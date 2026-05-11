@@ -1,50 +1,306 @@
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import Annotated
-from uuid import UUID
+
 from app.database import get_db
-from app.middleware.auth import require_student
-from app.models.course import Course, Enrollment
-from app.schemas.course import EnrollmentOut
+from app.dependencies import StudentUser
+from app.models.course import Course, CourseModule
+from app.models.enrollment import Certificate, Enrollment, ModuleProgress
+from app.models.payment import Payment
+from app.models.user import Student
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
 
-@router.post("/{course_id}", response_model=EnrollmentOut, status_code=status.HTTP_201_CREATED)
+# ── Request bodies ────────────────────────────────────────────────────────────
+
+class EnrollBody(BaseModel):
+    course_id: str
+
+
+class ModuleProgressBody(BaseModel):
+    module_id: str
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _enrollment_dict(e: Enrollment, course: Course | None = None) -> dict:
+    data: dict = {
+        "id": str(e.id),
+        "student_id": str(e.student_id),
+        "course_id": str(e.course_id),
+        "enrolled_at": e.enrolled_at.isoformat() if e.enrolled_at else None,
+        "completed_at": e.completed_at.isoformat() if e.completed_at else None,
+        "progress_pct": e.progress_pct or 0,
+    }
+    if course:
+        data["course"] = {
+            "id": str(course.id),
+            "title": course.title,
+            "thumbnail_url": course.thumbnail_url,
+            "category": course.category,
+            "level": course.level,
+            "is_free": course.is_free,
+            "price": float(course.price) if course.price is not None else 0.0,
+        }
+    return data
+
+
+async def _recalculate_progress(
+    db: AsyncSession, enrollment: Enrollment
+) -> int:
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(CourseModule)
+            .where(CourseModule.course_id == enrollment.course_id)
+        )
+    ).scalar_one()
+
+    if total == 0:
+        return 0
+
+    completed = (
+        await db.execute(
+            select(func.count())
+            .select_from(ModuleProgress)
+            .where(ModuleProgress.enrollment_id == enrollment.id)
+        )
+    ).scalar_one()
+
+    pct = int(completed / total * 100)
+    return pct
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def enroll_in_course(
-    course_id: UUID,
-    user: Annotated[dict, Depends(require_student)],
+    body: EnrollBody,
+    current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    course = await db.get(Course, course_id)
+    try:
+        cid = uuid.UUID(body.course_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid course_id")
+
+    course = await db.get(Course, cid)
     if not course or course.status != "approved":
-        raise HTTPException(status_code=404, detail="Course not found or not approved")
-    if not course.is_free:
-        raise HTTPException(status_code=402, detail="This is a paid course — initiate payment first")
+        raise HTTPException(status_code=404, detail="Course not found or not yet approved")
 
-    existing = await db.execute(
-        select(Enrollment).where(
-            Enrollment.student_id == UUID(user["sub"]),
-            Enrollment.course_id == course_id,
+    # Prevent duplicate enrollment
+    existing = (
+        await db.execute(
+            select(Enrollment).where(
+                Enrollment.student_id == current_user.id,
+                Enrollment.course_id == cid,
+            )
         )
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Already enrolled")
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="Already enrolled in this course")
 
-    enrollment = Enrollment(student_id=UUID(user["sub"]), course_id=course_id)
+    if not course.is_free:
+        # Check that a completed payment exists
+        payment = (
+            await db.execute(
+                select(Payment).where(
+                    Payment.student_id == current_user.id,
+                    Payment.course_id == cid,
+                    Payment.status == "completed",
+                )
+            )
+        ).scalar_one_or_none()
+        if not payment:
+            raise HTTPException(
+                status_code=402,
+                detail="Payment required. Complete payment before enrolling.",
+            )
+
+    enrollment = Enrollment(
+        student_id=current_user.id,
+        course_id=cid,
+    )
     db.add(enrollment)
+
+    # Increment enrolled_count
+    await db.execute(
+        update(Course)
+        .where(Course.id == cid)
+        .values(enrolled_count=Course.enrolled_count + 1)
+    )
+
     await db.commit()
     await db.refresh(enrollment)
-    return enrollment
+    return {
+        "success": True,
+        "message": "Enrolled successfully",
+        "data": _enrollment_dict(enrollment, course),
+    }
 
 
-@router.get("/me", response_model=list[EnrollmentOut])
+@router.get("/mine")
 async def my_enrollments(
-    user: Annotated[dict, Depends(require_student)],
+    current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Enrollment).where(Enrollment.student_id == UUID(user["sub"]))
+    stmt = (
+        select(Enrollment, Course)
+        .join(Course, Enrollment.course_id == Course.id)
+        .where(Enrollment.student_id == current_user.id)
+        .order_by(Enrollment.enrolled_at.desc())
     )
-    return result.scalars().all()
+    rows = (await db.execute(stmt)).all()
+    data = [_enrollment_dict(e, c) for e, c in rows]
+    return {"success": True, "message": "Enrollments fetched", "data": data}
+
+
+@router.get("/{enrollment_id}")
+async def get_enrollment(
+    enrollment_id: str,
+    current_user: StudentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        eid = uuid.UUID(enrollment_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid enrollment_id")
+
+    enrollment = await db.get(Enrollment, eid)
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    if enrollment.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your enrollment")
+
+    course = await db.get(Course, enrollment.course_id)
+
+    # Module progress list
+    mp_stmt = select(ModuleProgress).where(ModuleProgress.enrollment_id == eid)
+    module_progresses = (await db.execute(mp_stmt)).scalars().all()
+
+    data = _enrollment_dict(enrollment, course)
+    data["module_progress"] = [
+        {
+            "id": str(mp.id),
+            "module_id": str(mp.module_id),
+            "completed_at": mp.completed_at.isoformat() if mp.completed_at else None,
+        }
+        for mp in module_progresses
+    ]
+    return {"success": True, "message": "Enrollment detail", "data": data}
+
+
+@router.put("/{enrollment_id}/progress")
+async def update_module_progress(
+    enrollment_id: str,
+    body: ModuleProgressBody,
+    current_user: StudentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        eid = uuid.UUID(enrollment_id)
+        mid = uuid.UUID(body.module_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid enrollment_id or module_id")
+
+    enrollment = await db.get(Enrollment, eid)
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    if enrollment.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your enrollment")
+
+    # Verify module belongs to the enrolled course
+    module = await db.get(CourseModule, mid)
+    if not module or module.course_id != enrollment.course_id:
+        raise HTTPException(status_code=404, detail="Module not found for this course")
+
+    # Create progress record only if not already exists
+    existing_mp = (
+        await db.execute(
+            select(ModuleProgress).where(
+                ModuleProgress.enrollment_id == eid,
+                ModuleProgress.module_id == mid,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not existing_mp:
+        mp = ModuleProgress(enrollment_id=eid, module_id=mid)
+        db.add(mp)
+        await db.flush()
+
+    # Recalculate progress
+    pct = await _recalculate_progress(db, enrollment)
+    enrollment.progress_pct = pct
+
+    await db.commit()
+    await db.refresh(enrollment)
+    return {
+        "success": True,
+        "message": "Progress updated",
+        "data": {"enrollment_id": str(eid), "progress_pct": pct},
+    }
+
+
+@router.post("/{enrollment_id}/complete", status_code=status.HTTP_200_OK)
+async def complete_course(
+    enrollment_id: str,
+    current_user: StudentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        eid = uuid.UUID(enrollment_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid enrollment_id")
+
+    enrollment = await db.get(Enrollment, eid)
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    if enrollment.student_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your enrollment")
+
+    now = datetime.now(timezone.utc)
+    enrollment.completed_at = now
+    enrollment.progress_pct = 100
+
+    # Issue certificate if not already issued
+    existing_cert = (
+        await db.execute(
+            select(Certificate).where(
+                Certificate.student_id == current_user.id,
+                Certificate.course_id == enrollment.course_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not existing_cert:
+        cert = Certificate(
+            student_id=current_user.id,
+            course_id=enrollment.course_id,
+        )
+        db.add(cert)
+
+    # Award XP points
+    await db.execute(
+        update(Student)
+        .where(Student.id == current_user.id)
+        .values(xp_points=Student.xp_points + 100)
+    )
+
+    await db.commit()
+    await db.refresh(enrollment)
+
+    return {
+        "success": True,
+        "message": "Course completed! Certificate issued and 100 XP awarded.",
+        "data": {
+            "enrollment_id": str(eid),
+            "completed_at": enrollment.completed_at.isoformat(),
+            "progress_pct": 100,
+        },
+    }

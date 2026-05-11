@@ -1,32 +1,51 @@
-from pydantic import BaseModel, UUID4
-from typing import Literal
+import uuid
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict
 
 
-class RoadmapItemOut(BaseModel):
-    id: UUID4
-    course_id: UUID4 | None
+# ── RoadmapCourse ─────────────────────────────────────────────────────────────
+
+class RoadmapCourseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    roadmap_id: uuid.UUID
+    course_id: Optional[uuid.UUID] = None
     topic: str
-    skill_level: Literal["strong", "intermediate", "weak"]
+    reason: Optional[str] = None
+    priority: Optional[int] = None
+    recommended_course_type: Optional[str] = None
+    search_keywords: Optional[list[str]] = None
+    status: Optional[str] = None
     order_index: int
-    is_completed: bool
-    completed_at: datetime | None
-    notes: str | None
+    created_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
 
+class RoadmapCourseStatusUpdate(BaseModel):
+    status: str
+
+
+# ── Roadmap ───────────────────────────────────────────────────────────────────
 
 class RoadmapOut(BaseModel):
-    id: UUID4
-    student_id: UUID4
-    career_goal: str
-    generated_at: datetime
-    updated_at: datetime
-    items: list[RoadmapItemOut] = []
+    model_config = ConfigDict(from_attributes=True)
 
-    model_config = {"from_attributes": True}
+    id: uuid.UUID
+    student_id: uuid.UUID
+    goal: str
+    status: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    items: list[RoadmapCourseOut] = []
 
 
-class RoadmapItemUpdate(BaseModel):
-    is_completed: bool | None = None
-    notes: str | None = None
+# ── Generation request ────────────────────────────────────────────────────────
+
+class GenerateRoadmapRequest(BaseModel):
+    """
+    No fields required — the server derives goal and skill profile
+    from the authenticated student's existing records.
+    """
+    pass

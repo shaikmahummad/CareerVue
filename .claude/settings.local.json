@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\" -Depth 0 -File)",
+      "Bash(Select-Object Name)",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\backend\\\\venv\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(python3 -c \"import json,sys; p=json.load\\(sys.stdin\\); print\\(p.get\\('version','?'\\)\\)\")",
+      "PowerShell(npm list *)",
+      "PowerShell(npm root *)",
+      "PowerShell(cmd /c \"dir /b C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\node_modules\\\\next 2>&1\" | Select-Object -First 20)",
+      "PowerShell(cmd /c \"dir /b C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\node_modules\\\\next\\\\dist 2>&1\" | Select-Object -First 30)",
+      "PowerShell(cmd /c \"dir /b C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\node_modules\\\\next\\\\dist\\\\docs 2>&1\")",
+      "PowerShell(cmd /c \"dir /b C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\node_modules\\\\next\\\\dist\\\\docs\\\\01-app 2>&1\")",
+      "PowerShell(cmd /c \"dir /b C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\node_modules\\\\next\\\\dist\\\\docs\\\\01-app\\\\03-api-reference 2>&1\")",
+      "PowerShell(cmd /c \"dir /b C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\node_modules\\\\next\\\\dist\\\\docs\\\\01-app\\\\03-api-reference\\\\03-file-conventions 2>&1\")",
+      "PowerShell(Get-PSDrive C | Select-Object Name, @{N='Used\\(GB\\)';E={[math]::Round\\($_.Used/1GB,1\\)}}, @{N='Free\\(GB\\)';E={[math]::Round\\($_.Free/1GB,1\\)}}, @{N='Total\\(GB\\)';E={[math]::Round\\(\\($_.Used+$_.Free\\)/1GB,1\\)}})",
+      "PowerShell(Get-WmiObject *)",
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\node_modules\\\\react-native-worklets\\\\package.json\" | ConvertFrom-Json\\).version)",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"from app.main import app; print\\('Import OK'\\)\")",
+      "Bash('venv\\\\Scripts\\\\python.exe' -c ' *)",
+      "Bash(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\" -Filter \"*.tsx\")",
+      "Bash(Select-Object FullName)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\" -Recurse -File | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\lib\" -Recurse -File | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\\\\\\(tutor\\)\" -Recurse -File | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\\\\\\(admin\\)\" -Recurse -File | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\\\\\\(tutor\\)\" -Recurse | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\\\\\\(student\\)\\\\courses\" -Recurse -File | ForEach-Object { $_.FullName })",
+      "Bash(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\\\\\\(tutor\\)\")",
+      "Bash(dir \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\components\")",
+      "Bash(npx tsc *)",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\\\\\\(tutor\\)\" | Where-Object { $_.Extension -eq \".tsx\" } | Select-Object FullName)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.get\\('workspaces',d.get\\('dependencies',{}\\).keys\\(\\)\\)\\)[:10]\\)\")",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\app\\\\\\(student\\)\" | Where-Object { !$_.PSIsContainer } | Select-Object FullName)"
+    ]
+  }
+}

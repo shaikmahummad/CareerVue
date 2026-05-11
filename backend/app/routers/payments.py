@@ -1,76 +1,200 @@
+import uuid
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import Annotated
-from uuid import UUID
 from pydantic import BaseModel
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
 from app.database import get_db
-from app.middleware.auth import require_student
-from app.models.course import Course, Enrollment
-from app.services.payment_service import create_order, verify_payment_signature
+from app.dependencies import StudentUser
+from app.models.course import Course
+from app.models.enrollment import Enrollment
+from app.models.payment import Payment
+from app.services import payment_service
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 
-class PaymentOrderResponse(BaseModel):
-    order_id: str
-    amount: int
-    currency: str
-    key_id: str
+# ── Request bodies ────────────────────────────────────────────────────────────
+
+class CreateOrderBody(BaseModel):
+    course_id: str
 
 
-class PaymentVerifyRequest(BaseModel):
-    course_id: UUID
-    order_id: str
-    payment_id: str
-    signature: str
+class VerifyPaymentBody(BaseModel):
+    course_id: str
+    gateway_order_id: str
+    gateway_payment_id: str
+    gateway_signature: str
 
 
-@router.post("/create-order/{course_id}", response_model=PaymentOrderResponse)
-async def create_payment_order(
-    course_id: UUID,
-    user: Annotated[dict, Depends(require_student)],
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.post("/create-order", status_code=status.HTTP_201_CREATED)
+async def create_order(
+    body: CreateOrderBody,
+    current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    course = await db.get(Course, course_id)
+    try:
+        cid = uuid.UUID(body.course_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid course_id")
+
+    course = await db.get(Course, cid)
     if not course or course.status != "approved":
-        raise HTTPException(status_code=404, detail="Course not found")
+        raise HTTPException(status_code=404, detail="Course not found or not approved")
     if course.is_free:
         raise HTTPException(status_code=400, detail="This course is free — enroll directly")
 
-    from app.config import settings
-    order = create_order(float(course.price), receipt=str(course_id))
-    return PaymentOrderResponse(
-        order_id=order["id"],
-        amount=order["amount"],
-        currency=order["currency"],
-        key_id=settings.razorpay_key_id,
+    # Check not already enrolled
+    existing_enr = (
+        await db.execute(
+            select(Enrollment).where(
+                Enrollment.student_id == current_user.id,
+                Enrollment.course_id == cid,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_enr:
+        raise HTTPException(status_code=409, detail="Already enrolled in this course")
+
+    amount_inr = float(course.price)
+    receipt = f"course_{cid}_{current_user.id}"
+
+    try:
+        order = payment_service.create_order(amount_inr=amount_inr, receipt=receipt)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Payment gateway error: {exc}")
+
+    # Persist pending payment record
+    payment = Payment(
+        student_id=current_user.id,
+        course_id=cid,
+        amount=amount_inr,
+        currency=order.get("currency", "INR"),
+        status="pending",
+        payment_gateway="razorpay",
+        gateway_order_id=order["id"],
     )
+    db.add(payment)
+    await db.commit()
+    await db.refresh(payment)
+
+    data = {
+        "order_id": order["id"],
+        "amount": order["amount"],  # in paise
+        "currency": order.get("currency", "INR"),
+        "key_id": settings.razorpay_key_id,
+        "payment_id": str(payment.id),
+    }
+    return {"success": True, "message": "Order created", "data": data}
 
 
 @router.post("/verify")
-async def verify_and_enroll(
-    body: PaymentVerifyRequest,
-    user: Annotated[dict, Depends(require_student)],
+async def verify_payment(
+    body: VerifyPaymentBody,
+    current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    if not verify_payment_signature(body.order_id, body.payment_id, body.signature):
+    try:
+        cid = uuid.UUID(body.course_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid course_id")
+
+    # Verify Razorpay signature
+    is_valid = payment_service.verify_signature(
+        order_id=body.gateway_order_id,
+        payment_id=body.gateway_payment_id,
+        signature=body.gateway_signature,
+    )
+    if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid payment signature")
 
-    existing = await db.execute(
-        select(Enrollment).where(
-            Enrollment.student_id == UUID(user["sub"]),
-            Enrollment.course_id == body.course_id,
+    # Update Payment record
+    payment = (
+        await db.execute(
+            select(Payment).where(
+                Payment.student_id == current_user.id,
+                Payment.course_id == cid,
+                Payment.gateway_order_id == body.gateway_order_id,
+            )
         )
-    )
-    if existing.scalar_one_or_none():
-        return {"message": "Already enrolled"}
+    ).scalar_one_or_none()
 
-    enrollment = Enrollment(
-        student_id=UUID(user["sub"]),
-        course_id=body.course_id,
-        payment_id=body.payment_id,
-    )
-    db.add(enrollment)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment record not found")
+
+    payment.status = "completed"
+    payment.gateway_payment_id = body.gateway_payment_id
+    payment.paid_at = datetime.now(timezone.utc)
+
+    # Check not already enrolled
+    existing_enr = (
+        await db.execute(
+            select(Enrollment).where(
+                Enrollment.student_id == current_user.id,
+                Enrollment.course_id == cid,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if not existing_enr:
+        enrollment = Enrollment(
+            student_id=current_user.id,
+            course_id=cid,
+        )
+        db.add(enrollment)
+
+        # Increment enrolled_count
+        await db.execute(
+            update(Course)
+            .where(Course.id == cid)
+            .values(enrolled_count=Course.enrolled_count + 1)
+        )
+
     await db.commit()
-    return {"message": "Enrolled successfully", "enrollment_id": str(enrollment.id)}
+    await db.refresh(payment)
+
+    data = {
+        "payment_id": str(payment.id),
+        "gateway_payment_id": payment.gateway_payment_id,
+        "status": payment.status,
+        "paid_at": payment.paid_at.isoformat() if payment.paid_at else None,
+        "already_enrolled": existing_enr is not None,
+    }
+    return {"success": True, "message": "Payment verified and enrollment created", "data": data}
+
+
+@router.get("/mine")
+async def my_payments(
+    current_user: StudentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(Payment, Course)
+        .join(Course, Payment.course_id == Course.id)
+        .where(Payment.student_id == current_user.id)
+        .order_by(Payment.created_at.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    data = [
+        {
+            "id": str(p.id),
+            "course_id": str(p.course_id),
+            "course_title": c.title,
+            "amount": float(p.amount),
+            "currency": p.currency,
+            "status": p.status,
+            "payment_gateway": p.payment_gateway,
+            "gateway_payment_id": p.gateway_payment_id,
+            "gateway_order_id": p.gateway_order_id,
+            "paid_at": p.paid_at.isoformat() if p.paid_at else None,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p, c in rows
+    ]
+    return {"success": True, "message": "Payment history fetched", "data": data}
