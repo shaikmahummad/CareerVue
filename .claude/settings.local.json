@@ -33,7 +33,22 @@
       "Bash(npx tsc *)",
       "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\\\\\\(tutor\\)\" | Where-Object { $_.Extension -eq \".tsx\" } | Select-Object FullName)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.get\\('workspaces',d.get\\('dependencies',{}\\).keys\\(\\)\\)\\)[:10]\\)\")",
-      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\app\\\\\\(student\\)\" | Where-Object { !$_.PSIsContainer } | Select-Object FullName)"
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\app\\\\\\(student\\)\" | Where-Object { !$_.PSIsContainer } | Select-Object FullName)",
+      "WebFetch(domain:stitch.withgoogle.com)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\app\\\\\\(student\\)\")",
+      "Bash(Out-Null)",
+      "Bash(git *)",
+      "Bash(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\app\" -Filter \"*.tsx\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\backend\\\\app\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object -ExpandProperty FullName | Sort-Object)",
+      "PowerShell(Test-Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\node_modules\"; \\(Get-ChildItem \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\node_modules\" -ErrorAction SilentlyContinue | Measure-Object\\).Count)",
+      "PowerShell(npm view *)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\"; $env:CI = \"1\"; npx expo start 2>&1 | Select-Object -First 40)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\"; $env:CI = \"1\"; npx expo start 2>&1 | Select-Object -First 20)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\"; $env:CI = \"1\"; npx expo start --clear 2>&1 | Select-Object -First 30)",
+      "PowerShell(& \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\backend\\\\venv\\\\Scripts\\\\python.exe\" --version 2>&1; & \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\backend\\\\venv\\\\Scripts\\\\pip.exe\" --version 2>&1)",
+      "PowerShell(& \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\backend\\\\venv\\\\Scripts\\\\pip.exe\" list 2>&1 | Select-Object -First 30)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\app\" -Recurse | Where-Object { !$_.PSIsContainer } | Select-Object FullName)",
+      "PowerShell(Rename-Item *)"
     ]
   }
 }

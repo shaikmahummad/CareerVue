@@ -1,67 +1,50 @@
-import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+﻿import { View, StyleSheet } from "react-native";
+import { Slot, useRouter, useSegments } from "expo-router";
+import { BottomTabBar, TabConfig } from "../../components/ui/BottomTabBar";
+import { colors } from "../../constants/theme";
 
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+const STUDENT_TABS: TabConfig[] = [
+  { name: "index",   label: "Home",    icon: "home-outline",   activeIcon: "home"   },
+  { name: "roadmap", label: "Roadmap", icon: "map-outline",    activeIcon: "map"    },
+  { name: "courses", label: "Courses", icon: "book-outline",   activeIcon: "book"   },
+  { name: "profile", label: "Profile", icon: "person-outline", activeIcon: "person" },
+];
 
-function tabIcon(active: IoniconName, inactive: IoniconName) {
-  return ({ focused, color }: { focused: boolean; color: string }) => (
-    <Ionicons name={focused ? active : inactive} size={22} color={color} />
-  );
-}
+const ROUTE_ORDER = ["index", "roadmap", "courses", "profile"];
 
 export default function StudentLayout() {
+  const segments = useSegments();
+  const router   = useRouter();
+  const lastSeg  = segments[segments.length - 1] ?? "index";
+  const activeIndex = Math.max(0, ROUTE_ORDER.indexOf(lastSeg));
+
+  const hideTabBar =
+    lastSeg === "course-detail" ||
+    lastSeg === "quiz"          ||
+    lastSeg === "quiz-results";
+
+  function navigate(i: number) {
+    const name = ROUTE_ORDER[i];
+    if (name === "index") router.replace("/(student)/");
+    else router.replace(`/(student)/${name}` as never);
+  }
+
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: "#2563eb",
-        tabBarInactiveTintColor: "#9ca3af",
-        tabBarStyle: {
-          backgroundColor: "#ffffff",
-          borderTopColor: "#f3f4f6",
-          borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 6,
-        },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
-      }}
-    >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: "Home",
-          tabBarIcon: tabIcon("home", "home-outline"),
-        }}
-      />
-      <Tabs.Screen
-        name="quiz"
-        options={{
-          title: "Quiz",
-          tabBarIcon: tabIcon("school", "school-outline"),
-        }}
-      />
-      <Tabs.Screen
-        name="roadmap"
-        options={{
-          title: "Roadmap",
-          tabBarIcon: tabIcon("map", "map-outline"),
-        }}
-      />
-      <Tabs.Screen
-        name="courses"
-        options={{
-          title: "Courses",
-          tabBarIcon: tabIcon("book", "book-outline"),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: tabIcon("person", "person-outline"),
-        }}
-      />
-    </Tabs>
+    <View style={s.root}>
+      <View style={{ flex: 1 }}>
+        <Slot />
+      </View>
+      {!hideTabBar && (
+        <BottomTabBar
+          tabs={STUDENT_TABS}
+          activeIndex={activeIndex}
+          onPress={navigate}
+        />
+      )}
+    </View>
   );
 }
+
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+});
