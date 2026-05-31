@@ -1,147 +1,147 @@
 import { useState, useCallback } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Image, Alert,
+  View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Dimensions,
 } from "react-native";
-import { useRouter, Link } from "expo-router";
+import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MotiView } from "moti";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, { Defs, RadialGradient, Stop, Rect } from "react-native-svg";
 import { supabase } from "../../lib/supabase";
-import { GlowButton } from "../../components/ui/GlowButton";
-import { FormInput } from "../../components/ui/FormInput";
 import { colors } from "../../constants/theme";
 
+const { width, height } = Dimensions.get("window");
+const BTN_W = width - 32;
+
 export default function LoginScreen() {
-  const router  = useRouter();
-  const insets  = useSafeAreaInsets();
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const [loading,  setLoading]  = useState(false);
+  const router              = useRouter();
+  const insets              = useSafeAreaInsets();
+  const [email, setEmail]   = useState("");
+  const [pass,  setPass]    = useState("");
+  const [show,  setShow]    = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = useCallback(async () => {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
     setLoading(false);
     if (error) Alert.alert("Sign in failed", error.message);
-  }, [email, password]);
+  }, [email, pass]);
 
   return (
-    <View style={[s.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={s.root}>
       <StatusBar style="light" />
 
-      {/* Violet glow blob top-right */}
-      <View style={s.glowBlob} />
+      {/* Subtle top-right violet glow */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg width={width} height={height * 0.55}>
+          <Defs>
+            <RadialGradient id="glow" cx="100%" cy="0%" rx="65%" ry="80%">
+              <Stop offset="0%"   stopColor="#6c63ff" stopOpacity="0.22" />
+              <Stop offset="100%" stopColor="#6c63ff" stopOpacity="0"    />
+            </RadialGradient>
+          </Defs>
+          <Rect x="0" y="0" width={width} height={height * 0.55} fill="url(#glow)" />
+        </Svg>
+      </View>
 
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={[s.scroll, {
+          paddingTop:    insets.top + 24,
+          paddingBottom: insets.bottom + 32,
+        }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* Logo row */}
-        <MotiView
-          from={{ opacity: 0, translateY: -12 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "spring", damping: 20, delay: 100 }}
-          style={s.logoRow}
-        >
-          <View style={s.logoIcon}>
-            <Text style={{ fontSize: 18, color: "#fff" }}>◎</Text>
+        <View style={s.logoRow}>
+          <View style={s.logoMark}>
+            <Text style={s.logoMarkText}>CV</Text>
           </View>
-          <Text style={s.logoText}>CareerVue</Text>
-        </MotiView>
+          <Text style={s.logoName}>CareerVue</Text>
+        </View>
 
         {/* Heading */}
-        <MotiView
-          from={{ opacity: 0, translateY: 16 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "spring", delay: 200, damping: 20 }}
-        >
+        <View style={s.headBlock}>
           <Text style={s.heading}>Welcome back</Text>
           <Text style={s.sub}>Sign in to continue your journey.</Text>
-        </MotiView>
+        </View>
 
         {/* Google button */}
-        <MotiView
-          from={{ opacity: 0, translateY: 16 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "spring", delay: 320, damping: 20 }}
-        >
-          <Pressable style={s.googleBtn}>
-            <Text style={s.googleG}>G</Text>
-            <Text style={s.googleLabel}>Continue with Google</Text>
-          </Pressable>
-        </MotiView>
+        <Pressable style={({ pressed }) => [s.googleBtn, { opacity: pressed ? 0.9 : 1 }]}>
+          <Text style={s.googleG}>G</Text>
+          <Text style={s.googleLabel}>Continue with Google</Text>
+        </Pressable>
 
-        {/* Divider */}
+        {/* OR divider */}
         <View style={s.divider}>
           <View style={s.divLine} />
-          <Text style={s.divText}>or</Text>
+          <Text style={s.divText}>— OR —</Text>
           <View style={s.divLine} />
         </View>
 
-        {/* Form */}
-        <MotiView
-          from={{ opacity: 0, translateY: 16 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "spring", delay: 420, damping: 20 }}
-          style={s.form}
-        >
-          <FormInput
-            label="Email"
-            placeholder="your@email.com"
+        {/* Email */}
+        <View style={s.fieldWrap}>
+          <Text style={s.fieldLabel}>EMAIL ADDRESS</Text>
+          <TextInput
+            style={s.input}
+            placeholder="name@career.vue"
+            placeholderTextColor={colors.outlineVariant}
+            value={email}
+            onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
-            value={email}
-            onChangeText={setEmail}
           />
+        </View>
 
-          <FormInput
-            label="Password"
-            placeholder="••••••••"
-            secureTextEntry={!showPass}
-            value={password}
-            onChangeText={setPassword}
-            rightIcon={
-              <Ionicons
-                name={showPass ? "eye-off-outline" : "eye-outline"}
-                size={22}
-                color={colors.muted}
-              />
-            }
-            onRightPress={() => setShowPass(v => !v)}
-          />
-
-          <Pressable style={s.forgot} onPress={() => {}}>
-            <Text style={s.forgotText}>Forgot Password?</Text>
-          </Pressable>
-        </MotiView>
-
-        {/* Sign In button */}
-        <MotiView
-          from={{ opacity: 0, translateY: 16 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "spring", delay: 520, damping: 20 }}
-          style={{ marginTop: 4 }}
-        >
-          <GlowButton
-            label={loading ? "Signing in…" : "Sign In"}
-            onPress={handleLogin}
-            loading={loading}
-            variant="primary"
-          />
-        </MotiView>
-
-        {/* Register link */}
-        <View style={s.registerRow}>
-          <Text style={s.registerText}>Don't have an account? </Text>
-          <Link href="/(auth)/register" asChild>
+        {/* Password */}
+        <View style={s.fieldWrap}>
+          <View style={s.fieldLabelRow}>
+            <Text style={s.fieldLabel}>PASSWORD</Text>
             <Pressable>
-              <Text style={s.registerLink}>Create one →</Text>
+              <Text style={s.forgot}>FORGOT?</Text>
             </Pressable>
-          </Link>
+          </View>
+          <View>
+            <TextInput
+              style={s.input}
+              placeholder="••••••••"
+              placeholderTextColor={colors.outlineVariant}
+              value={pass}
+              onChangeText={setPass}
+              secureTextEntry={!show}
+              autoCapitalize="none"
+            />
+            <Pressable style={s.eyeBtn} onPress={() => setShow(v => !v)}>
+              <Ionicons name={show ? "eye-off-outline" : "eye-outline"} size={20} color={colors.outline} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Sign In */}
+        <Pressable
+          onPress={handleLogin}
+          disabled={loading}
+          style={({ pressed }) => ({ opacity: pressed ? 0.88 : 1, marginTop: 8 })}
+        >
+          <LinearGradient
+            colors={["#c4c0ff", "#8781ff"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[s.signInBtn, { width: BTN_W }]}
+          >
+            <Text style={s.signInText}>{loading ? "Signing in…" : "Sign In"}</Text>
+          </LinearGradient>
+        </Pressable>
+
+        {/* Footer */}
+        <View style={s.footerRow}>
+          <Text style={s.footerText}>Don't have an account? </Text>
+          <Pressable onPress={() => router.push("/(auth)/register")}>
+            <Text style={s.footerLink}>Create one →</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
@@ -153,115 +153,170 @@ const s = StyleSheet.create({
     flex:            1,
     backgroundColor: colors.bg,
   },
-  glowBlob: {
-    position:        "absolute",
-    top:             -20,
-    right:           -20,
-    width:           160,
-    height:          160,
-    borderRadius:    80,
-    backgroundColor: colors.primary,
-    opacity:         0.18,
-  },
   scroll: {
     paddingHorizontal: 16,
-    paddingTop:        60,
-    paddingBottom:     40,
-    gap:               20,
+    gap:               24,
   },
+
+  // Logo
   logoRow: {
     flexDirection: "row",
     alignItems:    "center",
     gap:           10,
-    marginBottom:  4,
   },
-  logoIcon: {
+  logoMark: {
     width:           40,
     height:          40,
     borderRadius:    10,
-    backgroundColor: colors.primary,
+    backgroundColor: "#1c1833",
+    borderWidth:     1,
+    borderColor:     "rgba(196,192,255,0.15)",
     alignItems:      "center",
     justifyContent:  "center",
   },
-  logoText: {
-    fontSize:    20,
-    fontWeight:  "700",
-    color:       colors.text,
+  logoMarkText: {
+    fontFamily:    "HankenGrotesk_700Bold",
+    fontSize:      14,
+    color:         colors.primary,
+    letterSpacing: -0.5,
   },
+  logoName: {
+    fontFamily:    "HankenGrotesk_700Bold",
+    fontSize:      20,
+    lineHeight:    25,
+    letterSpacing: -0.3,
+    color:         colors.text,
+  },
+
+  // Heading
+  headBlock: { gap: 6 },
   heading: {
-    fontSize:    34,
-    fontWeight:  "700",
-    color:       colors.text,
-    lineHeight:  41,
-    marginBottom: 6,
+    fontFamily:    "HankenGrotesk_700Bold",
+    fontSize:      34,
+    lineHeight:    41,
+    letterSpacing: -0.5,
+    color:         colors.text,
   },
   sub: {
-    fontSize: 17,
-    color:    colors.muted,
+    fontFamily: "HankenGrotesk_400Regular",
+    fontSize:   17,
+    lineHeight: 22,
+    color:      colors.textVariant,
   },
+
+  // Google
   googleBtn: {
-    flexDirection:    "row",
-    alignItems:       "center",
-    justifyContent:   "center",
-    backgroundColor:  "#ffffff",
-    borderRadius:     16,
-    height:           56,
-    gap:              12,
-    shadowColor:      "#000",
-    shadowOffset:     { width: 0, height: 4 },
-    shadowOpacity:    0.3,
-    shadowRadius:     8,
-    elevation:        6,
+    flexDirection:   "row",
+    alignItems:      "center",
+    justifyContent:  "center",
+    backgroundColor: "#ffffff",
+    borderRadius:    12,
+    height:          52,
+    gap:             10,
   },
   googleG: {
-    fontSize:    20,
-    fontWeight:  "700",
+    fontFamily:  "HankenGrotesk_700Bold",
+    fontSize:    18,
     color:       "#4285F4",
-    fontFamily:  "System",
   },
   googleLabel: {
-    fontSize:    17,
-    fontWeight:  "500",
-    color:       "#1a1a2a",
+    fontFamily:  "HankenGrotesk_600SemiBold",
+    fontSize:    16,
+    color:       "#1f1f28",
   },
+
+  // OR divider
   divider: {
     flexDirection: "row",
     alignItems:    "center",
     gap:           12,
+    marginVertical: -4,
   },
   divLine: {
     flex:            1,
     height:          1,
-    backgroundColor: colors.border,
+    backgroundColor: "rgba(255,255,255,0.1)",
   },
   divText: {
-    fontSize: 13,
-    color:    colors.muted,
+    fontFamily:    "JetBrainsMono_500Medium",
+    fontSize:      11,
+    letterSpacing: 1,
+    color:         colors.textVariant,
   },
-  form: {
-    gap: 16,
+
+  // Fields
+  fieldWrap: { gap: 6 },
+  fieldLabel: {
+    fontFamily:    "JetBrainsMono_500Medium",
+    fontSize:      11,
+    letterSpacing: 0.5,
+    color:         colors.outline,
+    textTransform: "uppercase",
+    marginLeft:    4,
+  },
+  fieldLabelRow: {
+    flexDirection:  "row",
+    justifyContent: "space-between",
+    alignItems:     "center",
+    marginLeft:     4,
+    marginRight:    4,
   },
   forgot: {
-    alignSelf: "flex-end",
+    fontFamily:    "JetBrainsMono_500Medium",
+    fontSize:      11,
+    letterSpacing: 0.5,
+    color:         colors.primary,
+    textTransform: "uppercase",
   },
-  forgotText: {
-    fontSize:   14,
-    color:      colors.primary,
-    fontWeight: "500",
+  input: {
+    height:            52,
+    backgroundColor:   "#0d0d14",
+    borderWidth:       1,
+    borderColor:       "rgba(255,255,255,0.08)",
+    borderRadius:      12,
+    paddingHorizontal: 16,
+    paddingRight:      48,
+    fontFamily:        "HankenGrotesk_400Regular",
+    fontSize:          17,
+    color:             colors.text,
   },
-  registerRow: {
+  eyeBtn: {
+    position: "absolute",
+    right:    14,
+    top:      0,
+    bottom:   0,
+    justifyContent: "center",
+  },
+
+  // Sign In button
+  signInBtn: {
+    height:         56,
+    borderRadius:   12,
+    alignItems:     "center",
+    justifyContent: "center",
+  },
+  signInText: {
+    fontFamily:    "HankenGrotesk_700Bold",
+    fontSize:      17,
+    letterSpacing: -0.2,
+    color:         "#1b0091",
+  },
+
+  // Footer
+  footerRow: {
     flexDirection:  "row",
     justifyContent: "center",
     alignItems:     "center",
-    marginTop:      8,
+    marginTop:      4,
   },
-  registerText: {
-    fontSize: 15,
-    color:    colors.muted,
+  footerText: {
+    fontFamily: "HankenGrotesk_400Regular",
+    fontSize:   17,
+    color:      colors.textVariant,
   },
-  registerLink: {
-    fontSize:   15,
-    color:      colors.primary,
-    fontWeight: "600",
+  footerLink: {
+    fontFamily:  "HankenGrotesk_600SemiBold",
+    fontSize:    17,
+    color:       colors.primary,
   },
 });

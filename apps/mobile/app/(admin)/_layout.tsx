@@ -1,13 +1,13 @@
-﻿import { View, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { BottomTabBar, TabConfig } from "../../components/ui/BottomTabBar";
 import { colors } from "../../constants/theme";
 
 const ADMIN_TABS: TabConfig[] = [
-  { name: "index",          label: "Overview",   icon: "grid-outline",            activeIcon: "grid"              },
-  { name: "approvals",      label: "Approvals",  icon: "checkmark-circle-outline", activeIcon: "checkmark-circle", badge: 5 },
-  { name: "users",          label: "Users",      icon: "people-outline",          activeIcon: "people"            },
-  { name: "admin-courses",  label: "Courses",    icon: "book-outline",            activeIcon: "book"              },
+  { name: "index",         label: "Home",    icon: "home-outline",        activeIcon: "home"        },
+  { name: "approvals",     label: "Goals",   icon: "trending-up-outline", activeIcon: "trending-up", badge: 5 },
+  { name: "users",         label: "Network", icon: "people-outline",      activeIcon: "people"      },
+  { name: "admin-courses", label: "Courses", icon: "book-outline",        activeIcon: "book"        },
 ];
 
 const ROUTE_ORDER = ["index", "approvals", "users", "admin-courses"];

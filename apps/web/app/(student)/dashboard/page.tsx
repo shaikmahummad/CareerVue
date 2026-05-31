@@ -5,176 +5,189 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Zap, Flame, BookOpen, Trophy, ChevronRight,
-  ArrowRight, Loader2, Map, Brain,
+  ArrowRight, Loader2, Map, Brain, Star,
 } from "lucide-react";
 import StudentNavbar from "../../../components/StudentNavbar";
 import { apiGet } from "../../../lib/api";
 import { createClient } from "../../../lib/supabase/client";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+interface Stats { xp_points: number; streak_days: number; enrolled_count: number; completed_count: number; }
+interface EnrollmentCourse { id: string; title: string; thumbnail_url: string | null; category: string | null; level: string | null; is_free: boolean; }
+interface Enrollment { id: string; course_id: string; enrolled_at: string; completed_at: string | null; progress_pct: number; course?: EnrollmentCourse; }
+interface RoadmapItem { id: string; topic: string; priority: string; status: string; order_index: number; }
+interface Roadmap { id: string; goal: string; items: RoadmapItem[]; }
 
-interface Stats {
-  xp_points: number;
-  streak_days: number;
-  enrolled_count: number;
-  completed_count: number;
+/* ─── Skill Radar (simple SVG pentagon) ──────────────────────────────────── */
+
+function SkillRadar({ skills }: { skills: { label: string; value: number }[] }) {
+  const size = 160;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 60;
+  const n = skills.length;
+
+  function point(i: number, val: number) {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    const rv = (val / 100) * r;
+    return { x: cx + rv * Math.cos(angle), y: cy + rv * Math.sin(angle) };
+  }
+  function gridPoint(i: number, scale: number) {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    return { x: cx + scale * r * Math.cos(angle), y: cy + scale * r * Math.sin(angle) };
+  }
+
+  const dataPoints = skills.map((s, i) => point(i, s.value));
+  const dataPath = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") + "Z";
+
+  const gridLevels = [0.25, 0.5, 0.75, 1];
+  const labelPoints = skills.map((s, i) => {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    const lx = cx + (r + 18) * Math.cos(angle);
+    const ly = cy + (r + 18) * Math.sin(angle);
+    return { label: s.label, x: lx, y: ly };
+  });
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {gridLevels.map((scale) => {
+        const pts = Array.from({ length: n }, (_, i) => gridPoint(i, scale));
+        const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") + "Z";
+        return <path key={scale} d={path} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />;
+      })}
+      {Array.from({ length: n }, (_, i) => {
+        const end = gridPoint(i, 1);
+        return <line key={i} x1={cx} y1={cy} x2={end.x} y2={end.y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />;
+      })}
+      <path d={dataPath} fill="rgba(108,99,255,0.2)" stroke="#6c63ff" strokeWidth="1.5" />
+      {dataPoints.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="3" fill="#6c63ff" />
+      ))}
+      {labelPoints.map((lp) => (
+        <text key={lp.label} x={lp.x} y={lp.y} textAnchor="middle" dominantBaseline="middle"
+          fontSize="8" fill="#7c7a8a">
+          {lp.label}
+        </text>
+      ))}
+    </svg>
+  );
 }
 
-interface EnrollmentCourse {
-  id: string;
-  title: string;
-  thumbnail_url: string | null;
-  category: string | null;
-  level: string | null;
-  is_free: boolean;
-}
+/* ─── Sub-components ─────────────────────────────────────────────────────── */
 
-interface Enrollment {
-  id: string;
-  course_id: string;
-  enrolled_at: string;
-  completed_at: string | null;
-  progress_pct: number;
-  course?: EnrollmentCourse;
-}
-
-interface RoadmapItem {
-  id: string;
-  topic: string;
-  priority: string;
-  status: string;
-  order_index: number;
-}
-
-interface Roadmap {
-  id: string;
-  goal: string;
-  items: RoadmapItem[];
-}
-
-// ─── Stat card ────────────────────────────────────────────────────────────────
-
-function StatCard({
-  icon: Icon,
-  value,
-  label,
-  color,
-  bg,
-}: {
-  icon: React.ElementType;
-  value: number | string;
-  label: string;
-  color: string;
-  bg: string;
+function StatCard({ icon: Icon, value, label, sub, accent }: {
+  icon: React.ElementType; value: string | number; label: string; sub?: string; accent: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-      <div className={`w-11 h-11 ${bg} rounded-xl flex items-center justify-center flex-shrink-0`}>
-        <Icon size={20} className={color} />
+    <div className="glass-card rounded-2xl p-5 flex items-center gap-4">
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={{ background: `${accent}18`, border: `1px solid ${accent}25` }}>
+        <Icon size={18} style={{ color: accent }} />
       </div>
       <div>
-        <p className="text-2xl font-bold text-gray-900">{value}</p>
-        <p className="text-xs text-gray-500">{label}</p>
+        <p className="text-xl font-bold text-white">{value}</p>
+        <p className="text-xs text-[#7c7a8a]">{label}</p>
+        {sub && <p className="text-[10px] text-[#6c63ff] mt-0.5">{sub}</p>}
       </div>
     </div>
   );
 }
 
-// ─── Continue learning card ───────────────────────────────────────────────────
-
-function ContinueLearningCard({ enrollment }: { enrollment: Enrollment }) {
-  const course = enrollment.course;
-  const pct = enrollment.progress_pct ?? 0;
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-        Continue Learning
-      </p>
-      <div className="flex items-start gap-4">
-        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-50 to-violet-100 flex items-center justify-center flex-shrink-0">
-          <BookOpen size={22} className="text-blue-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 leading-snug line-clamp-2 mb-1">
-            {course?.title ?? "Untitled Course"}
-          </p>
-          {course?.category && (
-            <p className="text-xs text-gray-400 mb-2">{course.category}</p>
-          )}
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-                className="h-full bg-blue-500 rounded-full"
-              />
-            </div>
-            <span className="text-xs text-gray-500 flex-shrink-0">{pct}%</span>
-          </div>
-        </div>
+function ActivePathCard({ roadmap }: { roadmap: Roadmap | null }) {
+  if (!roadmap) return (
+    <div className="glass-card rounded-2xl p-6">
+      <p className="text-[10px] font-semibold text-[#6c63ff] uppercase tracking-wider mb-2">ACTIVE PATH</p>
+      <div className="text-center py-6">
+        <Map size={28} className="text-[#7c7a8a] mx-auto mb-3" />
+        <p className="text-sm text-[#7c7a8a] mb-3">No roadmap yet</p>
+        <Link href="/quiz" className="btn-primary text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5">
+          <Brain size={12} /> Take the Quiz
+        </Link>
       </div>
-      <Link
-        href={`/courses/${enrollment.course_id}/learn`}
-        className="mt-4 w-full flex items-center justify-center gap-2 bg-blue-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
-      >
-        Continue <ArrowRight size={14} />
-      </Link>
     </div>
   );
-}
 
-// ─── Recent enrollments ───────────────────────────────────────────────────────
+  const done = roadmap.items.filter((i) => i.status === "completed").length;
+  const total = roadmap.items.length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
-function RecentEnrollments({ enrollments }: { enrollments: Enrollment[] }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm font-semibold text-gray-700">My Courses</p>
-        <Link href="/courses" className="text-xs text-blue-600 hover:underline">
-          Browse more
+    <div className="glass-card rounded-2xl p-6">
+      <p className="text-[10px] font-semibold text-[#6c63ff] uppercase tracking-wider mb-1">ACTIVE PATH</p>
+      <div className="flex items-start justify-between mb-4">
+        <h3 className="text-lg font-bold text-white">{roadmap.goal}</h3>
+        <Link href="/roadmap" className="btn-primary text-xs px-4 py-2 rounded-xl flex-shrink-0 ml-3">
+          Continue Learning
         </Link>
       </div>
 
-      {enrollments.length === 0 ? (
-        <div className="text-center py-6">
-          <BookOpen size={28} className="text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-400">No courses yet</p>
-          <Link href="/courses" className="text-xs text-blue-600 hover:underline mt-1 inline-block">
-            Browse courses
-          </Link>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+          <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+            transition={{ duration: 0.8 }} className="h-full gradient-primary rounded-full" />
+        </div>
+        <span className="text-xs text-[#7c7a8a] flex-shrink-0">{pct}% Completed</span>
+      </div>
+
+      <div className="flex gap-1.5 flex-wrap">
+        {roadmap.items.slice(0, 6).map((item, i) => (
+          <div key={item.id} className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold
+            ${item.status === "completed" ? "gradient-primary text-white" : "bg-white/[0.05] border border-white/[0.1] text-[#7c7a8a]"}`}>
+            {i + 1}
+          </div>
+        ))}
+        {total > 6 && (
+          <div className="w-7 h-7 rounded-full bg-white/[0.05] border border-white/[0.1] flex items-center justify-center text-[10px] text-[#7c7a8a]">
+            +{total - 6}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CurrentLearning({ enrollments }: { enrollments: Enrollment[] }) {
+  const active = enrollments.filter((e) => !e.completed_at).slice(0, 3);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-white">Current Learning</h3>
+        <Link href="/courses" className="text-xs text-[#6c63ff] hover:text-[#00d4ff] transition-colors flex items-center gap-1">
+          View all <ChevronRight size={12} />
+        </Link>
+      </div>
+      {active.length === 0 ? (
+        <div className="glass-card rounded-2xl p-8 text-center">
+          <BookOpen size={28} className="text-[#7c7a8a] mx-auto mb-3" />
+          <p className="text-sm text-[#7c7a8a] mb-3">No active courses</p>
+          <Link href="/courses" className="btn-primary text-xs px-4 py-2 rounded-xl inline-block">Browse Courses</Link>
         </div>
       ) : (
-        <div className="space-y-3">
-          {enrollments.slice(0, 5).map((e) => (
-            <Link
-              key={e.id}
-              href={`/courses/${e.course_id}/learn`}
-              className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-colors group"
-            >
-              <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                <BookOpen size={14} className="text-blue-400" />
+        <div className="grid grid-cols-1 gap-4">
+          {active.map((e, i) => (
+            <Link key={e.id} href={`/courses/${e.course_id}/learn`}
+              className="glass-card rounded-2xl p-4 flex items-center gap-4 hover:border-[#6c63ff]/30 transition-all group">
+              <div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 relative overflow-hidden"
+                style={{ background: `linear-gradient(135deg, ${["#6c63ff", "#00d4ff", "#6c63ff"][i]}18, #0d0d14)` }}>
+                <BookOpen size={20} className="text-[#7c7a8a]" />
+                {e.course?.level && (
+                  <span className="absolute top-1 right-1 text-[8px] font-bold text-[#6c63ff] bg-[#6c63ff]/10 px-1 rounded">
+                    {e.course.level.toUpperCase()}
+                  </span>
+                )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate group-hover:text-blue-600 transition-colors">
+                <p className="text-sm font-medium text-white truncate group-hover:text-[#6c63ff] transition-colors">
                   {e.course?.title ?? "Course"}
                 </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${
-                        e.completed_at ? "bg-emerald-500" : "bg-blue-400"
-                      }`}
-                      style={{ width: `${e.progress_pct ?? 0}%` }}
-                    />
+                <p className="text-[11px] text-[#7c7a8a] mb-2">{e.course?.category ?? ""}</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                    <div className="h-full gradient-primary rounded-full" style={{ width: `${e.progress_pct ?? 0}%` }} />
                   </div>
-                  <span className="text-xs text-gray-400 flex-shrink-0">
-                    {e.completed_at ? "✓ Done" : `${e.progress_pct ?? 0}%`}
-                  </span>
+                  <span className="text-[10px] text-[#7c7a8a] flex-shrink-0">{e.progress_pct ?? 0}%</span>
                 </div>
               </div>
-              <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-400 flex-shrink-0" />
             </Link>
           ))}
         </div>
@@ -183,111 +196,34 @@ function RecentEnrollments({ enrollments }: { enrollments: Enrollment[] }) {
   );
 }
 
-// ─── Roadmap preview ──────────────────────────────────────────────────────────
-
-function RoadmapPreview({ roadmap }: { roadmap: Roadmap | null }) {
-  if (!roadmap) {
-    return (
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">My Roadmap</p>
-        <div className="text-center py-4">
-          <Map size={28} className="text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-400 mb-3">No roadmap yet</p>
-          <Link
-            href="/quiz"
-            className="inline-flex items-center gap-1.5 text-xs font-medium bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
-          >
-            <Brain size={12} /> Take the quiz
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const pending = roadmap.items.filter((i) => i.status !== "completed");
-  const done = roadmap.items.filter((i) => i.status === "completed").length;
-  const total = roadmap.items.length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">My Roadmap</p>
-        <Link href="/roadmap" className="text-xs text-blue-600 hover:underline">View all</Link>
-      </div>
-
-      <p className="text-sm font-semibold text-gray-800 mb-2">{roadmap.goal}</p>
-
-      <div className="flex items-center gap-2 mb-4">
-        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.6 }}
-            className="h-full bg-emerald-500 rounded-full"
-          />
-        </div>
-        <span className="text-xs text-gray-500 flex-shrink-0">{done}/{total}</span>
-      </div>
-
-      {pending.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs text-gray-400">Up next:</p>
-          {pending.slice(0, 3).map((item) => (
-            <div key={item.id} className="flex items-center gap-2">
-              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                item.priority === "high" ? "bg-red-400" :
-                item.priority === "medium" ? "bg-orange-400" : "bg-green-400"
-              }`} />
-              <span className="text-sm text-gray-600 truncate">{item.topic}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {pending.length === 0 && (
-        <p className="text-xs text-emerald-600 font-medium">🎉 All topics completed!</p>
-      )}
-    </div>
-  );
-}
-
-// ─── Quick actions ────────────────────────────────────────────────────────────
-
-function QuickActions() {
-  const actions = [
-    { href: "/quiz",     icon: "🧠", label: "Skill Quiz",    desc: "Assess your current level" },
-    { href: "/roadmap",  icon: "🗺️", label: "My Roadmap",   desc: "View learning path" },
-    { href: "/courses",  icon: "📚", label: "Browse Courses", desc: "Find new courses" },
-    { href: "/profile",  icon: "👤", label: "My Profile",    desc: "Edit your details" },
+function RecommendedSection() {
+  const recs = [
+    { title: "Docker for Devs", sub: "Based on your profile" },
+    { title: "AWS Essentials", sub: "Popular in your roadmap" },
+    { title: "VueJS for Devs", sub: "Hot this week" },
   ];
-
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick Actions</p>
-      <div className="space-y-1">
-        {actions.map(({ href, icon, label, desc }) => (
-          <Link
-            key={href}
-            href={href}
-            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors group"
-          >
-            <span className="text-xl w-8 text-center">{icon}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800 group-hover:text-blue-600 transition-colors">
-                {label}
-              </p>
-              <p className="text-xs text-gray-400">{desc}</p>
+    <div className="glass-card rounded-2xl p-5">
+      <p className="text-xs font-semibold text-white mb-4">Recommended for You</p>
+      <div className="space-y-3">
+        {recs.map((r) => (
+          <div key={r.title} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.03] transition-colors cursor-pointer group">
+            <div className="w-8 h-8 rounded-lg bg-[#6c63ff]/10 border border-[#6c63ff]/20 flex items-center justify-center flex-shrink-0">
+              <BookOpen size={13} className="text-[#6c63ff]" />
             </div>
-            <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-400 flex-shrink-0" />
-          </Link>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-white truncate group-hover:text-[#6c63ff] transition-colors">{r.title}</p>
+              <p className="text-[10px] text-[#7c7a8a]">{r.sub}</p>
+            </div>
+            <ChevronRight size={12} className="text-[#7c7a8a] flex-shrink-0" />
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+/* ─── Page ───────────────────────────────────────────────────────────────── */
 
 export default function StudentDashboardPage() {
   const [name, setName] = useState("");
@@ -298,32 +234,23 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     async function loadAll() {
-      // Get user name from session
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       const fullName = session?.user?.user_metadata?.full_name as string | undefined;
       setName(fullName?.split(" ")[0] ?? "there");
 
-      // Load everything in parallel, failing gracefully
       const [statsR, enrollR, roadmapR] = await Promise.allSettled([
         apiGet<Stats>("/api/v1/students/stats"),
         apiGet<Enrollment[]>("/api/v1/enrollments/mine"),
         apiGet<Roadmap>("/api/v1/roadmap/mine"),
       ]);
-
       if (statsR.status === "fulfilled") setStats(statsR.value);
       if (enrollR.status === "fulfilled") setEnrollments(enrollR.value);
       if (roadmapR.status === "fulfilled") setRoadmap(roadmapR.value);
-
       setLoading(false);
     }
     loadAll();
   }, []);
-
-  // Most recent incomplete enrollment for "Continue Learning"
-  const inProgress = enrollments
-    .filter((e) => !e.completed_at)
-    .sort((a, b) => new Date(b.enrolled_at).getTime() - new Date(a.enrolled_at).getTime())[0];
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -332,59 +259,91 @@ export default function StudentDashboardPage() {
     return "Good evening";
   })();
 
+  const today = new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+
+  const SKILL_DATA = [
+    { label: "React", value: 82 },
+    { label: "Node", value: 65 },
+    { label: "Python", value: 54 },
+    { label: "SQL", value: 70 },
+    { label: "DSA", value: 42 },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#050508] flex">
       <StudentNavbar />
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* Welcome */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
-            {greeting}{name ? `, ${name}` : ""}! 👋
-          </h1>
-          <p className="text-gray-500 mt-1">Here&apos;s your learning overview.</p>
+      <main className="flex-1 ml-60 p-8 overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-white">
+              {greeting}{name ? `, ${name}` : ""} 👋
+            </h1>
+            <p className="text-sm text-[#7c7a8a] mt-0.5">{today}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="w-9 h-9 rounded-xl glass-card flex items-center justify-center text-[#7c7a8a] hover:text-white transition-colors">
+              <Star size={16} />
+            </button>
+          </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 size={28} className="animate-spin text-blue-400" />
+          <div className="flex items-center justify-center py-32">
+            <Loader2 size={28} className="animate-spin text-[#6c63ff]" />
           </div>
         ) : (
-          <>
-            {/* Stats row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="space-y-6">
+            {/* Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { icon: Zap,      value: stats?.xp_points ?? 0,       label: "XP Points",       color: "text-yellow-600", bg: "bg-yellow-50" },
-                { icon: Flame,    value: `${stats?.streak_days ?? 0}d`, label: "Streak",          color: "text-orange-600", bg: "bg-orange-50" },
-                { icon: BookOpen, value: stats?.enrolled_count ?? 0,   label: "Enrolled",        color: "text-blue-600",   bg: "bg-blue-50" },
-                { icon: Trophy,   value: stats?.completed_count ?? 0,  label: "Completed",       color: "text-emerald-600",bg: "bg-emerald-50" },
+                { icon: Zap,      value: stats?.xp_points ?? 0,          label: "Total XP",        sub: "+12% this week", accent: "#e7c365" },
+                { icon: Flame,    value: `${stats?.streak_days ?? 0} Days`, label: "Daily Streak",  sub: "Keep it up!", accent: "#ff6b35" },
+                { icon: BookOpen, value: stats?.enrolled_count ?? 0,      label: "Active Courses",  sub: undefined, accent: "#6c63ff" },
+                { icon: Trophy,   value: stats?.completed_count ?? 0,     label: "Certificates",   sub: undefined, accent: "#00d4ff" },
               ].map((s, i) => (
-                <motion.div
-                  key={s.label}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.07 }}
-                >
+                <motion.div key={s.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}>
                   <StatCard {...s} />
                 </motion.div>
               ))}
             </div>
 
             {/* Main grid */}
-            <div className="grid lg:grid-cols-5 gap-6">
-              {/* Left — activity */}
-              <div className="lg:col-span-3 space-y-5">
-                {inProgress && <ContinueLearningCard enrollment={inProgress} />}
-                <RecentEnrollments enrollments={enrollments} />
+            <div className="grid lg:grid-cols-3 gap-6">
+              {/* Left — active path + current learning */}
+              <div className="lg:col-span-2 space-y-6">
+                <ActivePathCard roadmap={roadmap} />
+                <CurrentLearning enrollments={enrollments} />
               </div>
 
-              {/* Right — roadmap + actions */}
-              <div className="lg:col-span-2 space-y-5">
-                <RoadmapPreview roadmap={roadmap} />
-                <QuickActions />
+              {/* Right — skill radar + recommendations */}
+              <div className="space-y-5">
+                <div className="glass-card rounded-2xl p-5">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-semibold text-white">Skill Profile</p>
+                    <span className="ai-chip text-[9px] font-semibold px-2 py-0.5 rounded-full">AI ANALYSED</span>
+                  </div>
+                  <div className="flex justify-center py-3">
+                    <SkillRadar skills={SKILL_DATA} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    {[
+                      { label: "Top Skill", value: "Frontend (React)" },
+                      { label: "Improve Area", value: "SQL Optimisation" },
+                    ].map((item) => (
+                      <div key={item.label} className="bg-white/[0.03] rounded-xl p-2.5">
+                        <p className="text-[10px] text-[#7c7a8a]">{item.label}</p>
+                        <p className="text-xs font-medium text-white mt-0.5">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <RecommendedSection />
               </div>
             </div>
-          </>
+          </div>
         )}
       </main>
     </div>

@@ -1,18 +1,30 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { LayoutDashboard, BookOpen, BarChart3, Settings } from "lucide-react";
+import AppSidebar from "./AppSidebar";
 import { createClient } from "../lib/supabase/client";
 
-const NAV_LINKS = [
-  { href: "/tutor/dashboard", label: "Dashboard" },
-  { href: "/tutor/courses",   label: "My Courses" },
-  { href: "/tutor/profile",   label: "Profile" },
+const NAV_ITEMS = [
+  { href: "/tutor/dashboard", label: "Dashboard",  icon: LayoutDashboard },
+  { href: "/tutor/courses",   label: "My Courses", icon: BookOpen },
+  { href: "/tutor/analytics", label: "Analytics",  icon: BarChart3 },
+  { href: "/tutor/settings",  label: "Settings",   icon: Settings },
 ];
 
 export default function TutorNavbar() {
-  const pathname = usePathname();
   const router = useRouter();
+  const [userName, setUserName] = useState("Tutor");
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const name = session?.user?.user_metadata?.full_name as string | undefined;
+      if (name) setUserName(name);
+    })();
+  }, []);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -20,41 +32,15 @@ export default function TutorNavbar() {
     router.push("/login");
   }
 
-  function isActive(href: string) {
-    return pathname.startsWith(href);
-  }
-
   return (
-    <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <Link href="/tutor/dashboard" className="text-lg font-bold tracking-tight flex-shrink-0">
-            Career<span className="text-blue-600">Vue</span>
-            <span className="ml-2 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Tutor</span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-0.5">
-            {NAV_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
-                  isActive(href)
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-gray-500 hover:text-gray-800 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-100 flex-shrink-0"
-        >
-          Sign out
-        </button>
-      </div>
-    </header>
+    <AppSidebar
+      navItems={NAV_ITEMS}
+      tierLabel="Premium Tier"
+      userName={userName}
+      userRoleLabel="Senior Instructor"
+      showUpgrade
+      settingsHref="/tutor/settings"
+      onLogout={handleLogout}
+    />
   );
 }

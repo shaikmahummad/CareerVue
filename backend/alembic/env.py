@@ -7,11 +7,8 @@ from alembic import context
 from app.database import Base
 from app.config import settings
 
-# Import models so Alembic can detect them
-import app.models.user  # noqa
-import app.models.course  # noqa
-import app.models.quiz  # noqa
-import app.models.roadmap  # noqa
+# Import all models so Alembic can detect every table
+import app.models  # noqa
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

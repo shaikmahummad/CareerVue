@@ -64,7 +64,7 @@ function TabItem({
         <Ionicons
           name={isActive ? tab.activeIcon : tab.icon}
           size={26}
-          color={isActive ? colors.primary : colors.muted}
+          color={isActive ? colors.primary : colors.outline}
         />
         {!!tab.badge && (
           <View style={s.badge}>
@@ -105,11 +105,11 @@ export function BottomTabBar({ tabs, activeIndex, onPress }: BottomTabBarProps) 
 const s = StyleSheet.create({
   bar: {
     flexDirection:   "row",
-    backgroundColor: colors.tabbar,
+    backgroundColor: "rgba(8,8,16,0.9)",
     borderTopWidth:  1,
-    borderTopColor:  colors.border,
+    borderTopColor:  "rgba(255,255,255,0.05)",
     paddingTop:      10,
-    height:          49,
+    minHeight:       54,
   },
   tab: {
     flex:           1,
@@ -128,12 +128,13 @@ const s = StyleSheet.create({
     width:           44,
     height:          44,
     borderRadius:    22,
-    backgroundColor: colors.primaryBg,
+    backgroundColor: "rgba(196,192,255,0.12)",
   },
   label: {
-    fontSize:   12,
-    fontWeight: "500",
-    color:      colors.primary,
+    fontSize:      12,
+    fontFamily:    "JetBrainsMono_500Medium",
+    letterSpacing: 0.3,
+    color:         colors.primary,
   },
   badge: {
     position:        "absolute",

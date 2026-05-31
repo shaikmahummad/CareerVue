@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import engine
+from app.database import Base, engine
+import app.models  # noqa — registers all ORM models before create_all
 from app.routers import (
     auth,
     students,
@@ -21,6 +22,11 @@ from app.routers import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as e:
+        print(f"[startup] DB init skipped: {e}")
     yield
     await engine.dispose()
 

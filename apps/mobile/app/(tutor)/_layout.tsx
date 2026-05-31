@@ -1,16 +1,16 @@
-﻿import { View, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { BottomTabBar, TabConfig } from "../../components/ui/BottomTabBar";
 import { colors } from "../../constants/theme";
 
 const TUTOR_TABS: TabConfig[] = [
-  { name: "index",     label: "Home",      icon: "bar-chart-outline",   activeIcon: "bar-chart"    },
-  { name: "courses",   label: "Courses",   icon: "book-outline",        activeIcon: "book"         },
-  { name: "create",    label: "Create",    icon: "add-circle-outline",  activeIcon: "add-circle"   },
-  { name: "analytics", label: "Analytics", icon: "trending-up-outline", activeIcon: "trending-up"  },
+  { name: "index",     label: "Home",    icon: "home-outline",        activeIcon: "home"        },
+  { name: "analytics", label: "Goals",   icon: "trending-up-outline", activeIcon: "trending-up" },
+  { name: "courses",   label: "Network", icon: "people-outline",      activeIcon: "people"      },
+  { name: "create",    label: "Create",  icon: "add-circle-outline",  activeIcon: "add-circle"  },
 ];
 
-const ROUTE_ORDER = ["index", "courses", "create", "analytics"];
+const ROUTE_ORDER = ["index", "analytics", "courses", "create"];
 
 export default function TutorLayout() {
   const segments    = useSegments();

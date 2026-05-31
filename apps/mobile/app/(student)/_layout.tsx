@@ -1,13 +1,13 @@
-﻿import { View, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { BottomTabBar, TabConfig } from "../../components/ui/BottomTabBar";
 import { colors } from "../../constants/theme";
 
 const STUDENT_TABS: TabConfig[] = [
-  { name: "index",   label: "Home",    icon: "home-outline",   activeIcon: "home"   },
-  { name: "roadmap", label: "Roadmap", icon: "map-outline",    activeIcon: "map"    },
-  { name: "courses", label: "Courses", icon: "book-outline",   activeIcon: "book"   },
-  { name: "profile", label: "Profile", icon: "person-outline", activeIcon: "person" },
+  { name: "index",   label: "Home",    icon: "home-outline",         activeIcon: "home"         },
+  { name: "roadmap", label: "Goals",   icon: "trending-up-outline",  activeIcon: "trending-up"  },
+  { name: "courses", label: "Network", icon: "people-outline",       activeIcon: "people"       },
+  { name: "profile", label: "Profile", icon: "person-outline",       activeIcon: "person"       },
 ];
 
 const ROUTE_ORDER = ["index", "roadmap", "courses", "profile"];
