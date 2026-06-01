@@ -59,7 +59,10 @@ async def generate_roadmap_endpoint(
     if not student.current_goal:
         raise HTTPException(status_code=400, detail="Set a career goal before generating a roadmap")
 
-    roadmap = await generate_student_roadmap(db, student_pk, student.current_goal)
+    try:
+        roadmap = await generate_student_roadmap(db, student_pk, student.current_goal)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
     items = (await db.execute(
         select(RoadmapCourse).where(RoadmapCourse.roadmap_id == roadmap.id).order_by(RoadmapCourse.order_index)

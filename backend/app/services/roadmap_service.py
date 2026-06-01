@@ -1,3 +1,5 @@
+import asyncio
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -33,27 +35,31 @@ async def generate_student_roadmap(
     skills = result.scalars().all()
 
     skill_profile = [
-        {"topic": s.topic, "level": s.level, "score_pct": s.score_pct}
+        {"topic": s.topic, "level": s.level, "score_pct": s.score_percent}
         for s in skills
     ]
 
-    # 2. Generate roadmap items via Claude (synchronous API call)
-    roadmap_items = generate_roadmap(goal, skill_profile)
+    # 2. Generate roadmap items via AI (run sync HTTP call off the event loop)
+    try:
+        loop = asyncio.get_running_loop()
+        roadmap_items = await loop.run_in_executor(None, generate_roadmap, goal, skill_profile)
+    except Exception as exc:
+        raise ValueError(f"AI roadmap generation failed: {exc}") from exc
+
+    if not isinstance(roadmap_items, list) or not roadmap_items:
+        raise ValueError("AI returned an empty or invalid roadmap — try again")
 
     # 3. Archive existing active roadmap (if any)
     existing_result = await db.execute(
-        select(Roadmap).where(
-            Roadmap.student_id == student_id,
-            Roadmap.status == "active",
-        )
+        select(Roadmap).where(Roadmap.student_id == student_id, Roadmap.is_active == True)
     )
     old_roadmap = existing_result.scalar_one_or_none()
     if old_roadmap:
-        old_roadmap.status = "archived"
+        old_roadmap.is_active = False
         await db.flush()
 
     # 4. Create new roadmap
-    roadmap = Roadmap(student_id=student_id, goal=goal, status="active")
+    roadmap = Roadmap(student_id=student_id, goal=goal, is_active=True)
     db.add(roadmap)
     await db.flush()  # populate roadmap.id
 

@@ -1,3 +1,5 @@
+import asyncio
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -26,7 +28,8 @@ async def get_or_create_quiz_template(db: AsyncSession, goal: str) -> QuizTempla
     if template:
         return template
 
-    quiz_data = generate_quiz(goal)
+    loop = asyncio.get_running_loop()
+    quiz_data = await loop.run_in_executor(None, generate_quiz, goal)
 
     template = QuizTemplate(
         goal=goal,
