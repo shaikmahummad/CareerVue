@@ -67,7 +67,20 @@
       "PowerShell(Get-Process *)",
       "PowerShell(Start-Sleep -Seconds 12; try { $r = Invoke-WebRequest -Uri \"http://localhost:3000\" -TimeoutSec 8 -UseBasicParsing; \"Status: $\\($r.StatusCode\\)\" } catch { \"Error: $\\($_.Exception.Message\\)\" })",
       "PowerShell(netstat *)",
-      "PowerShell(taskkill *)"
+      "PowerShell(taskkill *)",
+      "Bash(venv\\\\Scripts\\\\python.exe *)",
+      "Bash(ping -n 4 127.0.0.1)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "PowerShell(Start-Sleep -Seconds 5; Invoke-RestMethod -Uri http://localhost:8000/health -ErrorAction SilentlyContinue)",
+      "PowerShell(Invoke-RestMethod -Uri http://localhost:8000/ ; Write-Host \"---\" ; \\(Invoke-RestMethod -Uri http://localhost:8000/openapi.json\\).paths.PSObject.Properties.Name | Select-Object -First 20)",
+      "Bash(venv\\\\Scripts\\\\pip install *)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:8000/docs\" -UseBasicParsing -TimeoutSec 3; \"Backend running: $\\($r.StatusCode\\)\" } catch { \"Backend NOT reachable: $_\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3000\" -UseBasicParsing -TimeoutSec 3; \"Web running: $\\($r.StatusCode\\)\" } catch { \"Web NOT reachable: $_\" })",
+      "PowerShell($body = '{\"email\":\"test@test.com\",\"password\":\"test123\",\"full_name\":\"Test\"}'; try { $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/auth/register/student\" -Method POST -Body $body -ContentType \"application/json\" -UseBasicParsing -TimeoutSec 5; \"Status: $\\($r.StatusCode\\) - $\\($r.Content\\)\" } catch { \"Response: $\\($_.Exception.Response.StatusCode\\) - $\\($_.Exception.Message\\)\" })",
+      "PowerShell($body = '{\"email\":\"testuser123@test.com\",\"password\":\"test1234\",\"full_name\":\"Test User\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/auth/register/student\" -Method POST -Body $body -ContentType \"application/json\" -UseBasicParsing -TimeoutSec 30; \"Status: $\\($r.StatusCode\\)\"; $r.Content)",
+      "PowerShell($body = '{\"email\":\"testuser123@test.com\",\"password\":\"test1234\",\"full_name\":\"Test User\"}'; try { Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/auth/register/student\" -Method POST -Body $body -ContentType \"application/json\" -UseBasicParsing -TimeoutSec 30 } catch { $_.Exception.Response.GetResponseStream\\(\\) | % { $reader = New-Object System.IO.StreamReader\\($_\\); $reader.ReadToEnd\\(\\) } })",
+      "Bash(curl *)",
+      "Bash(venv/Scripts/python.exe *)"
     ]
   }
 }

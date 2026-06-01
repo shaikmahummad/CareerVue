@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
 
-    # Anthropic
-    anthropic_api_key: str
+    # Groq
+    groq_api_key: str
 
     # Razorpay
     razorpay_key_id: str

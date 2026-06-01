@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 import uuid
@@ -69,27 +71,43 @@ async def register_student(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Registration failed: {e}")
 
-    profile = Profile(
-        id=user_id,
-        role="student",
-        full_name=body.full_name,
-        email=body.email,
-        phone=body.phone,
-    )
-    db.add(profile)
+    try:
+        # Upsert profile (trigger may have already created it)
+        await db.execute(
+            pg_insert(Profile).values(
+                id=user_id, role="student", full_name=body.full_name,
+                email=body.email, phone=body.phone,
+            ).on_conflict_do_update(
+                index_elements=["id"],
+                set_={"role": "student", "full_name": body.full_name,
+                      "email": body.email, "phone": body.phone},
+            )
+        )
 
-    student = Student(
-        id=user_id,
-        college=body.college,
-        branch=body.branch,
-        year_of_study=body.year_of_study,
-        graduation_year=body.graduation_year,
-        city=body.city,
-        linkedin_url=body.linkedin_url,
-        github_url=body.github_url,
-    )
-    db.add(student)
-    await db.commit()
+        # Insert or update student row (profile_id has no unique constraint, use select first)
+        existing_student = (await db.execute(
+            select(Student).where(Student.profile_id == user_id)
+        )).scalar_one_or_none()
+
+        if existing_student:
+            existing_student.college_name = body.college
+            existing_student.branch = body.branch
+            existing_student.year_of_study = body.year_of_study
+            existing_student.graduation_year = body.graduation_year
+            existing_student.city = body.city
+            existing_student.linkedin_url = body.linkedin_url
+            existing_student.github_url = body.github_url
+        else:
+            db.add(Student(
+                profile_id=user_id, college_name=body.college, branch=body.branch,
+                year_of_study=body.year_of_study, graduation_year=body.graduation_year,
+                city=body.city, linkedin_url=body.linkedin_url, github_url=body.github_url,
+            ))
+
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
     return {
         "success": True,
@@ -114,26 +132,42 @@ async def register_tutor(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Registration failed: {e}")
 
-    profile = Profile(
-        id=user_id,
-        role="tutor",
-        full_name=body.full_name,
-        email=body.email,
-        phone=body.phone,
-    )
-    db.add(profile)
+    try:
+        # Upsert profile (trigger may have already created it)
+        await db.execute(
+            pg_insert(Profile).values(
+                id=user_id, role="tutor", full_name=body.full_name,
+                email=body.email, phone=body.phone,
+            ).on_conflict_do_update(
+                index_elements=["id"],
+                set_={"role": "tutor", "full_name": body.full_name,
+                      "email": body.email, "phone": body.phone},
+            )
+        )
 
-    tutor = Tutor(
-        id=user_id,
-        bio=body.bio,
-        expertise_tags=body.expertise_tags or [],
-        qualification=body.qualification,
-        years_experience=body.years_experience,
-        linkedin_url=body.linkedin_url,
-        website_url=body.website_url,
-    )
-    db.add(tutor)
-    await db.commit()
+        # Insert or update tutor row (profile_id has no unique constraint, use select first)
+        existing_tutor = (await db.execute(
+            select(Tutor).where(Tutor.profile_id == user_id)
+        )).scalar_one_or_none()
+
+        if existing_tutor:
+            existing_tutor.bio = body.bio
+            existing_tutor.expertise_tags = body.expertise_tags or []
+            existing_tutor.qualification = body.qualification
+            existing_tutor.experience_years = body.years_experience
+            existing_tutor.linkedin_url = body.linkedin_url
+            existing_tutor.website_url = body.website_url
+        else:
+            db.add(Tutor(
+                profile_id=user_id, bio=body.bio, expertise_tags=body.expertise_tags or [],
+                qualification=body.qualification, experience_years=body.years_experience,
+                linkedin_url=body.linkedin_url, website_url=body.website_url,
+            ))
+
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
     return {
         "success": True,

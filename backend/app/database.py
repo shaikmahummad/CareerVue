@@ -12,7 +12,7 @@ engine = create_async_engine(
     settings.database_url,
     echo=not settings.is_production,
     poolclass=NullPool,
-    connect_args={"ssl": _ssl_ctx},
+    connect_args={"ssl": _ssl_ctx, "statement_cache_size": 0},
 )
 
 AsyncSessionLocal = async_sessionmaker(

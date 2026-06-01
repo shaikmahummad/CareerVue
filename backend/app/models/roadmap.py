@@ -17,8 +17,10 @@ class Roadmap(Base):
         UUID(as_uuid=True), ForeignKey("students.id", ondelete="CASCADE"), nullable=False
     )
     goal: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
-    created_at: Mapped[datetime | None] = mapped_column(
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool | None] = mapped_column(nullable=True, server_default=text("true"))
+    completion_pct: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
+    generated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=text("now()")
     )
     updated_at: Mapped[datetime | None] = mapped_column(

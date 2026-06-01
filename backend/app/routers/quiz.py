@@ -10,7 +10,7 @@ from app.database import get_db
 from app.dependencies import AnyUser, StudentUser
 from app.models.quiz import QuizAttempt, QuizTemplate
 from app.models.user import SkillProfile
-from app.services.quiz_service import get_or_create_quiz_template, submit_quiz_attempt
+from app.services.quiz_service import get_or_create_quiz_template, get_student_pk, submit_quiz_attempt
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
 
@@ -89,7 +89,7 @@ async def submit_quiz(
     try:
         attempt, skill_results = await submit_quiz_attempt(
             db=db,
-            student_id=current_user.id,
+            profile_id=current_user.id,
             quiz_id=body.quiz_id,
             answers=answers,
             time_taken_secs=body.time_taken_secs or 0,
@@ -154,9 +154,10 @@ async def get_my_attempts(
     db: AsyncSession = Depends(get_db),
 ):
     """Return a summary list of all quiz attempts for the authenticated student."""
+    student_pk = await get_student_pk(db, current_user.id)
     result = await db.execute(
         select(QuizAttempt)
-        .where(QuizAttempt.student_id == current_user.id)
+        .where(QuizAttempt.student_id == student_pk)
         .order_by(QuizAttempt.completed_at.desc())
     )
     attempts = result.scalars().all()
@@ -186,10 +187,11 @@ async def get_my_skills(
     db: AsyncSession = Depends(get_db),
 ):
     """Return the student's current SkillProfile (all assessed topics)."""
+    student_pk = await get_student_pk(db, current_user.id)
     result = await db.execute(
         select(SkillProfile)
-        .where(SkillProfile.student_id == current_user.id)
-        .order_by(SkillProfile.score_pct.desc())
+        .where(SkillProfile.student_id == student_pk)
+        .order_by(SkillProfile.score_percent.desc())
     )
     skills = result.scalars().all()
 
@@ -201,8 +203,8 @@ async def get_my_skills(
                 "id": str(s.id),
                 "topic": s.topic,
                 "level": s.level,
-                "score_pct": s.score_pct,
-                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+                "score_pct": s.score_percent,
+                "assessed_at": s.assessed_at.isoformat() if s.assessed_at else None,
             }
             for s in skills
         ],

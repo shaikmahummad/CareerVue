@@ -24,53 +24,47 @@ class Profile(Base):
     )
 
     # Relationships
-    student: Mapped["Student | None"] = relationship(back_populates="profile", uselist=False)
-    tutor: Mapped["Tutor | None"] = relationship(back_populates="profile", uselist=False)
+    student: Mapped["Student | None"] = relationship(back_populates="profile", uselist=False, foreign_keys="Student.profile_id")
+    tutor: Mapped["Tutor | None"] = relationship(back_populates="profile", uselist=False, foreign_keys="Tutor.profile_id")
 
 
 class Student(Base):
     __tablename__ = "students"
 
-    # Shared PK with profiles — also a FK
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    college: Mapped[str | None] = mapped_column(Text, nullable=True)
+    college_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     branch: Mapped[str | None] = mapped_column(Text, nullable=True)
     year_of_study: Mapped[int | None] = mapped_column(Integer, nullable=True)
     graduation_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     city: Mapped[str | None] = mapped_column(Text, nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     github_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    career_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    current_goal: Mapped[str | None] = mapped_column(Text, nullable=True)
     xp_points: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
     streak_days: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
-    last_active: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    placement_ready: Mapped[bool | None] = mapped_column(
-        Boolean, nullable=True, server_default=text("false")
-    )
+    last_active_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, server_default=text("now()")
-    )
-    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=text("now()")
     )
 
     # Relationships
-    profile: Mapped["Profile"] = relationship(back_populates="student")
+    profile: Mapped["Profile"] = relationship(back_populates="student", foreign_keys=[profile_id])
 
 
 class Tutor(Base):
     __tablename__ = "tutors"
 
-    # Shared PK with profiles — also a FK
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     expertise_tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     qualification: Mapped[str | None] = mapped_column(Text, nullable=True)
-    years_experience: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    experience_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     website_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_verified: Mapped[bool | None] = mapped_column(
@@ -82,12 +76,9 @@ class Tutor(Base):
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=text("now()")
     )
-    updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, server_default=text("now()")
-    )
 
     # Relationships
-    profile: Mapped["Profile"] = relationship(back_populates="tutor")
+    profile: Mapped["Profile"] = relationship(back_populates="tutor", foreign_keys=[profile_id])
 
 
 class SkillProfile(Base):
@@ -101,7 +92,7 @@ class SkillProfile(Base):
     )
     topic: Mapped[str] = mapped_column(Text, nullable=False)
     level: Mapped[str] = mapped_column(Text, nullable=False)  # 'strong' | 'intermediate' | 'weak'
-    score_pct: Mapped[int] = mapped_column(Integer, nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(
+    score_percent: Mapped[int] = mapped_column(Integer, nullable=False)
+    assessed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=text("now()")
     )
