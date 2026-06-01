@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -45,27 +44,28 @@ def _merge_profile(profile: Profile, student: Student) -> dict:
         "avatar_url": profile.avatar_url,
         "phone": profile.phone,
         "profile_created_at": profile.created_at.isoformat() if profile.created_at else None,
-        "college": student.college,
+        "college": student.college_name,
         "branch": student.branch,
         "year_of_study": student.year_of_study,
         "graduation_year": student.graduation_year,
         "city": student.city,
         "linkedin_url": student.linkedin_url,
         "github_url": student.github_url,
-        "career_goal": student.career_goal,
+        "career_goal": student.current_goal,
         "xp_points": student.xp_points or 0,
         "streak_days": student.streak_days or 0,
-        "placement_ready": student.placement_ready or False,
-        "last_active": student.last_active.isoformat() if student.last_active else None,
+        "last_active": student.last_active_at.isoformat() if student.last_active_at else None,
         "student_created_at": student.created_at.isoformat() if student.created_at else None,
-        "student_updated_at": student.updated_at.isoformat() if student.updated_at else None,
     }
 
 
-async def _get_student_or_404(db: AsyncSession, student_id: uuid.UUID) -> Student:
-    student = await db.get(Student, student_id)
+async def _get_student_or_404(db: AsyncSession, profile_id: uuid.UUID) -> Student:
+    student = (await db.execute(select(Student).where(Student.profile_id == profile_id))).scalar_one_or_none()
     if not student:
-        raise HTTPException(status_code=404, detail="Student profile not found")
+        student = Student(profile_id=profile_id)
+        db.add(student)
+        await db.commit()
+        await db.refresh(student)
     return student
 
 
@@ -93,14 +93,22 @@ async def update_student_profile(
     profile_updates = body.model_dump(include={"phone", "avatar_url"}, exclude_none=True)
     for field, value in profile_updates.items():
         setattr(current_user, field, value)
-    current_user.updated_at = datetime.now(timezone.utc)
 
-    # Update students table columns
-    student_fields = {"college", "branch", "year_of_study", "graduation_year", "city", "linkedin_url", "github_url"}
-    student_updates = body.model_dump(include=student_fields, exclude_none=True)
-    for field, value in student_updates.items():
-        setattr(student, field, value)
-    student.updated_at = datetime.now(timezone.utc)
+    # Update students table columns (map request field names to actual DB column names)
+    if body.college is not None:
+        student.college_name = body.college
+    if body.branch is not None:
+        student.branch = body.branch
+    if body.year_of_study is not None:
+        student.year_of_study = body.year_of_study
+    if body.graduation_year is not None:
+        student.graduation_year = body.graduation_year
+    if body.city is not None:
+        student.city = body.city
+    if body.linkedin_url is not None:
+        student.linkedin_url = body.linkedin_url
+    if body.github_url is not None:
+        student.github_url = body.github_url
 
     await db.commit()
     await db.refresh(current_user)
@@ -117,14 +125,13 @@ async def set_career_goal(
     db: AsyncSession = Depends(get_db),
 ):
     student = await _get_student_or_404(db, current_user.id)
-    student.career_goal = body.career_goal
-    student.updated_at = datetime.now(timezone.utc)
+    student.current_goal = body.career_goal
     await db.commit()
     await db.refresh(student)
     return {
         "success": True,
         "message": "Career goal updated",
-        "data": {"career_goal": student.career_goal},
+        "data": {"career_goal": student.current_goal},
     }
 
 
@@ -133,15 +140,15 @@ async def get_skill_profile(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(SkillProfile).where(SkillProfile.student_id == current_user.id)
-    skills = (await db.execute(stmt)).scalars().all()
+    student = await _get_student_or_404(db, current_user.id)
+    skills = (await db.execute(select(SkillProfile).where(SkillProfile.student_id == student.id))).scalars().all()
     data = [
         {
             "id": str(s.id),
             "topic": s.topic,
             "level": s.level,
-            "score_pct": s.score_pct,
-            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            "score_pct": s.score_percent,
+            "assessed_at": s.assessed_at.isoformat() if s.assessed_at else None,
         }
         for s in skills
     ]
@@ -179,6 +186,7 @@ async def get_student_stats(
         "streak_days": student.streak_days or 0,
         "enrolled_count": enrolled_count,
         "completed_count": completed_count,
+        "career_goal": student.current_goal,
     }
     return {"success": True, "message": "Student stats fetched", "data": data}
 

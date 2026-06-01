@@ -9,18 +9,15 @@ from app.database import get_db
 from app.dependencies import StudentUser
 from app.models.roadmap import Roadmap, RoadmapCourse
 from app.models.user import Student
+from app.services.quiz_service import get_student_pk
 from app.services.roadmap_service import generate_student_roadmap
 
 router = APIRouter(prefix="/roadmap", tags=["roadmap"])
 
 
-# ── Request bodies ────────────────────────────────────────────────────────────
-
 class StatusUpdate(BaseModel):
     status: str  # "pending" | "enrolled" | "completed"
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _serialize_item(item: RoadmapCourse) -> dict:
     return {
@@ -37,63 +34,38 @@ def _serialize_item(item: RoadmapCourse) -> dict:
     }
 
 
-def _serialize_roadmap(roadmap: Roadmap, items: list[RoadmapCourse] | None = None) -> dict:
-    """
-    Serialize a Roadmap ORM object.
-
-    Pass `items` explicitly when the relationship isn't loaded in the same session
-    (e.g. after a select + separate items query).  If items is None, the ORM
-    relationship attribute is used directly.
-    """
-    road_items = items if items is not None else getattr(roadmap, "items", [])
+def _serialize_roadmap(roadmap: Roadmap, items: list[RoadmapCourse]) -> dict:
     return {
         "id": str(roadmap.id),
         "student_id": str(roadmap.student_id),
         "goal": roadmap.goal,
-        "status": roadmap.status,
-        "created_at": roadmap.created_at.isoformat() if roadmap.created_at else None,
+        "is_active": roadmap.is_active,
+        "completion_pct": roadmap.completion_pct or 0,
+        "generated_at": roadmap.generated_at.isoformat() if roadmap.generated_at else None,
         "updated_at": roadmap.updated_at.isoformat() if roadmap.updated_at else None,
-        "items": [_serialize_item(i) for i in road_items],
+        "items": [_serialize_item(i) for i in items],
     }
 
-
-# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/generate")
 async def generate_roadmap_endpoint(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Generate (or regenerate) an AI-powered learning roadmap for the authenticated
-    student based on their career goal and current SkillProfile.
-
-    The previous active roadmap (if any) is archived before the new one is created.
-    """
-    student = await db.get(Student, current_user.id)
+    student_pk = await get_student_pk(db, current_user.id)
+    student = await db.get(Student, student_pk)
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found")
-    if not student.career_goal:
-        raise HTTPException(
-            status_code=400,
-            detail="Set a career goal before generating a roadmap",
-        )
+    if not student.current_goal:
+        raise HTTPException(status_code=400, detail="Set a career goal before generating a roadmap")
 
-    roadmap = await generate_student_roadmap(db, current_user.id, student.career_goal)
+    roadmap = await generate_student_roadmap(db, student_pk, student.current_goal)
 
-    # Eagerly load items for serialization
-    items_result = await db.execute(
-        select(RoadmapCourse)
-        .where(RoadmapCourse.roadmap_id == roadmap.id)
-        .order_by(RoadmapCourse.order_index)
-    )
-    items = items_result.scalars().all()
+    items = (await db.execute(
+        select(RoadmapCourse).where(RoadmapCourse.roadmap_id == roadmap.id).order_by(RoadmapCourse.order_index)
+    )).scalars().all()
 
-    return {
-        "success": True,
-        "message": "Roadmap generated successfully",
-        "data": _serialize_roadmap(roadmap, items),
-    }
+    return {"success": True, "message": "Roadmap generated successfully", "data": _serialize_roadmap(roadmap, items)}
 
 
 @router.get("/mine")
@@ -101,32 +73,19 @@ async def get_my_roadmap(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return the student's current active roadmap with all course items."""
-    result = await db.execute(
-        select(Roadmap).where(
-            Roadmap.student_id == current_user.id,
-            Roadmap.status == "active",
-        )
-    )
-    roadmap = result.scalar_one_or_none()
+    student_pk = await get_student_pk(db, current_user.id)
+    roadmap = (await db.execute(
+        select(Roadmap).where(Roadmap.student_id == student_pk, Roadmap.is_active == True)
+    )).scalar_one_or_none()
+
     if not roadmap:
-        raise HTTPException(
-            status_code=404,
-            detail="No active roadmap found. Generate one first.",
-        )
+        raise HTTPException(status_code=404, detail="No active roadmap found. Generate one first.")
 
-    items_result = await db.execute(
-        select(RoadmapCourse)
-        .where(RoadmapCourse.roadmap_id == roadmap.id)
-        .order_by(RoadmapCourse.order_index)
-    )
-    items = items_result.scalars().all()
+    items = (await db.execute(
+        select(RoadmapCourse).where(RoadmapCourse.roadmap_id == roadmap.id).order_by(RoadmapCourse.order_index)
+    )).scalars().all()
 
-    return {
-        "success": True,
-        "message": "Roadmap fetched",
-        "data": _serialize_roadmap(roadmap, items),
-    }
+    return {"success": True, "message": "Roadmap fetched", "data": _serialize_roadmap(roadmap, items)}
 
 
 @router.get("/history")
@@ -134,22 +93,16 @@ async def get_roadmap_history(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all roadmaps (active + archived) for the authenticated student."""
-    result = await db.execute(
-        select(Roadmap)
-        .where(Roadmap.student_id == current_user.id)
-        .order_by(Roadmap.created_at.desc())
-    )
-    roadmaps = result.scalars().all()
+    student_pk = await get_student_pk(db, current_user.id)
+    roadmaps = (await db.execute(
+        select(Roadmap).where(Roadmap.student_id == student_pk).order_by(Roadmap.generated_at.desc())
+    )).scalars().all()
 
     data = []
     for roadmap in roadmaps:
-        items_result = await db.execute(
-            select(RoadmapCourse)
-            .where(RoadmapCourse.roadmap_id == roadmap.id)
-            .order_by(RoadmapCourse.order_index)
-        )
-        items = items_result.scalars().all()
+        items = (await db.execute(
+            select(RoadmapCourse).where(RoadmapCourse.roadmap_id == roadmap.id).order_by(RoadmapCourse.order_index)
+        )).scalars().all()
         data.append(_serialize_roadmap(roadmap, items))
 
     return {"success": True, "message": "Roadmap history fetched", "data": data}
@@ -163,26 +116,18 @@ async def update_roadmap_course_status(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Update the status of a single roadmap course item.
-
-    Allowed status values: ``pending``, ``enrolled``, ``completed``.
-    """
     valid_statuses = {"pending", "enrolled", "completed"}
     if body.status not in valid_statuses:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid status '{body.status}'. Must be one of: {sorted(valid_statuses)}",
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid status '{body.status}'. Must be one of: {sorted(valid_statuses)}")
 
     try:
-        rid = uuid.UUID(roadmap_id)
-        iid = uuid.UUID(item_id)
+        rid, iid = uuid.UUID(roadmap_id), uuid.UUID(item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid roadmap_id or item_id")
 
+    student_pk = await get_student_pk(db, current_user.id)
     roadmap = await db.get(Roadmap, rid)
-    if not roadmap or roadmap.student_id != current_user.id:
+    if not roadmap or roadmap.student_id != student_pk:
         raise HTTPException(status_code=404, detail="Roadmap not found")
 
     item = await db.get(RoadmapCourse, iid)
@@ -192,8 +137,4 @@ async def update_roadmap_course_status(
     item.status = body.status
     await db.commit()
 
-    return {
-        "success": True,
-        "message": f"Course item status updated to '{body.status}'",
-        "data": _serialize_item(item),
-    }
+    return {"success": True, "message": f"Status updated to '{body.status}'", "data": _serialize_item(item)}
