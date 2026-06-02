@@ -1,4 +1,5 @@
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -13,6 +14,10 @@ from app.services.quiz_service import get_student_pk
 from app.services.roadmap_service import generate_student_roadmap
 
 router = APIRouter(prefix="/roadmap", tags=["roadmap"])
+
+
+class GenerateRoadmapRequest(BaseModel):
+    attempt_id: Optional[str] = None
 
 
 class StatusUpdate(BaseModel):
@@ -50,6 +55,7 @@ def _serialize_roadmap(roadmap: Roadmap, items: list[RoadmapCourse]) -> dict:
 @router.post("/generate")
 async def generate_roadmap_endpoint(
     current_user: StudentUser,
+    body: Optional[GenerateRoadmapRequest] = None,
     db: AsyncSession = Depends(get_db),
 ):
     student_pk = await get_student_pk(db, current_user.id)
@@ -59,8 +65,15 @@ async def generate_roadmap_endpoint(
     if not student.current_goal:
         raise HTTPException(status_code=400, detail="Set a career goal before generating a roadmap")
 
+    attempt_id = None
+    if body and body.attempt_id:
+        try:
+            attempt_id = uuid.UUID(body.attempt_id)
+        except ValueError:
+            pass
+
     try:
-        roadmap = await generate_student_roadmap(db, student_pk, student.current_goal)
+        roadmap = await generate_student_roadmap(db, student_pk, student.current_goal, attempt_id=attempt_id)
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
@@ -119,7 +132,7 @@ async def update_roadmap_course_status(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    valid_statuses = {"pending", "enrolled", "completed"}
+    valid_statuses = {"not_started", "in_progress", "completed"}
     if body.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status '{body.status}'. Must be one of: {sorted(valid_statuses)}")
 

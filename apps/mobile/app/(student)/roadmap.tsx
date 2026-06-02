@@ -30,9 +30,9 @@ interface Roadmap {
 }
 
 const STATUS_CYCLE: Record<string, string> = {
-  pending:   "enrolled",
-  enrolled:  "completed",
-  completed: "pending",
+  not_started: "in_progress",
+  in_progress: "completed",
+  completed:   "not_started",
 };
 
 const FALLBACK: Roadmap = {
@@ -72,10 +72,10 @@ const RING_CIRCUM = 2 * Math.PI * RING_R; // ≈ 175.9
 type NodeType = "completed" | "active" | "upcoming" | "locked";
 
 function getNodeType(item: RoadmapItem, items: RoadmapItem[]): NodeType {
-  if (item.status === "completed") return "completed";
-  if (item.status === "enrolled")  return "active";
-  const firstPendingId = items.find(i => i.status === "pending")?.id;
-  if (item.id === firstPendingId)  return "upcoming";
+  if (item.status === "completed")   return "completed";
+  if (item.status === "in_progress") return "active";
+  const firstNotStartedId = items.find(i => i.status === "not_started")?.id;
+  if (item.id === firstNotStartedId) return "upcoming";
   return "locked";
 }
 
@@ -107,8 +107,16 @@ export default function RoadmapScreen() {
     try {
       const data = await apiGet<Roadmap>("/api/v1/roadmap/mine");
       setRoadmap(data);
-    } catch {
-      setRoadmap(FALLBACK);
+    } catch (e: any) {
+      // Only use FALLBACK for non-404 errors (network issues etc.)
+      const is404 =
+        e?.status === 404 ||
+        (typeof e?.message === "string" && e.message.includes("404"));
+      if (is404) {
+        setRoadmap(null);
+      } else {
+        setRoadmap(FALLBACK);
+      }
     } finally {
       setLoading(false);
     }
@@ -152,6 +160,33 @@ export default function RoadmapScreen() {
     ]);
   }
 
+  function handleChangeGoal() {
+    Alert.alert(
+      "Change Career Goal",
+      "Changing your goal will archive your current roadmap. You'll need to take a new assessment to generate a fresh roadmap.\n\nAre you sure?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Change Goal",
+          style: "destructive",
+          onPress: () => router.push("/(student)/quiz" as any),
+        },
+      ]
+    );
+  }
+
+  async function handleGenerateNew() {
+    setRegenerating(true);
+    try {
+      const data = await apiPost<Roadmap>("/api/v1/roadmap/generate");
+      setRoadmap(data);
+    } catch (e: any) {
+      Alert.alert("Error", e.message ?? "Failed to generate roadmap");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   const HEADER_H = insets.top + 44;
 
   if (loading || regenerating) {
@@ -164,7 +199,49 @@ export default function RoadmapScreen() {
     );
   }
 
-  if (!roadmap) return null;
+  // ── No roadmap / empty state ─────────────────────────────────────────────
+
+  if (!roadmap) {
+    return (
+      <View style={[s.root, s.center]}>
+        <StatusBar style="light" />
+        <Ionicons name="map-outline" size={64} color={colors.surfaceHighest} />
+        <Text style={[s.pageTitle, { textAlign: "center", marginTop: 16, marginBottom: 8 }]}>
+          No Roadmap Yet
+        </Text>
+        <Text style={[s.loadingText, { textAlign: "center", marginBottom: 24 }]}>
+          Take a skill quiz to generate your personalized learning roadmap
+        </Text>
+        <Pressable
+          style={{
+            backgroundColor:   colors.primary,
+            paddingHorizontal: 24,
+            paddingVertical:   14,
+            borderRadius:      16,
+            marginBottom:      12,
+          }}
+          onPress={() => router.push("/(student)/quiz" as any)}
+        >
+          <Text style={{ fontFamily: "HankenGrotesk_600SemiBold", fontSize: 15, color: colors.onPrimary }}>
+            Take Skill Quiz
+          </Text>
+        </Pressable>
+        <Pressable
+          style={{
+            backgroundColor:   colors.surfaceContainer,
+            paddingHorizontal: 24,
+            paddingVertical:   12,
+            borderRadius:      14,
+          }}
+          onPress={handleGenerateNew}
+        >
+          <Text style={{ fontFamily: "HankenGrotesk_500Medium", fontSize: 14, color: colors.textVariant }}>
+            Generate from Existing Goal
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   const items      = [...roadmap.items].sort((a, b) => a.order_index - b.order_index);
   const done       = items.filter(i => i.status === "completed").length;
@@ -184,7 +261,7 @@ export default function RoadmapScreen() {
           </Pressable>
           <Text style={s.headerTitle}>CareerVue</Text>
         </View>
-        <Pressable hitSlop={12} onPress={handleRegenerate}>
+        <Pressable hitSlop={12} onPress={() => router.push("/(student)/settings" as any)}>
           <Ionicons name="settings-outline" size={24} color={colors.textVariant} />
         </Pressable>
       </View>
@@ -205,6 +282,9 @@ export default function RoadmapScreen() {
             <Text style={s.goalLabel}>ACTIVE GOAL</Text>
             <Text style={s.goalTitle}>{roadmap.goal}</Text>
             <Text style={s.goalSub}>{done} of {total} modules completed</Text>
+            <Pressable hitSlop={8} onPress={handleChangeGoal} style={{ marginTop: 6 }}>
+              <Text style={s.changeGoalLink}>Change Goal</Text>
+            </Pressable>
           </View>
 
           {/* Circular ring progress */}
@@ -233,6 +313,15 @@ export default function RoadmapScreen() {
             </View>
           </View>
         </View>
+
+        {/* Take New Assessment secondary button */}
+        <Pressable
+          style={s.newAssessBtn}
+          onPress={() => router.push("/(student)/quiz" as any)}
+        >
+          <Ionicons name="flash-outline" size={14} color={colors.primary} />
+          <Text style={s.newAssessBtnText}>Take New Assessment to Update Roadmap</Text>
+        </Pressable>
 
         {/* Vertical timeline */}
         <View style={s.timeline}>
@@ -603,5 +692,33 @@ const s = StyleSheet.create({
     lineHeight: 20,
     color:      colors.textVariant,
     marginTop:  12,
+  },
+
+  // Change goal link
+  changeGoalLink: {
+    fontFamily:    "HankenGrotesk_500Medium",
+    fontSize:      12,
+    color:         colors.primary,
+    textDecorationLine: "underline" as const,
+  },
+
+  // Take new assessment button
+  newAssessBtn: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    justifyContent:    "center",
+    gap:               6,
+    backgroundColor:   colors.surfaceContainer,
+    borderWidth:       1,
+    borderColor:       "rgba(196,192,255,0.2)",
+    borderRadius:      14,
+    paddingVertical:   12,
+    paddingHorizontal: 16,
+  },
+  newAssessBtnText: {
+    fontFamily:    "HankenGrotesk_500Medium",
+    fontSize:      13,
+    color:         colors.primary,
+    letterSpacing: -0.1,
   },
 });

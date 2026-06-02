@@ -14,6 +14,7 @@ async def generate_student_roadmap(
     db: AsyncSession,
     student_id: UUID,
     goal: str,
+    attempt_id: UUID | None = None,
 ) -> Roadmap:
     """
     Generate an AI-powered learning roadmap for a student.
@@ -59,7 +60,7 @@ async def generate_student_roadmap(
         await db.flush()
 
     # 4. Create new roadmap
-    roadmap = Roadmap(student_id=student_id, goal=goal, is_active=True)
+    roadmap = Roadmap(student_id=student_id, goal=goal, is_active=True, quiz_attempt_id=attempt_id)
     db.add(roadmap)
     await db.flush()  # populate roadmap.id
 
@@ -75,7 +76,7 @@ async def generate_student_roadmap(
             priority=item.get("priority", 1),
             recommended_course_type=item.get("recommended_course_type", ""),
             search_keywords=item.get("search_keywords", []),
-            status="pending",
+            status="not_started",
             order_index=item.get("order_index", 1),
         )
         db.add(rc)

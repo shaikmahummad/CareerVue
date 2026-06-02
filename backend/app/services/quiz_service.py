@@ -21,16 +21,51 @@ async def get_student_pk(db: AsyncSession, profile_id: UUID) -> UUID:
     return row.id
 
 
-async def get_or_create_quiz_template(db: AsyncSession, goal: str) -> QuizTemplate:
+def _compute_skill_level(avg_score: float) -> str:
+    if avg_score >= 75:
+        return "advanced"
+    if avg_score >= 45:
+        return "intermediate"
+    return "beginner"
+
+
+async def get_or_create_quiz_template(
+    db: AsyncSession,
+    goal: str,
+    student_id: UUID | None = None,
+) -> QuizTemplate:
+    # Determine the appropriate difficulty for this student
+    skill_level = "beginner"
+    if student_id:
+        skills = (await db.execute(
+            select(SkillProfile).where(SkillProfile.student_id == student_id)
+        )).scalars().all()
+        if skills:
+            avg = sum(s.score_percent for s in skills) / len(skills)
+            skill_level = _compute_skill_level(avg)
+
+    # For non-beginner students, always generate a fresh quiz so difficulty improves
+    if skill_level != "beginner":
+        loop = asyncio.get_running_loop()
+        quiz_data = await loop.run_in_executor(None, generate_quiz, goal, 20, skill_level)
+        template = QuizTemplate(
+            goal=goal,
+            topic_areas=quiz_data["topic_areas"],
+            questions=quiz_data["questions"],
+        )
+        db.add(template)
+        await db.commit()
+        await db.refresh(template)
+        return template
+
+    # Beginners get the cached template (same questions until they improve)
     result = await db.execute(select(QuizTemplate).where(QuizTemplate.goal == goal))
     template = result.scalar_one_or_none()
-
     if template:
         return template
 
     loop = asyncio.get_running_loop()
-    quiz_data = await loop.run_in_executor(None, generate_quiz, goal)
-
+    quiz_data = await loop.run_in_executor(None, generate_quiz, goal, 20, "beginner")
     template = QuizTemplate(
         goal=goal,
         topic_areas=quiz_data["topic_areas"],

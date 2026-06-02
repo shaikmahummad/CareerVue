@@ -14,29 +14,58 @@ def _extract_json(raw: str) -> str:
     """
     Robustly pull the first complete JSON object or array out of a raw LLM
     response, regardless of surrounding prose or markdown fences.
+    Uses bracket matching to correctly handle nested structures.
     """
     text = raw.strip()
 
     # Strip markdown code fences first
     if "```" in text:
-        # Grab content between first and last fence
         start = text.find("```")
         end = text.rfind("```")
         if end > start:
             inner = text[start + 3: end]
-            # Drop the optional language tag on the opening fence line
             first_newline = inner.find("\n")
             if first_newline != -1:
                 inner = inner[first_newline + 1:]
             text = inner.strip()
 
-    # Find the outermost JSON structure (object or array)
-    for opener, closer in [('{', '}'), ('[', ']')]:
-        idx = text.find(opener)
-        if idx != -1:
-            last = text.rfind(closer)
-            if last > idx:
-                return text[idx: last + 1]
+    # Pick whichever outermost structure appears first in the text
+    bracket_idx = text.find('[')
+    brace_idx = text.find('{')
+
+    if bracket_idx == -1 and brace_idx == -1:
+        return text
+
+    if bracket_idx == -1:
+        opener, closer, idx = '{', '}', brace_idx
+    elif brace_idx == -1:
+        opener, closer, idx = '[', ']', bracket_idx
+    elif bracket_idx < brace_idx:
+        opener, closer, idx = '[', ']', bracket_idx
+    else:
+        opener, closer, idx = '{', '}', brace_idx
+
+    depth = 0
+    in_string = False
+    escape_next = False
+    for i, char in enumerate(text[idx:], idx):
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == opener:
+            depth += 1
+        elif char == closer:
+            depth -= 1
+            if depth == 0:
+                return text[idx: i + 1]
 
     return text
 
@@ -53,10 +82,18 @@ def _chat(system: str, user: str, max_tokens: int = 8000) -> str:
     return response.choices[0].message.content
 
 
-def generate_quiz(goal: str, num_questions: int = 20) -> dict:
+def generate_quiz(goal: str, num_questions: int = 20, skill_level: str = "beginner") -> dict:
     topics_per_question = num_questions // 5
 
+    difficulty_instructions = {
+        "beginner":     "Focus on foundational concepts. Mix of beginner (60%) and intermediate (40%) questions.",
+        "intermediate": "Focus on applied knowledge. Mix of intermediate (60%) and advanced (40%) questions. Avoid basic recall questions.",
+        "advanced":     "Focus on advanced topics, edge cases, best practices, and system design. All intermediate-to-advanced questions.",
+    }.get(skill_level, "Mix of beginner (60%) and intermediate (40%) questions.")
+
     prompt = f"""Generate a {num_questions}-question multiple choice quiz to assess a student's current skill level for the goal: "{goal}".
+
+Difficulty profile: {difficulty_instructions}
 
 Cover exactly 5 different topic areas relevant to this goal ({topics_per_question} questions each).
 Each question must have:

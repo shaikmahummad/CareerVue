@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
 import {
-  View, Text, ScrollView, Pressable, TextInput,
+  View, Text, StyleSheet, ScrollView, Pressable, TextInput,
   ActivityIndicator, Alert,
 } from "react-native";
+import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
 import { apiGet, apiPut } from "../../lib/api";
+import { colors, TAB_BAR_HEIGHT } from "../../constants/theme";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface StudentProfile {
   id: string;
@@ -26,6 +32,8 @@ interface StudentProfile {
   completed_count: number;
 }
 
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+
 function AvatarInitial({ name }: { name: string }) {
   const initials = name
     .split(" ")
@@ -34,14 +42,29 @@ function AvatarInitial({ name }: { name: string }) {
     .map((w) => w[0].toUpperCase())
     .join("");
   return (
-    <View
-      className="w-20 h-20 rounded-2xl items-center justify-center"
-      style={{ backgroundColor: "#2563eb" }}
-    >
-      <Text className="text-white text-2xl font-bold">{initials || "S"}</Text>
+    <View style={a.avatar}>
+      <Text style={a.avatarText}>{initials || "S"}</Text>
     </View>
   );
 }
+
+const a = StyleSheet.create({
+  avatar: {
+    width:           80,
+    height:          80,
+    borderRadius:    20,
+    backgroundColor: "#2000a4",
+    alignItems:      "center",
+    justifyContent:  "center",
+  },
+  avatarText: {
+    fontFamily: "HankenGrotesk_700Bold",
+    fontSize:   28,
+    color:      colors.primary,
+  },
+});
+
+// ─── Field component ──────────────────────────────────────────────────────────
 
 function Field({
   label, value, onChangeText, placeholder, keyboardType, editable = true,
@@ -54,18 +77,14 @@ function Field({
   editable?: boolean;
 }) {
   return (
-    <View className="mb-4">
-      <Text className="text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</Text>
+    <View style={f.wrap}>
+      <Text style={f.label}>{label}</Text>
       <TextInput
-        className={`border rounded-xl px-3.5 py-2.5 text-sm ${
-          editable
-            ? "border-gray-200 bg-white text-gray-900"
-            : "border-gray-100 bg-gray-50 text-gray-400"
-        }`}
+        style={[f.input, editable ? f.inputEditable : f.inputReadOnly]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#9ca3af"
+        placeholderTextColor={colors.textVariant}
         keyboardType={keyboardType}
         editable={editable}
         autoCapitalize="none"
@@ -74,10 +93,45 @@ function Field({
   );
 }
 
+const f = StyleSheet.create({
+  wrap: { marginBottom: 16 },
+  label: {
+    fontFamily:    "JetBrainsMono_500Medium",
+    fontSize:      11,
+    letterSpacing: 0.5,
+    color:         colors.textVariant,
+    textTransform: "uppercase",
+    marginBottom:  6,
+  },
+  input: {
+    borderWidth:       1,
+    borderRadius:      12,
+    paddingHorizontal: 14,
+    paddingVertical:   11,
+    fontFamily:        "HankenGrotesk_400Regular",
+    fontSize:          14,
+  },
+  inputEditable: {
+    backgroundColor: colors.surfaceContainer,
+    borderColor:     colors.border,
+    color:           colors.text,
+  },
+  inputReadOnly: {
+    backgroundColor: colors.surfaceHighest,
+    borderColor:     colors.border,
+    color:           colors.textVariant,
+  },
+});
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
 export default function ProfileScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving,  setSaving]  = useState(false);
 
   const [form, setForm] = useState({
     phone: "", college: "", branch: "",
@@ -105,7 +159,7 @@ export default function ProfileScreen() {
   }, []);
 
   function set(key: keyof typeof form) {
-    return (val: string) => setForm((f) => ({ ...f, [key]: val }));
+    return (val: string) => setForm((prev) => ({ ...prev, [key]: val }));
   }
 
   async function handleSave() {
@@ -130,32 +184,44 @@ export default function ProfileScreen() {
     }
   }
 
+  // ── Loading ───────────────────────────────────────────────────────────────
+
   if (loading) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#2563eb" />
+      <View style={[s.root, s.center]}>
+        <StatusBar style="light" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
+  // ── Screen ────────────────────────────────────────────────────────────────
+
   return (
-    <ScrollView className="flex-1 bg-gray-50" showsVerticalScrollIndicator={false}>
-      <View className="px-5 pt-14 pb-8">
+    <View style={s.root}>
+      <StatusBar style="light" />
+      <ScrollView
+        contentContainerStyle={[
+          s.scroll,
+          { paddingTop: insets.top + 16, paddingBottom: TAB_BAR_HEIGHT + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
-        <Text className="text-2xl font-bold text-gray-900 mb-5">My Profile</Text>
+        <Text style={s.pageTitle}>My Profile</Text>
 
         {/* Identity card */}
-        <View className="bg-white rounded-2xl border border-gray-100 p-5 mb-5">
-          <View className="flex-row items-center gap-4 mb-4">
+        <View style={s.card}>
+          <View style={s.identityRow}>
             <AvatarInitial name={profile?.full_name ?? ""} />
-            <View className="flex-1 min-w-0">
-              <Text className="text-base font-bold text-gray-900" numberOfLines={1}>
+            <View style={s.identityInfo}>
+              <Text style={s.identityName} numberOfLines={1}>
                 {profile?.full_name}
               </Text>
-              <Text className="text-sm text-gray-400" numberOfLines={1}>{profile?.email}</Text>
+              <Text style={s.identityEmail} numberOfLines={1}>{profile?.email}</Text>
               {profile?.career_goal && (
-                <View className="bg-blue-50 self-start rounded-lg px-2 py-0.5 mt-1.5">
-                  <Text className="text-xs text-blue-600 font-medium" numberOfLines={1}>
+                <View style={s.goalBadge}>
+                  <Text style={s.goalBadgeText} numberOfLines={1}>
                     {profile.career_goal}
                   </Text>
                 </View>
@@ -164,31 +230,87 @@ export default function ProfileScreen() {
           </View>
 
           {/* Stats mini row */}
-          <View className="flex-row gap-3">
+          <View style={s.statsRow}>
             {[
-              { label: "XP",       value: profile?.xp_points ?? 0,      color: "#d97706" },
-              { label: "Streak",   value: `${profile?.streak_days ?? 0}d`, color: "#ea580c" },
-              { label: "Enrolled", value: profile?.enrolled_count ?? 0,  color: "#2563eb" },
-              { label: "Done",     value: profile?.completed_count ?? 0, color: "#059669" },
-            ].map((s) => (
-              <View key={s.label} className="flex-1 bg-gray-50 rounded-xl py-2.5 items-center">
-                <Text className="text-sm font-bold" style={{ color: s.color }}>{s.value}</Text>
-                <Text className="text-xs text-gray-400 mt-0.5">{s.label}</Text>
+              { label: "XP",       value: profile?.xp_points ?? 0,          color: colors.warning },
+              { label: "Streak",   value: `${profile?.streak_days ?? 0}d`,   color: colors.tertiary },
+              { label: "Enrolled", value: profile?.enrolled_count ?? 0,      color: colors.primary },
+              { label: "Done",     value: profile?.completed_count ?? 0,     color: colors.success },
+            ].map((s_) => (
+              <View key={s_.label} style={s.statCell}>
+                <Text style={[s.statValue, { color: s_.color }]}>{s_.value}</Text>
+                <Text style={s.statLabel}>{s_.label}</Text>
               </View>
             ))}
           </View>
         </View>
 
-        {/* Read-only fields */}
-        <View className="bg-white rounded-2xl border border-gray-100 p-5 mb-5">
-          <Text className="text-sm font-semibold text-gray-700 mb-4">Account Info</Text>
+        {/* Career Goal card */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Career Goal</Text>
+          {profile?.career_goal ? (
+            <>
+              <View style={s.currentGoalBox}>
+                <Text style={s.currentGoalCaption}>Current Goal</Text>
+                <Text style={s.currentGoalText}>{profile.career_goal}</Text>
+              </View>
+              <Pressable
+                style={s.changeGoalBtn}
+                onPress={() => {
+                  Alert.alert(
+                    "Change Career Goal",
+                    "Changing your goal will archive your current roadmap. You'll need to take a new assessment to generate a fresh roadmap.\n\nAre you sure?",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Change Goal",
+                        style: "destructive",
+                        onPress: () => router.push("/(student)/quiz" as any),
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Text style={s.changeGoalBtnText}>Change Goal</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              style={s.primaryBtn}
+              onPress={() => router.push("/(student)/quiz" as any)}
+            >
+              <Text style={s.primaryBtnText}>Set Career Goal</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* Quiz History row */}
+        <Pressable
+          style={s.quizHistoryRow}
+          onPress={() => router.push("/(student)/quiz-history" as any)}
+        >
+          <View style={s.quizHistoryLeft}>
+            <View style={s.quizHistoryIcon}>
+              <Ionicons name="bar-chart-outline" size={16} color={colors.primary} />
+            </View>
+            <View>
+              <Text style={s.quizHistoryTitle}>Quiz History</Text>
+              <Text style={s.quizHistorySub}>View past attempts &amp; answers</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textVariant} />
+        </Pressable>
+
+        {/* Account Info (read-only) */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Account Info</Text>
           <Field label="Full Name" value={profile?.full_name ?? ""} editable={false} />
           <Field label="Email"     value={profile?.email ?? ""}     editable={false} />
         </View>
 
-        {/* Editable fields */}
-        <View className="bg-white rounded-2xl border border-gray-100 p-5 mb-5">
-          <Text className="text-sm font-semibold text-gray-700 mb-4">Personal Details</Text>
+        {/* Personal Details (editable) */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Personal Details</Text>
           <Field label="Phone"           value={form.phone}           onChangeText={set("phone")}           placeholder="+91 9876543210" keyboardType="phone-pad" />
           <Field label="City"            value={form.city}            onChangeText={set("city")}            placeholder="Hyderabad" />
           <Field label="College"         value={form.college}         onChangeText={set("college")}         placeholder="IIT Bombay" />
@@ -198,34 +320,241 @@ export default function ProfileScreen() {
         </View>
 
         {/* Links */}
-        <View className="bg-white rounded-2xl border border-gray-100 p-5 mb-5">
-          <Text className="text-sm font-semibold text-gray-700 mb-4">Links</Text>
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Links</Text>
           <Field label="LinkedIn" value={form.linkedin_url} onChangeText={set("linkedin_url")} placeholder="https://linkedin.com/in/..." keyboardType="url" />
           <Field label="GitHub"   value={form.github_url}   onChangeText={set("github_url")}   placeholder="https://github.com/..."   keyboardType="url" />
         </View>
 
         {/* Save */}
         <Pressable
-          className="bg-blue-600 rounded-2xl py-4 items-center flex-row justify-center gap-2"
+          style={[s.primaryBtn, s.saveBtn]}
           onPress={handleSave}
           disabled={saving}
         >
           {saving
-            ? <ActivityIndicator size="small" color="white" />
-            : <Ionicons name="save-outline" size={16} color="white" />}
-          <Text className="text-white font-semibold text-sm">
+            ? <ActivityIndicator size="small" color={colors.onPrimary} />
+            : <Ionicons name="save-outline" size={16} color={colors.onPrimary} />}
+          <Text style={s.primaryBtnText}>
             {saving ? "Saving…" : "Save Profile"}
           </Text>
         </Pressable>
 
         {/* Sign out */}
         <Pressable
-          className="mt-4 py-4 items-center"
+          style={s.signOutBtn}
           onPress={() => supabase.auth.signOut()}
         >
-          <Text className="text-sm text-red-500 font-medium">Sign Out</Text>
+          <Text style={s.signOutText}>Sign Out</Text>
         </Pressable>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  root:   { flex: 1, backgroundColor: colors.bg },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+
+  scroll: {
+    paddingHorizontal: 16,
+    gap:               16,
+  },
+
+  // Page header
+  pageTitle: {
+    fontFamily:    "HankenGrotesk_700Bold",
+    fontSize:      28,
+    lineHeight:    34,
+    letterSpacing: -0.4,
+    color:         colors.text,
+  },
+
+  // Generic card
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderRadius:    20,
+    padding:         16,
+    gap:             12,
+  },
+
+  // Section title
+  sectionTitle: {
+    fontFamily:    "HankenGrotesk_600SemiBold",
+    fontSize:      14,
+    lineHeight:    20,
+    color:         colors.text,
+  },
+
+  // Identity card internals
+  identityRow: {
+    flexDirection: "row",
+    alignItems:    "center",
+    gap:           16,
+  },
+  identityInfo: {
+    flex:   1,
+    gap:    3,
+    minWidth: 0,
+  },
+  identityName: {
+    fontFamily:    "HankenGrotesk_700Bold",
+    fontSize:      17,
+    lineHeight:    22,
+    letterSpacing: -0.2,
+    color:         colors.text,
+  },
+  identityEmail: {
+    fontFamily: "HankenGrotesk_400Regular",
+    fontSize:   13,
+    lineHeight: 18,
+    color:      colors.textVariant,
+  },
+  goalBadge: {
+    alignSelf:         "flex-start",
+    backgroundColor:   "rgba(196,192,255,0.1)",
+    borderWidth:       1,
+    borderColor:       "rgba(196,192,255,0.2)",
+    borderRadius:      8,
+    paddingHorizontal: 8,
+    paddingVertical:   3,
+    marginTop:         2,
+  },
+  goalBadgeText: {
+    fontFamily: "HankenGrotesk_500Medium",
+    fontSize:   11,
+    color:      colors.primary,
+  },
+
+  // Stats row
+  statsRow: {
+    flexDirection: "row",
+    gap:           8,
+  },
+  statCell: {
+    flex:           1,
+    backgroundColor: colors.surfaceContainer,
+    borderRadius:   12,
+    paddingVertical: 10,
+    alignItems:     "center",
+    gap:            2,
+  },
+  statValue: {
+    fontFamily:    "JetBrainsMono_500Medium",
+    fontSize:      14,
+    letterSpacing: 0.3,
+  },
+  statLabel: {
+    fontFamily: "HankenGrotesk_400Regular",
+    fontSize:   11,
+    color:      colors.textVariant,
+  },
+
+  // Career goal internals
+  currentGoalBox: {
+    backgroundColor:   colors.surfaceContainer,
+    borderRadius:      14,
+    paddingHorizontal: 14,
+    paddingVertical:   12,
+    gap:               4,
+  },
+  currentGoalCaption: {
+    fontFamily:    "JetBrainsMono_500Medium",
+    fontSize:      10,
+    letterSpacing: 0.5,
+    color:         colors.textVariant,
+    textTransform: "uppercase",
+  },
+  currentGoalText: {
+    fontFamily:    "HankenGrotesk_600SemiBold",
+    fontSize:      15,
+    lineHeight:    21,
+    color:         colors.primary,
+  },
+  changeGoalBtn: {
+    backgroundColor: colors.surfaceContainer,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderRadius:    12,
+    paddingVertical: 11,
+    alignItems:      "center",
+  },
+  changeGoalBtnText: {
+    fontFamily: "HankenGrotesk_500Medium",
+    fontSize:   14,
+    color:      colors.text,
+  },
+
+  // Primary button
+  primaryBtn: {
+    flexDirection:   "row",
+    backgroundColor: colors.primary,
+    borderRadius:    16,
+    paddingVertical: 14,
+    alignItems:      "center",
+    justifyContent:  "center",
+    gap:             8,
+  },
+  primaryBtnText: {
+    fontFamily: "HankenGrotesk_600SemiBold",
+    fontSize:   15,
+    color:      colors.onPrimary,
+  },
+
+  // Quiz history row
+  quizHistoryRow: {
+    backgroundColor: colors.surface,
+    borderWidth:     1,
+    borderColor:     colors.border,
+    borderRadius:    20,
+    paddingHorizontal: 16,
+    paddingVertical:   14,
+    flexDirection:   "row",
+    alignItems:      "center",
+    justifyContent:  "space-between",
+  },
+  quizHistoryLeft: {
+    flexDirection: "row",
+    alignItems:    "center",
+    gap:           12,
+  },
+  quizHistoryIcon: {
+    width:           36,
+    height:          36,
+    borderRadius:    10,
+    backgroundColor: "rgba(196,192,255,0.1)",
+    alignItems:      "center",
+    justifyContent:  "center",
+  },
+  quizHistoryTitle: {
+    fontFamily:    "HankenGrotesk_600SemiBold",
+    fontSize:      14,
+    lineHeight:    20,
+    color:         colors.text,
+  },
+  quizHistorySub: {
+    fontFamily: "HankenGrotesk_400Regular",
+    fontSize:   12,
+    color:      colors.textVariant,
+  },
+
+  // Save button
+  saveBtn: {
+    marginTop: 4,
+  },
+
+  // Sign out
+  signOutBtn: {
+    paddingVertical: 16,
+    alignItems:      "center",
+  },
+  signOutText: {
+    fontFamily: "HankenGrotesk_500Medium",
+    fontSize:   14,
+    color:      colors.error,
+  },
+});

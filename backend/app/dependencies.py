@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,8 @@ from app.database import get_db
 from app.utils.supabase import supabase_admin
 from app.models.user import Profile
 from app.config import settings  # noqa: F401 — kept for potential future use
+
+logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer()
 
@@ -27,7 +31,8 @@ async def get_current_user(
             raise HTTPException(status_code=401, detail="Invalid token")
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
+        logger.warning("Token validation failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

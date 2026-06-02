@@ -80,7 +80,16 @@
       "PowerShell($body = '{\"email\":\"testuser123@test.com\",\"password\":\"test1234\",\"full_name\":\"Test User\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/auth/register/student\" -Method POST -Body $body -ContentType \"application/json\" -UseBasicParsing -TimeoutSec 30; \"Status: $\\($r.StatusCode\\)\"; $r.Content)",
       "PowerShell($body = '{\"email\":\"testuser123@test.com\",\"password\":\"test1234\",\"full_name\":\"Test User\"}'; try { Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/auth/register/student\" -Method POST -Body $body -ContentType \"application/json\" -UseBasicParsing -TimeoutSec 30 } catch { $_.Exception.Response.GetResponseStream\\(\\) | % { $reader = New-Object System.IO.StreamReader\\($_\\); $reader.ReadToEnd\\(\\) } })",
       "Bash(curl *)",
-      "Bash(venv/Scripts/python.exe *)"
+      "Bash(venv/Scripts/python.exe *)",
+      "Bash(xargs grep -l \"openai\\\\|anthropic\\\\|llm\\\\|ai\\\\|gpt\")",
+      "Bash(xargs grep -l \"anthropic\")",
+      "Bash(xargs grep -l \"anthropic\\\\|openai\\\\|generate.*roadmap\")",
+      "Bash(xargs grep -l \"logging\\\\|logger\")",
+      "Bash(c:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\venv\\\\Scripts\\\\activate *)",
+      "PowerShell(Out-Null *)",
+      "PowerShell(ConvertTo-Json *)",
+      "PowerShell($body = '{\"career_goal\": \"Full Stack Developer\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/students/goal\" -Method PUT -Body $body -ContentType \"application/json\" -ErrorAction SilentlyContinue; Write-Host \"Status: $\\($r.StatusCode\\) $\\($r.StatusDescription\\)\")",
+      "PowerShell($body = '{\"goal\": \"Full Stack Developer\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/students/goal\" -Method PUT -Body $body -ContentType \"application/json\" -ErrorAction SilentlyContinue; Write-Host \"Status: $\\($r.StatusCode\\) — old field name \\(should be 422\\)\")"
     ]
   }
 }

@@ -26,6 +26,9 @@ class Roadmap(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=text("now()")
     )
+    quiz_attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("quiz_attempts.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Relationships
     items: Mapped[list["RoadmapCourse"]] = relationship(

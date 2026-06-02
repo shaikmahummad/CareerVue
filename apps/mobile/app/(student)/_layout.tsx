@@ -21,7 +21,9 @@ export default function StudentLayout() {
   const hideTabBar =
     lastSeg === "course-detail" ||
     lastSeg === "quiz"          ||
-    lastSeg === "quiz-results";
+    lastSeg === "quiz-results"  ||
+    lastSeg === "quiz-history"  ||
+    lastSeg === "settings";
 
   function navigate(i: number) {
     const name = ROUTE_ORDER[i];

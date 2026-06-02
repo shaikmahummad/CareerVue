@@ -11,6 +11,15 @@ async function authHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
+async function freshAuthHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.refreshSession();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+  return headers;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   const json = await res.json().catch(() => null);
   if (!res.ok) {
@@ -20,24 +29,35 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return (json?.data ?? json) as T;
 }
 
+async function fetchWithRetry(url: string, options: RequestInit): Promise<Response> {
+  const res = await fetch(url, options);
+  if (res.status !== 401) return res;
+  // Token expired — refresh session and retry once
+  const retryHeaders = await freshAuthHeaders();
+  return fetch(url, { ...options, headers: retryHeaders });
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { headers: await authHeaders() });
+  const headers = await authHeaders();
+  const res = await fetchWithRetry(`${API_URL}${path}`, { headers });
   return handleResponse<T>(res);
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const headers = await authHeaders();
+  const res = await fetchWithRetry(`${API_URL}${path}`, {
     method: "POST",
-    headers: await authHeaders(),
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   return handleResponse<T>(res);
 }
 
 export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const headers = await authHeaders();
+  const res = await fetchWithRetry(`${API_URL}${path}`, {
     method: "PUT",
-    headers: await authHeaders(),
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   return handleResponse<T>(res);
