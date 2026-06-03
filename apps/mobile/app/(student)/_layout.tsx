@@ -4,13 +4,14 @@ import { BottomTabBar, TabConfig } from "../../components/ui/BottomTabBar";
 import { colors } from "../../constants/theme";
 
 const STUDENT_TABS: TabConfig[] = [
-  { name: "index",   label: "Home",    icon: "home-outline",         activeIcon: "home"         },
-  { name: "roadmap", label: "Goals",   icon: "trending-up-outline",  activeIcon: "trending-up"  },
-  { name: "courses", label: "Network", icon: "people-outline",       activeIcon: "people"       },
-  { name: "profile", label: "Profile", icon: "person-outline",       activeIcon: "person"       },
+  { name: "index",    label: "Home",     icon: "home-outline",        activeIcon: "home"         },
+  { name: "roadmap",  label: "Goals",    icon: "trending-up-outline", activeIcon: "trending-up"  },
+  { name: "courses",  label: "Network",  icon: "people-outline",      activeIcon: "people"       },
+  { name: "profile",  label: "Profile",  icon: "person-outline",      activeIcon: "person"       },
+  { name: "settings", label: "Settings", icon: "settings-outline",    activeIcon: "settings"     },
 ];
 
-const ROUTE_ORDER = ["index", "roadmap", "courses", "profile"];
+const ROUTE_ORDER = ["index", "roadmap", "courses", "profile", "settings"];
 
 export default function StudentLayout() {
   const segments = useSegments();
@@ -22,8 +23,7 @@ export default function StudentLayout() {
     lastSeg === "course-detail" ||
     lastSeg === "quiz"          ||
     lastSeg === "quiz-results"  ||
-    lastSeg === "quiz-history"  ||
-    lastSeg === "settings";
+    lastSeg === "quiz-history";
 
   function navigate(i: number) {
     const name = ROUTE_ORDER[i];

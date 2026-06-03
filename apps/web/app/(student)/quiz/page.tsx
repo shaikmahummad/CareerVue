@@ -13,7 +13,7 @@ import { apiGet, apiPost, apiPut } from "../../../lib/api";
 const SECS_PER_QUESTION = 90;
 const OPT_KEYS = ["A", "B", "C", "D"] as const;
 type OptionKey = (typeof OPT_KEYS)[number];
-type AppStep = "goal" | "quiz" | "review" | "results";
+type AppStep = "loading" | "assessment" | "goal" | "quiz" | "review" | "results";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -570,7 +570,7 @@ function QuizResults({ result, goal, onGenerateRoadmap, generating, error }: {
 
 export default function QuizPage() {
   const router = useRouter();
-  const [step, setStep] = useState<AppStep>("goal");
+  const [step, setStep] = useState<AppStep>("loading");
   const [goalLoading, setGoalLoading] = useState(false);
   const [goalError, setGoalError] = useState("");
   const [template, setTemplate] = useState<QuizTemplate | null>(null);
@@ -582,16 +582,33 @@ export default function QuizPage() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [existingGoal, setExistingGoal] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
   const [timerActive, setTimerActive] = useState(false);
   const [timeExpired, setTimeExpired] = useState(false);
   const startTimeRef = useRef<number>(0);
-  const stepRef = useRef<AppStep>("goal");
+  const stepRef = useRef<AppStep>("loading");
   stepRef.current = step;
 
   useEffect(() => {
-    apiGet<Attempt[]>("/api/v1/quiz/my-attempts").then(setAttempts).catch(() => {});
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const isChanging = params.get("change") === "1";
+      try {
+        const profile = await apiGet<{ career_goal: string | null }>("/api/v1/students/profile");
+        if (profile.career_goal && !isChanging) {
+          setExistingGoal(profile.career_goal);
+          setStep("assessment");
+        } else {
+          setStep("goal");
+        }
+      } catch {
+        setStep("goal");
+      }
+      apiGet<Attempt[]>("/api/v1/quiz/my-attempts").then(setAttempts).catch(() => {});
+    }
+    init();
   }, []);
 
   // Countdown tick
@@ -685,6 +702,78 @@ export default function QuizPage() {
     <div className="min-h-screen bg-[#050508] flex">
       {!isFullScreen && <StudentNavbar />}
       <main className={`flex-1 ${isFullScreen ? "" : "ml-60"} p-8 overflow-y-auto`}>
+        {step === "loading" && (
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Loader2 size={32} className="animate-spin text-[#6c63ff]" />
+          </div>
+        )}
+
+        {step === "assessment" && existingGoal && (
+          <>
+            <div className="max-w-2xl mx-auto">
+              <div className="mb-8">
+                <span className="ai-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">SKILL ASSESSMENT</span>
+                <h1 className="text-2xl font-bold text-white mb-2">Ready to Assess?</h1>
+                <p className="text-sm text-[#7c7a8a]">
+                  Retake your assessment to track improvement. Each attempt adapts to your current level.
+                </p>
+              </div>
+
+              {/* Current goal card */}
+              <div className="glass-card rounded-2xl p-5 mb-6">
+                <p className="text-[10px] font-semibold text-[#6c63ff] uppercase tracking-widest mb-2">Your Goal</p>
+                <p className="text-xl font-bold text-white mb-1">{existingGoal}</p>
+                <p className="text-xs text-[#7c7a8a]">Questions adapt to your skill level with every attempt</p>
+              </div>
+
+              {goalError && (
+                <p className="mb-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">{goalError}</p>
+              )}
+
+              <button
+                onClick={() => handleGoalSelect(existingGoal)}
+                disabled={goalLoading}
+                className="btn-primary inline-flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed mb-4 w-full justify-center"
+              >
+                {goalLoading ? <><Loader2 size={16} className="animate-spin" /> Generating quiz…</> : <><Sparkles size={16} /> Start Assessment</>}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!confirm("Changing your goal will archive your current roadmap. Are you sure?")) return;
+                  setExistingGoal(null);
+                  setStep("goal");
+                }}
+                className="w-full text-xs text-[#7c7a8a] hover:text-white py-2 transition-colors"
+              >
+                Change Goal
+              </button>
+            </div>
+
+            {attempts.length > 0 && (
+              <div className="max-w-2xl mx-auto mt-10">
+                <p className="text-xs font-semibold text-[#7c7a8a] uppercase tracking-wider mb-3">Past Attempts</p>
+                <div className="space-y-2">
+                  {attempts.map((a) => (
+                    <div key={a.id} className="glass-card rounded-xl px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-[#7c7a8a]">
+                          {new Date(a.completed_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                        <p className="text-sm text-white font-medium">{a.total_questions} questions · {formatTime(a.time_taken_secs ?? 0)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold" style={{ color: a.score >= 70 ? "#00d4ff" : a.score >= 50 ? "#6c63ff" : "#e7c365" }}>{a.score}%</p>
+                        <p className="text-[10px] text-[#7c7a8a]">{a.score >= 70 ? "Senior" : a.score >= 50 ? "Intermediate" : "Junior"}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         {step === "goal" && (
           <>
             <GoalSelect onSelect={handleGoalSelect} loading={goalLoading} error={goalError} />

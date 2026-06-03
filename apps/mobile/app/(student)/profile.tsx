@@ -265,7 +265,7 @@ export default function ProfileScreen() {
                       {
                         text: "Change Goal",
                         style: "destructive",
-                        onPress: () => router.push("/(student)/quiz" as any),
+                        onPress: () => router.push("/(student)/quiz?change=1" as any),
                       },
                     ]
                   );

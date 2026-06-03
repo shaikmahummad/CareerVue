@@ -132,7 +132,8 @@ async def list_pending_courses(
     """List all courses awaiting admin approval."""
     stmt = (
         select(Course, Profile)
-        .join(Profile, Course.tutor_id == Profile.id)
+        .join(Tutor, Course.tutor_id == Tutor.id)
+        .join(Profile, Tutor.profile_id == Profile.id)
         .where(Course.status == "pending_approval")
         .order_by(Course.created_at.desc())
     )
@@ -158,7 +159,11 @@ async def list_all_courses(
 
     Query params: status, category, tutor_id
     """
-    stmt = select(Course, Profile).join(Profile, Course.tutor_id == Profile.id)
+    stmt = (
+        select(Course, Profile)
+        .join(Tutor, Course.tutor_id == Tutor.id)
+        .join(Profile, Tutor.profile_id == Profile.id)
+    )
 
     if status:
         stmt = stmt.where(Course.status == status)

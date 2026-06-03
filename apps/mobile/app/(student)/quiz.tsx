@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
   ActivityIndicator, Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -72,6 +72,8 @@ type OptionKey = typeof OPTIONS[number];
 export default function QuizScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { change } = useLocalSearchParams<{ change?: string }>();
+  const isChangingGoal = change === "1";
 
   const [state,        setState]        = useState<QuizState>("init");
   const [goal,         setGoal]         = useState("");
@@ -99,7 +101,11 @@ export default function QuizScreen() {
       if (data.career_goal) {
         setExistingGoal(data.career_goal);
         setGoal(data.career_goal);
-        setState("improvement");
+        if (isChangingGoal) {
+          setState("goal");
+        } else {
+          setState("improvement");
+        }
       } else {
         setState("goal");
       }
@@ -242,10 +248,9 @@ export default function QuizScreen() {
           contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16, paddingBottom: TAB_BAR_HEIGHT + 24 }]}
           showsVerticalScrollIndicator={false}
         >
-          {/* Page title */}
-          <Text style={s.pageTitle}>Skill Assessment</Text>
+          <Text style={s.pageTitle}>Assessment</Text>
           <Text style={s.pageSubtitle}>
-            {fullName ? `Hi ${fullName.split(" ")[0]}, ready to` : "Ready to"} test your skills?
+            Retake your quiz to track improvement. Each attempt gets harder as you grow.
           </Text>
 
           {/* Current goal card */}
@@ -254,11 +259,11 @@ export default function QuizScreen() {
               <View style={s.goalIconWrap}>
                 <Ionicons name="briefcase-outline" size={15} color={colors.onPrimary} />
               </View>
-              <Text style={s.goalCardLabel}>Current Goal</Text>
+              <Text style={s.goalCardLabel}>Your Goal</Text>
             </View>
             <Text style={s.goalCardTitle}>{existingGoal}</Text>
             <Text style={s.goalCardSub}>
-              Your quiz history and roadmap are tied to this goal
+              Questions adapt to your skill level with every attempt
             </Text>
           </View>
 
@@ -268,13 +273,17 @@ export default function QuizScreen() {
             </View>
           ) : null}
 
-          <Pressable style={s.primaryBtn} onPress={handleStartAssessment}>
+          <Pressable style={[s.primaryBtn, { flexDirection: "row", justifyContent: "center", gap: 6 }]} onPress={handleStartAssessment}>
+            <Ionicons name="flash" size={16} color={colors.onPrimary} />
             <Text style={s.primaryBtnText}>Start Assessment</Text>
           </Pressable>
 
-          <Text style={s.hintText}>
-            To change your goal, go to Settings
-          </Text>
+          <Pressable
+            style={s.secondaryBtn}
+            onPress={() => router.push("/(student)/quiz-history" as any)}
+          >
+            <Text style={s.secondaryBtnText}>View Past Results</Text>
+          </Pressable>
         </ScrollView>
       </View>
     );
@@ -290,9 +299,11 @@ export default function QuizScreen() {
           contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16, paddingBottom: TAB_BAR_HEIGHT + 24 }]}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={s.pageTitle}>Skill Quiz</Text>
+          <Text style={s.pageTitle}>{isChangingGoal ? "Change Goal" : "Skill Quiz"}</Text>
           <Text style={s.pageSubtitle}>
-            Enter your career goal and we'll generate a personalized assessment.
+            {isChangingGoal
+              ? "Enter your new goal. Your current roadmap will be archived."
+              : "Enter your career goal and we'll generate a personalized assessment."}
           </Text>
 
           <Text style={s.fieldLabel}>Your Career Goal</Text>

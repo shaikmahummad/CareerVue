@@ -169,7 +169,7 @@ export default function RoadmapScreen() {
         {
           text: "Change Goal",
           style: "destructive",
-          onPress: () => router.push("/(student)/quiz" as any),
+          onPress: () => router.push("/(student)/quiz?change=1" as any),
         },
       ]
     );
@@ -249,21 +249,60 @@ export default function RoadmapScreen() {
   const pct        = total > 0 ? Math.round((done / total) * 100) : 0;
   const dashOffset = RING_CIRCUM * (1 - pct / 100);
 
+  if (pct === 100 && total > 0) {
+    return (
+      <View style={[s.root, s.center]}>
+        <StatusBar style="light" />
+        <View style={s.achievedIconWrap}>
+          <Ionicons name="trophy" size={48} color="#FFB800" />
+        </View>
+        <Text style={[s.pageTitle, { textAlign: "center" }]}>Goal Achieved!</Text>
+        <Text style={[s.loadingText, { textAlign: "center", marginBottom: 4 }]}>{roadmap.goal}</Text>
+        <Text style={[s.loadingText, { textAlign: "center", marginBottom: 32 }]}>
+          All {total} topics completed. Ready for your next challenge?
+        </Text>
+        <Pressable
+          style={{
+            backgroundColor: colors.primary,
+            paddingHorizontal: 24,
+            paddingVertical: 14,
+            borderRadius: 16,
+            marginBottom: 12,
+            width: "100%" as any,
+            alignItems: "center" as const,
+          }}
+          onPress={() => router.push("/(student)/quiz?change=1" as any)}
+        >
+          <Text style={{ fontFamily: "HankenGrotesk_600SemiBold", fontSize: 15, color: colors.onPrimary }}>
+            Choose New Goal
+          </Text>
+        </Pressable>
+        <Pressable
+          style={{
+            backgroundColor: colors.surfaceContainer,
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            borderRadius: 14,
+            width: "100%" as any,
+            alignItems: "center" as const,
+          }}
+          onPress={() => router.push("/(student)/quiz" as any)}
+        >
+          <Text style={{ fontFamily: "HankenGrotesk_500Medium", fontSize: 14, color: colors.textVariant }}>
+            Retake Assessment
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={s.root}>
       <StatusBar style="light" />
 
       {/* Fixed header */}
       <View style={[s.header, { paddingTop: insets.top, height: HEADER_H }]}>
-        <View style={s.headerLeft}>
-          <Pressable hitSlop={12} onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={24} color={colors.primary} />
-          </Pressable>
-          <Text style={s.headerTitle}>CareerVue</Text>
-        </View>
-        <Pressable hitSlop={12} onPress={() => router.push("/(student)/settings" as any)}>
-          <Ionicons name="settings-outline" size={24} color={colors.textVariant} />
-        </Pressable>
+        <Text style={s.headerTitle}>My Goals</Text>
       </View>
 
       <ScrollView
@@ -720,5 +759,16 @@ const s = StyleSheet.create({
     fontSize:      13,
     color:         colors.primary,
     letterSpacing: -0.1,
+  },
+
+  // Goal achieved state
+  achievedIconWrap: {
+    width:           80,
+    height:          80,
+    borderRadius:    40,
+    backgroundColor: "rgba(255,184,0,0.12)",
+    alignItems:      "center",
+    justifyContent:  "center",
+    marginBottom:    16,
   },
 });

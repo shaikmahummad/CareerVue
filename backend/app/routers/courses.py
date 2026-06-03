@@ -13,7 +13,7 @@ from app.dependencies import StudentUser, TutorUser
 from app.models.course import Course, CourseApproval, CourseModule
 from app.models.enrollment import Enrollment
 from app.models.social import Review
-from app.models.user import Profile
+from app.models.user import Profile, Tutor
 
 _optional_bearer = HTTPBearer(auto_error=False)
 
@@ -150,8 +150,13 @@ async def _get_course_or_404(db: AsyncSession, course_id: uuid.UUID) -> Course:
     return course
 
 
-async def _assert_owner_or_admin(course: Course, user: Profile) -> None:
-    if course.tutor_id != user.id and user.role != "admin":
+async def _assert_owner_or_admin(course: Course, user: Profile, db: AsyncSession) -> None:
+    if user.role == "admin":
+        return
+    tutor = (await db.execute(
+        select(Tutor).where(Tutor.profile_id == user.id)
+    )).scalar_one_or_none()
+    if not tutor or course.tutor_id != tutor.id:
         raise HTTPException(status_code=403, detail="Not your course")
 
 
@@ -170,7 +175,8 @@ async def list_approved_courses(
 ):
     stmt = (
         select(Course, Profile)
-        .join(Profile, Course.tutor_id == Profile.id)
+        .join(Tutor, Course.tutor_id == Tutor.id)
+        .join(Profile, Tutor.profile_id == Profile.id)
         .where(Course.status == "approved")
     )
     if category:
@@ -203,7 +209,8 @@ async def search_courses(
 ):
     stmt = (
         select(Course, Profile)
-        .join(Profile, Course.tutor_id == Profile.id)
+        .join(Tutor, Course.tutor_id == Tutor.id)
+        .join(Profile, Tutor.profile_id == Profile.id)
         .where(
             Course.status == "approved",
             (Course.title.ilike(f"%{q}%")) | (Course.description.ilike(f"%{q}%")),
@@ -219,7 +226,12 @@ async def my_courses(
     current_user: TutorUser,
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Course).where(Course.tutor_id == current_user.id)
+    tutor = (await db.execute(
+        select(Tutor).where(Tutor.profile_id == current_user.id)
+    )).scalar_one_or_none()
+    if not tutor:
+        return {"success": True, "message": "Your courses", "data": []}
+    stmt = select(Course).where(Course.tutor_id == tutor.id)
     rows = (await db.execute(stmt)).scalars().all()
     data = [_course_dict(c) for c in rows]
     return {"success": True, "message": "Your courses", "data": data}
@@ -250,8 +262,11 @@ async def get_course(
         else:
             raise HTTPException(status_code=404, detail="Course not found")
 
-    # Tutor info
-    tutor_profile = await db.get(Profile, course.tutor_id)
+    # Tutor info (courses.tutor_id → tutors.id → profiles.id)
+    tutor_row = (await db.execute(
+        select(Tutor).where(Tutor.id == course.tutor_id)
+    )).scalar_one_or_none()
+    tutor_profile = await db.get(Profile, tutor_row.profile_id) if tutor_row else None
 
     # Modules ordered by order_index
     mod_stmt = (
@@ -284,9 +299,14 @@ async def create_course(
     current_user: TutorUser,
     db: AsyncSession = Depends(get_db),
 ):
+    tutor = (await db.execute(
+        select(Tutor).where(Tutor.profile_id == current_user.id)
+    )).scalar_one_or_none()
+    if not tutor:
+        raise HTTPException(status_code=404, detail="Tutor profile not found")
     price = 0.0 if body.is_free else body.price
     course = Course(
-        tutor_id=current_user.id,
+        tutor_id=tutor.id,
         title=body.title,
         description=body.description,
         category=body.category,
@@ -318,7 +338,7 @@ async def update_course(
         raise HTTPException(status_code=400, detail="Invalid course_id")
 
     course = await _get_course_or_404(db, cid)
-    await _assert_owner_or_admin(course, current_user)
+    await _assert_owner_or_admin(course, current_user, db)
 
     if course.status not in ("draft", "rejected") and current_user.role != "admin":
         raise HTTPException(
@@ -348,7 +368,7 @@ async def delete_course(
         raise HTTPException(status_code=400, detail="Invalid course_id")
 
     course = await _get_course_or_404(db, cid)
-    await _assert_owner_or_admin(course, current_user)
+    await _assert_owner_or_admin(course, current_user, db)
 
     if course.status != "draft" and current_user.role != "admin":
         raise HTTPException(status_code=400, detail="Only draft courses can be deleted")
@@ -370,7 +390,7 @@ async def submit_for_approval(
         raise HTTPException(status_code=400, detail="Invalid course_id")
 
     course = await _get_course_or_404(db, cid)
-    await _assert_owner_or_admin(course, current_user)
+    await _assert_owner_or_admin(course, current_user, db)
 
     if course.status not in ("draft", "rejected"):
         raise HTTPException(
@@ -413,7 +433,7 @@ async def add_module(
         raise HTTPException(status_code=400, detail="Invalid course_id")
 
     course = await _get_course_or_404(db, cid)
-    await _assert_owner_or_admin(course, current_user)
+    await _assert_owner_or_admin(course, current_user, db)
 
     module = CourseModule(
         course_id=cid,
@@ -446,7 +466,7 @@ async def update_module(
         raise HTTPException(status_code=400, detail="Invalid course_id or module_id")
 
     course = await _get_course_or_404(db, cid)
-    await _assert_owner_or_admin(course, current_user)
+    await _assert_owner_or_admin(course, current_user, db)
 
     module = await db.get(CourseModule, mid)
     if not module or module.course_id != cid:
@@ -474,7 +494,7 @@ async def delete_module(
         raise HTTPException(status_code=400, detail="Invalid course_id or module_id")
 
     course = await _get_course_or_404(db, cid)
-    await _assert_owner_or_admin(course, current_user)
+    await _assert_owner_or_admin(course, current_user, db)
 
     module = await db.get(CourseModule, mid)
     if not module or module.course_id != cid:

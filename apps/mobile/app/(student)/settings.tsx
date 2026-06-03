@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { apiGet, apiPost } from "../../lib/api";
 import { supabase } from "../../lib/supabase";
-import { colors } from "../../constants/theme";
+import { colors, TAB_BAR_HEIGHT } from "../../constants/theme";
 
 interface StudentProfile {
   goal?: string;
@@ -42,7 +42,7 @@ export default function SettingsScreen() {
         {
           text: "Change Goal",
           style: "destructive",
-          onPress: () => router.push("/(student)/quiz" as any),
+          onPress: () => router.push("/(student)/quiz?change=1" as any),
         },
       ]
     );
@@ -73,23 +73,13 @@ export default function SettingsScreen() {
     await supabase.auth.signOut();
   }
 
-  const HEADER_H = insets.top + 56;
-
   return (
     <View style={s.root}>
-      {/* Fixed header */}
-      <View style={[s.header, { paddingTop: insets.top, height: HEADER_H }]}>
-        <Pressable hitSlop={12} onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="chevron-back" size={22} color={colors.primary} />
-        </Pressable>
-        <Text style={s.headerTitle}>Settings</Text>
-        <View style={s.headerRight} />
-      </View>
-
       <ScrollView
-        contentContainerStyle={[s.scroll, { paddingTop: HEADER_H + 16 }]}
+        contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16, paddingBottom: TAB_BAR_HEIGHT + 24 }]}
         showsVerticalScrollIndicator={false}
       >
+        <Text style={s.pageTitle}>Settings</Text>
 
         {/* ── Section 1: Goal & Roadmap ─────────────────────────────────── */}
         <Text style={s.sectionLabel}>Goal &amp; Roadmap</Text>
@@ -205,36 +195,18 @@ export default function SettingsScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
 
-  // Header
-  header: {
-    position:          "absolute",
-    top: 0, left: 0, right: 0,
-    zIndex:            50,
-    flexDirection:     "row",
-    alignItems:        "flex-end",
-    justifyContent:    "space-between",
-    paddingHorizontal: 16,
-    paddingBottom:     10,
-    backgroundColor:   "rgba(5,5,8,0.92)",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backBtn:     { width: 32, alignItems: "flex-start" },
-  headerTitle: {
-    flex:          1,
-    fontFamily:    "HankenGrotesk_700Bold",
-    fontSize:      17,
-    lineHeight:    22,
-    letterSpacing: -0.2,
-    color:         colors.text,
-    textAlign:     "center",
-  },
-  headerRight: { width: 32 },
-
   scroll: {
     paddingHorizontal: 16,
-    paddingBottom:     48,
     gap:               8,
+  },
+
+  pageTitle: {
+    fontFamily:    "HankenGrotesk_700Bold",
+    fontSize:      28,
+    lineHeight:    34,
+    letterSpacing: -0.4,
+    color:         colors.text,
+    marginBottom:  8,
   },
 
   // Section label

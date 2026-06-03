@@ -89,7 +89,8 @@
       "PowerShell(Out-Null *)",
       "PowerShell(ConvertTo-Json *)",
       "PowerShell($body = '{\"career_goal\": \"Full Stack Developer\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/students/goal\" -Method PUT -Body $body -ContentType \"application/json\" -ErrorAction SilentlyContinue; Write-Host \"Status: $\\($r.StatusCode\\) $\\($r.StatusDescription\\)\")",
-      "PowerShell($body = '{\"goal\": \"Full Stack Developer\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/students/goal\" -Method PUT -Body $body -ContentType \"application/json\" -ErrorAction SilentlyContinue; Write-Host \"Status: $\\($r.StatusCode\\) — old field name \\(should be 422\\)\")"
+      "PowerShell($body = '{\"goal\": \"Full Stack Developer\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/students/goal\" -Method PUT -Body $body -ContentType \"application/json\" -ErrorAction SilentlyContinue; Write-Host \"Status: $\\($r.StatusCode\\) — old field name \\(should be 422\\)\")",
+      "PowerShell(head *)"
     ]
   }
 }
