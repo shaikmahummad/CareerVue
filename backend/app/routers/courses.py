@@ -257,8 +257,13 @@ async def get_course(
             raise HTTPException(status_code=404, detail="Course not found")
         if current_user.role == "admin":
             pass  # admin sees all
-        elif current_user.role in ("tutor",) and course.tutor_id == current_user.id:
-            pass  # tutor sees own course
+        elif current_user.role == "tutor":
+            tutor_row = (await db.execute(
+                select(Tutor).where(Tutor.profile_id == current_user.id)
+            )).scalar_one_or_none()
+            if not tutor_row or course.tutor_id != tutor_row.id:
+                raise HTTPException(status_code=404, detail="Course not found")
+            # tutor sees own course
         else:
             raise HTTPException(status_code=404, detail="Course not found")
 

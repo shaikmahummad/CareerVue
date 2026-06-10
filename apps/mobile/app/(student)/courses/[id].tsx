@@ -95,7 +95,7 @@ export default function CourseDetailScreen() {
   useEffect(() => {
     apiGet<Course>(`/api/v1/courses/${id}`)
       .then(setCourse)
-      .catch(() => setError("Failed to load course"))
+      .catch((e: any) => setError(e?.message ?? "Failed to load course"))
       .finally(() => setLoading(false));
   }, [id]);
 
