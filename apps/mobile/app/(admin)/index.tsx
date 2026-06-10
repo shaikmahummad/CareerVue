@@ -42,13 +42,13 @@ export default function AdminDashboard() {
       .catch(() => {});
   }, []);
 
-  const totalUsers    = stats?.total_users       ?? 12400;
-  const totalStudents = stats?.total_students    ?? 8200;
-  const totalTutors   = stats?.total_tutors      ?? 412;
-  const totalCourses  = stats?.total_courses     ?? 1204;
-  const totalRevenue  = stats?.total_revenue     ?? 42800;
-  const totalEnrolled = stats?.total_enrollments ?? 3100;
-  const pendingCount  = stats?.pending_approvals ?? 5;
+  const totalUsers    = stats?.total_users       ?? 0;
+  const totalStudents = stats?.total_students    ?? 0;
+  const totalTutors   = stats?.total_tutors      ?? 0;
+  const totalCourses  = stats?.total_courses     ?? 0;
+  const totalRevenue  = stats?.total_revenue     ?? 0;
+  const totalEnrolled = stats?.total_enrollments ?? 0;
+  const pendingCount  = stats?.pending_approvals ?? 0;
 
   const HEADER_H = insets.top + 44;
 

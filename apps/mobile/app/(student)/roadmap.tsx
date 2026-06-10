@@ -425,7 +425,7 @@ export default function RoadmapScreen() {
                       </View>
                       {item.reason ? <Text style={s.cardBody}>{item.reason}</Text> : null}
                       <View style={s.progTrack}>
-                        <View style={[s.progFill, { width: `${item.progress ?? 45}%` as any }]} />
+                        <View style={[s.progFill, { width: `${item.progress ?? 0}%` as any }]} />
                       </View>
                     </View>
                   )}

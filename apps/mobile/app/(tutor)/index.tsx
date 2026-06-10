@@ -33,29 +33,6 @@ interface TutorProfile {
   is_verified: boolean;
 }
 
-const FALLBACK_COURSES: TutorCourse[] = [
-  { id: "1", title: "React Mastery",  student_count: 42 },
-  { id: "2", title: "DSA Bootcamp",   student_count: 128 },
-];
-
-const ACTIVITY: { dot: string; ring: string; prefix: string; highlight: string; highlightColor: string; time: string }[] = [
-  {
-    dot:            colors.primary,
-    ring:           "rgba(196,192,255,0.12)",
-    prefix:         "New enrollment in ",
-    highlight:      "Node.js Pro",
-    highlightColor: colors.primary,
-    time:           "2 minutes ago",
-  },
-  {
-    dot:            colors.secondary,
-    ring:           "rgba(162,231,255,0.12)",
-    prefix:         "Payout of ",
-    highlight:      "₹8,400 processed",
-    highlightColor: colors.secondary,
-    time:           "Yesterday, 10:45 PM",
-  },
-];
 
 export default function TutorDashboard() {
   const router = useRouter();
@@ -82,11 +59,11 @@ export default function TutorDashboard() {
     load();
   }, []);
 
-  const students  = analytics?.total_students  ?? 1284;
-  const earnings  = analytics?.total_earnings  ?? 24500;
-  const rating    = analytics?.avg_rating      ?? 4.9;
+  const students  = analytics?.total_students ?? 0;
+  const earnings  = analytics?.total_earnings ?? 0;
+  const rating    = analytics?.avg_rating     ?? 0;
   const firstName = profile?.full_name?.split(" ")[0] ?? "Tutor";
-  const courseList = courses.length ? courses : FALLBACK_COURSES;
+  const courseList = courses;
 
   const HEADER_H = insets.top + 44;
 
@@ -205,28 +182,6 @@ export default function TutorDashboard() {
           </View>
         </View>
 
-        {/* Recent Activity */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Recent Activity</Text>
-          <View style={s.activityList}>
-            {ACTIVITY.map(({ dot, ring, prefix, highlight, highlightColor, time }, i) => (
-              <View key={i} style={s.activityItem}>
-                <View style={[s.dotRing, { backgroundColor: ring }]}>
-                  <View style={[s.dot, { backgroundColor: dot }]} />
-                </View>
-                <View style={s.activityBody}>
-                  <Text style={s.activityText}>
-                    {prefix}
-                    <Text style={{ color: highlightColor, fontFamily: "HankenGrotesk_600SemiBold" }}>
-                      {highlight}
-                    </Text>
-                  </Text>
-                  <Text style={s.activityTime}>{time}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
 
         {/* Create New Course CTA */}
         <Pressable

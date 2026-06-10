@@ -69,10 +69,10 @@ export default function StudentDashboard() {
   }, []);
 
   const inProgress = enrollments.find(e => !e.completed_at);
-  const xp         = stats?.xp_points    ?? 1240;
-  const streak     = stats?.streak_days  ?? 7;
-  const enrolled   = stats?.enrolled_count  ?? 12;
-  const completed  = stats?.completed_count ?? 4;
+  const xp         = stats?.xp_points       ?? 0;
+  const streak     = stats?.streak_days     ?? 0;
+  const enrolled   = stats?.enrolled_count  ?? 0;
+  const completed  = stats?.completed_count ?? 0;
 
   const HEADER_H = insets.top + 44;
 
@@ -141,31 +141,32 @@ export default function StudentDashboard() {
         </View>
 
         {/* Continue Learning */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Continue Learning</Text>
-          <View style={s.continueLearningCard}>
-            <View style={s.clRow}>
-              <View style={s.clIconBox}>
-                <Ionicons name="terminal-outline" size={24} color={colors.primary} />
+        {inProgress && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Continue Learning</Text>
+            <View style={s.continueLearningCard}>
+              <View style={s.clRow}>
+                <View style={s.clIconBox}>
+                  <Ionicons name="terminal-outline" size={24} color={colors.primary} />
+                </View>
+                <View style={s.clInfo}>
+                  <Text style={s.clTitle} numberOfLines={1}>
+                    {inProgress.course?.title ?? "Course"}
+                  </Text>
+                </View>
+                <Text style={s.clPct}>{inProgress.progress_pct ?? 0}%</Text>
               </View>
-              <View style={s.clInfo}>
-                <Text style={s.clTitle} numberOfLines={1}>
-                  {inProgress?.course?.title ?? "React Fundamentals"}
-                </Text>
-                <Text style={s.clModule}>Module 4: Hooks</Text>
+              <View style={s.progressTrack}>
+                <LinearGradient
+                  colors={["#c4c0ff", "#8781ff"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[s.progressFill, { width: `${inProgress.progress_pct ?? 0}%` }]}
+                />
               </View>
-              <Text style={s.clPct}>{inProgress?.progress_pct ?? 65}%</Text>
-            </View>
-            <View style={s.progressTrack}>
-              <LinearGradient
-                colors={["#c4c0ff", "#8781ff"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[s.progressFill, { width: `${inProgress?.progress_pct ?? 65}%` }]}
-              />
             </View>
           </View>
-        </View>
+        )}
 
         {/* Roadmap Row */}
         <View style={s.section}>
