@@ -177,7 +177,7 @@ export default function RoadmapPage() {
     <div className="min-h-screen bg-[#050508] flex">
       <StudentNavbar />
 
-      <main className="flex-1 ml-60 p-8 overflow-y-auto">
+      <main className="flex-1 p-8 overflow-y-auto" style={{ marginLeft: "var(--sidebar-w, 15rem)", transition: "margin-left 0.2s ease" }}>
         {loading && (
           <div className="flex flex-col items-center justify-center py-32 gap-3">
             <Loader2 size={28} className="animate-spin text-[#6c63ff]" />

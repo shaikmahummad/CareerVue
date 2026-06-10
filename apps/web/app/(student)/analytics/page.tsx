@@ -32,7 +32,7 @@ export default function AnalyticsPage() {
   return (
     <div className="min-h-screen bg-[#050508] flex">
       <StudentNavbar />
-      <main className="ml-60 flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 p-8 overflow-y-auto" style={{ marginLeft: "var(--sidebar-w, 15rem)", transition: "margin-left 0.2s ease" }}>
         <div className="max-w-5xl mx-auto">
 
           {/* Header */}

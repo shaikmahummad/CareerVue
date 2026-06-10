@@ -71,6 +71,7 @@ export default function SettingsScreen() {
 
   async function handleSignOut() {
     await supabase.auth.signOut();
+    router.replace("/(auth)/login" as never);
   }
 
   return (
@@ -131,6 +132,18 @@ export default function SettingsScreen() {
         <Text style={s.sectionLabel}>Assessment</Text>
 
         <View style={s.sectionCard}>
+          {/* Analytics */}
+          <Pressable style={[s.row, s.rowBorder]} onPress={() => router.push("/(student)/analytics" as any)}>
+            <View style={[s.iconWrap, { backgroundColor: "rgba(196,192,255,0.12)" }]}>
+              <Ionicons name="analytics-outline" size={18} color={colors.primary} />
+            </View>
+            <View style={s.rowContent}>
+              <Text style={s.rowTitle}>Analytics</Text>
+              <Text style={s.rowSubtitle}>Score progression and skill breakdown</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.surfaceHighest} />
+          </Pressable>
+
           {/* Quiz History */}
           <Pressable style={[s.row, s.rowBorder]} onPress={() => router.push("/(student)/quiz-history" as any)}>
             <View style={[s.iconWrap, { backgroundColor: "rgba(196,192,255,0.12)" }]}>

@@ -66,6 +66,31 @@ export default function UsersScreen() {
     debounce.current = setTimeout(fetchUsers, 350);
   }, [search, roleFilter]);
 
+  function handleDeactivate(user: UserProfile) {
+    if (user.role === "deactivated") return;
+    Alert.alert(
+      "Deactivate User",
+      `Deactivate ${user.full_name}? They will lose access to the platform.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Deactivate", style: "destructive",
+          onPress: async () => {
+            setUpdating(user.id);
+            try {
+              await apiPut(`/api/v1/admin/users/${user.id}/role`, { role: "deactivated" });
+              setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, role: "deactivated" } : u));
+            } catch (e: any) {
+              Alert.alert("Error", e.message ?? "Failed to deactivate user");
+            } finally {
+              setUpdating(null);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   function handleRoleChange(user: UserProfile) {
     const options: Array<"student" | "tutor" | "admin"> = ["student", "tutor", "admin"];
     Alert.alert(
@@ -104,23 +129,36 @@ export default function UsersScreen() {
               </Text>
             )}
           </View>
-          <Pressable
-            className="flex-row items-center gap-1 rounded-full px-2.5 py-1"
-            style={{ backgroundColor: sty.bg }}
-            onPress={() => handleRoleChange(u)}
-            disabled={isUpdating}
-          >
-            {isUpdating ? (
-              <ActivityIndicator size="small" color={sty.color} />
-            ) : (
-              <>
-                <Text className="text-xs font-semibold capitalize" style={{ color: sty.color }}>
-                  {u.role}
-                </Text>
-                <Ionicons name="chevron-down" size={10} color={sty.color} />
-              </>
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              className="flex-row items-center gap-1 rounded-full px-2.5 py-1"
+              style={{ backgroundColor: sty.bg }}
+              onPress={() => handleRoleChange(u)}
+              disabled={isUpdating || u.role === "deactivated"}
+            >
+              {isUpdating ? (
+                <ActivityIndicator size="small" color={sty.color} />
+              ) : (
+                <>
+                  <Text className="text-xs font-semibold capitalize" style={{ color: sty.color }}>
+                    {u.role}
+                  </Text>
+                  {u.role !== "deactivated" && (
+                    <Ionicons name="chevron-down" size={10} color={sty.color} />
+                  )}
+                </>
+              )}
+            </Pressable>
+            {u.role !== "deactivated" && u.role !== "admin" && (
+              <Pressable
+                className="w-7 h-7 rounded-full bg-red-50 items-center justify-center"
+                onPress={() => handleDeactivate(u)}
+                hitSlop={8}
+              >
+                <Ionicons name="ban-outline" size={14} color="#dc2626" />
+              </Pressable>
             )}
-          </Pressable>
+          </View>
         </View>
       </View>
     );

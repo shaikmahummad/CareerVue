@@ -55,7 +55,8 @@ interface EnrollmentSummary {
 // ─── Video player ─────────────────────────────────────────────────────────────
 
 function getYouTubeId(url: string): string | null {
-  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  // Handles watch?v=, youtu.be/, /embed/, and ?si= share links
+  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   return m?.[1] ?? null;
 }
 

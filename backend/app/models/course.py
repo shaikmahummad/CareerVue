@@ -1,4 +1,4 @@
-from sqlalchemy import Text, Boolean, Integer, Numeric, DateTime, ForeignKey
+from sqlalchemy import Text, Boolean, Integer, Numeric, DateTime, ForeignKey, Computed
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy import text
@@ -24,7 +24,7 @@ class Course(Base):
     price: Mapped[float | None] = mapped_column(
         Numeric, nullable=True, server_default=text("0.00")
     )
-    is_free: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    is_free: Mapped[bool | None] = mapped_column(Boolean, Computed("price = 0", persisted=True), nullable=True)
     level: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_hours: Mapped[float | None] = mapped_column(Numeric, nullable=True)
     language: Mapped[str | None] = mapped_column(

@@ -311,7 +311,6 @@ async def create_course(
         description=body.description,
         category=body.category,
         level=body.level,
-        is_free=body.is_free,
         price=price,
         tags=body.tags,
         language=body.language,
@@ -346,7 +345,7 @@ async def update_course(
             detail="Course can only be edited when in draft or rejected status",
         )
 
-    update_data = body.model_dump(exclude_none=True)
+    update_data = body.model_dump(exclude_none=True, exclude={"is_free"})
     for field, value in update_data.items():
         setattr(course, field, value)
     course.updated_at = datetime.utcnow()

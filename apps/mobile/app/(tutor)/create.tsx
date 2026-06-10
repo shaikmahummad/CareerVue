@@ -34,7 +34,7 @@ export default function CreateCourseScreen() {
         .map((t) => t.trim())
         .filter(Boolean);
 
-      await apiPost("/api/v1/courses/", {
+      const course = await apiPost<{ id: string }>("/api/v1/courses/", {
         title:          title.trim(),
         description:    description.trim() || null,
         category:       category || null,
@@ -45,11 +45,7 @@ export default function CreateCourseScreen() {
         duration_hours: durationHours ? parseFloat(durationHours) : null,
       });
 
-      Alert.alert(
-        "Course Created!",
-        "Your course has been submitted for review. We'll notify you once it's approved.",
-        [{ text: "OK", onPress: () => router.replace("/(tutor)/courses" as never) }],
-      );
+      router.replace(`/(tutor)/courses/${course.id}` as never);
     } catch (e: any) {
       Alert.alert("Error", e.message ?? "Failed to create course");
     } finally {
@@ -220,9 +216,9 @@ export default function CreateCourseScreen() {
         >
           {loading
             ? <ActivityIndicator size="small" color="white" />
-            : <Ionicons name="cloud-upload-outline" size={18} color="white" />}
+            : <Ionicons name="arrow-forward-outline" size={18} color="white" />}
           <Text className="text-white font-semibold text-sm">
-            {loading ? "Creating…" : "Submit for Review"}
+            {loading ? "Creating…" : "Create & Add Modules"}
           </Text>
         </Pressable>
 

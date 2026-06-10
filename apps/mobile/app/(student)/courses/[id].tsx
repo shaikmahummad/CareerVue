@@ -378,7 +378,7 @@ export default function CourseDetailScreen() {
             </View>
             <Pressable
               style={({ pressed }) => [s.enrollBtn, { opacity: pressed ? 0.88 : 1 }]}
-              onPress={() => router.back()}
+              onPress={() => router.push({ pathname: "/(student)/course-learn" as never, params: { courseId: course.id } })}
             >
               <LinearGradient
                 colors={["#6c63ff", "#c4c0ff"]}
@@ -386,7 +386,7 @@ export default function CourseDetailScreen() {
                 end={{ x: 1, y: 0 }}
                 style={s.enrollBtnGrad}
               >
-                <Text style={s.enrollBtnText}>Continue</Text>
+                <Text style={s.enrollBtnText}>Continue Learning</Text>
               </LinearGradient>
             </Pressable>
           </>

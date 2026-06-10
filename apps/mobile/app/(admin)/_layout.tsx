@@ -4,19 +4,23 @@ import { BottomTabBar, TabConfig } from "../../components/ui/BottomTabBar";
 import { colors } from "../../constants/theme";
 
 const ADMIN_TABS: TabConfig[] = [
-  { name: "index",         label: "Home",    icon: "home-outline",        activeIcon: "home"        },
-  { name: "approvals",     label: "Goals",   icon: "trending-up-outline", activeIcon: "trending-up", badge: 5 },
-  { name: "users",         label: "Network", icon: "people-outline",      activeIcon: "people"      },
-  { name: "admin-courses", label: "Courses", icon: "book-outline",        activeIcon: "book"        },
+  { name: "index",         label: "Home",      icon: "home-outline",             activeIcon: "home"             },
+  { name: "approvals",     label: "Approvals", icon: "checkmark-circle-outline", activeIcon: "checkmark-circle", badge: 5 },
+  { name: "users",         label: "Users",     icon: "people-outline",           activeIcon: "people"           },
+  { name: "analytics",     label: "Analytics", icon: "bar-chart-outline",        activeIcon: "bar-chart"        },
+  { name: "settings",      label: "Settings",  icon: "settings-outline",         activeIcon: "settings"         },
 ];
 
-const ROUTE_ORDER = ["index", "approvals", "users", "admin-courses"];
+const ROUTE_ORDER = ["index", "approvals", "users", "analytics", "settings"];
 
 export default function AdminLayout() {
   const segments    = useSegments();
   const router      = useRouter();
-  const lastSeg     = segments[segments.length - 1] ?? "index";
-  const activeIndex = Math.max(0, ROUTE_ORDER.indexOf(lastSeg));
+
+  const tabSeg      = segments[1];
+  const activeSeg   = !tabSeg || tabSeg === "index" ? "index" : tabSeg;
+  const activeIndex = Math.max(0, ROUTE_ORDER.indexOf(activeSeg));
+  const hideTabBar  = !ROUTE_ORDER.includes(activeSeg) || segments.length > 2;
 
   function navigate(i: number) {
     const name = ROUTE_ORDER[i];
@@ -29,7 +33,9 @@ export default function AdminLayout() {
       <View style={{ flex: 1 }}>
         <Slot />
       </View>
-      <BottomTabBar tabs={ADMIN_TABS} activeIndex={activeIndex} onPress={navigate} />
+      {!hideTabBar && (
+        <BottomTabBar tabs={ADMIN_TABS} activeIndex={activeIndex} onPress={navigate} />
+      )}
     </View>
   );
 }

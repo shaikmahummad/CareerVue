@@ -100,7 +100,7 @@ export default function LoginScreen() {
         <View style={s.fieldWrap}>
           <View style={s.fieldLabelRow}>
             <Text style={s.fieldLabel}>PASSWORD</Text>
-            <Pressable>
+            <Pressable onPress={() => router.push("/(auth)/forgot-password" as never)}>
               <Text style={s.forgot}>FORGOT?</Text>
             </Pressable>
           </View>

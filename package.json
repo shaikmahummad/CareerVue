@@ -16,7 +16,6 @@
     "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000"
   },
   "devDependencies": {
-    "expo-router": "^55.0.14",
     "turbo": "^2.0.0",
     "typescript": "^5.4.0"
   },

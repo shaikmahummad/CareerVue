@@ -701,7 +701,7 @@ export default function QuizPage() {
   return (
     <div className="min-h-screen bg-[#050508] flex">
       {!isFullScreen && <StudentNavbar />}
-      <main className={`flex-1 ${isFullScreen ? "" : "ml-60"} p-8 overflow-y-auto`}>
+      <main className="flex-1 p-8 overflow-y-auto" style={{ marginLeft: isFullScreen ? 0 : "var(--sidebar-w, 15rem)", transition: "margin-left 0.2s ease" }}>
         {step === "loading" && (
           <div className="flex items-center justify-center min-h-[60vh]">
             <Loader2 size={32} className="animate-spin text-[#6c63ff]" />

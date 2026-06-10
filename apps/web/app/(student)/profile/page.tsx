@@ -201,11 +201,13 @@ export default function ProfilePage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
+  const sidebarStyle = { marginLeft: "var(--sidebar-w, 15rem)", transition: "margin-left 0.2s ease" };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <StudentNavbar />
-        <div className="flex items-center justify-center py-32">
+        <div className="flex items-center justify-center py-32" style={sidebarStyle}>
           <Loader2 size={28} className="animate-spin text-blue-400" />
         </div>
       </div>
@@ -216,7 +218,7 @@ export default function ProfilePage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <StudentNavbar />
-        <div className="text-center py-32">
+        <div className="text-center py-32" style={sidebarStyle}>
           <AlertCircle size={32} className="text-red-400 mx-auto mb-2" />
           <p className="text-gray-500">Failed to load profile</p>
         </div>
@@ -228,7 +230,7 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gray-50">
       <StudentNavbar />
 
-      <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <main className="px-6 py-8 space-y-6" style={sidebarStyle}><div className="max-w-3xl mx-auto space-y-6">
 
         {/* Profile header */}
         <motion.div
@@ -461,7 +463,7 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
-      </main>
+      </div></main>
     </div>
   );
 }

@@ -162,24 +162,17 @@ async def get_student_stats(
 ):
     student = await _get_student_or_404(db, current_user.id)
 
-    enrolled_count = (
+    # Single query: count all enrollments and completed ones in one DB round-trip
+    row = (
         await db.execute(
-            select(func.count())
-            .select_from(Enrollment)
-            .where(Enrollment.student_id == current_user.id)
+            select(
+                func.count().label("enrolled_count"),
+                func.count(Enrollment.completed_at).label("completed_count"),
+            ).where(Enrollment.student_id == current_user.id)
         )
-    ).scalar_one()
-
-    completed_count = (
-        await db.execute(
-            select(func.count())
-            .select_from(Enrollment)
-            .where(
-                Enrollment.student_id == current_user.id,
-                Enrollment.completed_at.isnot(None),
-            )
-        )
-    ).scalar_one()
+    ).one()
+    enrolled_count  = row.enrolled_count
+    completed_count = row.completed_count
 
     data = {
         "xp_points": student.xp_points or 0,

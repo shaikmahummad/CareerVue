@@ -289,11 +289,13 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  const sidebarStyle = { marginLeft: "var(--sidebar-w, 15rem)", transition: "margin-left 0.2s ease" };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <StudentNavbar />
-        <div className="flex items-center justify-center py-32">
+        <div className="flex items-center justify-center py-32" style={sidebarStyle}>
           <Loader2 size={32} className="animate-spin text-blue-500" />
         </div>
       </div>
@@ -304,7 +306,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
     return (
       <div className="min-h-screen bg-gray-50">
         <StudentNavbar />
-        <div className="text-center py-32">
+        <div className="text-center py-32" style={sidebarStyle}>
           <BookOpen size={40} className="text-gray-300 mx-auto mb-3" />
           <p className="text-gray-600 font-medium">Course not found</p>
           <Link href="/courses" className="mt-3 inline-block text-sm text-blue-600 hover:underline">
@@ -321,7 +323,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
     <div className="min-h-screen bg-gray-50">
       <StudentNavbar />
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="px-6 py-8" style={{ marginLeft: "var(--sidebar-w, 15rem)", transition: "margin-left 0.2s ease" }}><div className="max-w-6xl mx-auto">
         {/* Breadcrumb */}
         <Link
           href="/courses"
@@ -492,7 +494,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         </div>
-      </main>
+      </div></main>
     </div>
   );
 }

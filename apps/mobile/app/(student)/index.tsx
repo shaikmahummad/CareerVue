@@ -50,20 +50,22 @@ export default function StudentDashboard() {
   const [roadmap,     setRoadmap]     = useState<Roadmap | null>(null);
 
   useEffect(() => {
-    async function load() {
-      const { data: { session } } = await supabase.auth.getSession();
-      const fullName = session?.user?.user_metadata?.full_name as string | undefined;
-      setName(fullName?.split(" ")[0] ?? "there");
-      const [s, e, r] = await Promise.allSettled([
-        apiGet<Stats>("/api/v1/students/stats"),
-        apiGet<Enrollment[]>("/api/v1/enrollments/mine"),
-        apiGet<Roadmap>("/api/v1/roadmap/mine"),
-      ]);
+    // Fire all API calls immediately — authHeaders() is now synchronous
+    const statsP   = apiGet<Stats>("/api/v1/students/stats");
+    const enrollP  = apiGet<Enrollment[]>("/api/v1/enrollments/mine");
+    const roadmapP = apiGet<Roadmap>("/api/v1/roadmap/mine");
+
+    // Resolve user name in parallel — doesn't block data loading
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const n = (session?.user?.user_metadata?.full_name as string | undefined)?.split(" ")[0];
+      setName(n ?? "there");
+    });
+
+    Promise.allSettled([statsP, enrollP, roadmapP]).then(([s, e, r]) => {
       if (s.status === "fulfilled") setStats(s.value);
       if (e.status === "fulfilled") setEnrollments(e.value);
       if (r.status === "fulfilled") setRoadmap(r.value);
-    }
-    load();
+    });
   }, []);
 
   const inProgress = enrollments.find(e => !e.completed_at);

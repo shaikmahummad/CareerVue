@@ -35,7 +35,7 @@ function AuthGuard({ session, ready }: { session: Session | null; ready: boolean
     const isPublic    = inAuth || inOnboard || inRoot;
 
     if (!session) {
-      if (!isPublic) router.replace("/");
+      if (!isPublic) router.replace("/(auth)/login" as never);
     } else {
       if (isPublic) {
         const role = (session.user.user_metadata?.role as string) ?? "student";

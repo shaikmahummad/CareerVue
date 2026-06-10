@@ -90,7 +90,31 @@
       "PowerShell(ConvertTo-Json *)",
       "PowerShell($body = '{\"career_goal\": \"Full Stack Developer\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/students/goal\" -Method PUT -Body $body -ContentType \"application/json\" -ErrorAction SilentlyContinue; Write-Host \"Status: $\\($r.StatusCode\\) $\\($r.StatusDescription\\)\")",
       "PowerShell($body = '{\"goal\": \"Full Stack Developer\"}'; $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/students/goal\" -Method PUT -Body $body -ContentType \"application/json\" -ErrorAction SilentlyContinue; Write-Host \"Status: $\\($r.StatusCode\\) — old field name \\(should be 422\\)\")",
-      "PowerShell(head *)"
+      "PowerShell(head *)",
+      "WebSearch",
+      "WebFetch(domain:expo.dev)",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npm show *)",
+      "Bash(node -e \"const v=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const arr=JSON.parse\\(v\\); console.log\\(arr.filter\\(x=>x.startsWith\\('0.8'\\)\\).join\\('\\\\n'\\)\\)\")",
+      "PowerShell(npm show *)",
+      "Bash(node *)",
+      "Bash(grep -v \"^react$\\\\|^react-native$\")",
+      "Bash(cd /tmp)",
+      "Bash(npm pack *)",
+      "Bash(npm install *)",
+      "Bash(xargs -I{} node -e \"try{const p=require\\('{}'\\);console.log\\(p.name+'@'+p.version\\);}catch\\(e\\){}\")",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\node_modules\\\\expo-router\\\\node_modules\" -Directory -ErrorAction SilentlyContinue | ForEach-Object { $pkg = $_.Name; $pkgJson = Join-Path $_.FullName \"package.json\"; if \\(Test-Path $pkgJson\\) { $v = \\(Get-Content $pkgJson | ConvertFrom-Json\\).version; Write-Host \"$pkg@$v\" } })",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\\\\app\" -Recurse -File)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\mobile\" -Recurse -Name)",
+      "Bash(grep -v \"//.*Sign Out\")",
+      "Bash(node_modules\\\\.bin\\\\next dev *)",
+      "Bash(exit 0)",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\backend\\\\alembic\" | Where-Object { $_.Extension -eq \".py\" } | Select-Object FullName)",
+      "mcp__ide__getDiagnostics",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\" | Where-Object { $_.Extension -ne \"\" } | Select-Object FullName)",
+      "PowerShell(Get-ChildItem -Recurse \"C:\\\\Users\\\\mahummadq\\\\Desktop\\\\CareerVue\\\\apps\\\\web\\\\app\\\\\\(student\\)\" -Filter \"page.tsx\" | ForEach-Object { Write-Host \"=== $\\($_.FullName\\) ===\"; Get-Content $_.FullName | Select-String \"StudentNavbar|ml-60|<main\" | Select-Object -First 5 })"
     ]
   }
 }

@@ -342,9 +342,13 @@ export default function ProfileScreen() {
 
         {/* Sign out */}
         <Pressable
-          style={s.signOutBtn}
-          onPress={() => supabase.auth.signOut()}
+          style={({ pressed }) => [s.signOutBtn, { opacity: pressed ? 0.7 : 1 }]}
+          onPress={async () => {
+            await supabase.auth.signOut();
+            router.replace("/(auth)/login" as never);
+          }}
         >
+          <Ionicons name="log-out-outline" size={18} color={colors.error} />
           <Text style={s.signOutText}>Sign Out</Text>
         </Pressable>
       </ScrollView>
@@ -549,12 +553,21 @@ const s = StyleSheet.create({
 
   // Sign out
   signOutBtn: {
-    paddingVertical: 16,
+    flexDirection:   "row",
     alignItems:      "center",
+    justifyContent:  "center",
+    gap:             8,
+    backgroundColor: "rgba(255,180,171,0.08)",
+    borderWidth:     1,
+    borderColor:     "rgba(255,180,171,0.2)",
+    borderRadius:    16,
+    paddingVertical: 15,
+    marginTop:       4,
   },
   signOutText: {
-    fontFamily: "HankenGrotesk_500Medium",
-    fontSize:   14,
-    color:      colors.error,
+    fontFamily:    "HankenGrotesk_600SemiBold",
+    fontSize:      15,
+    color:         colors.error,
+    letterSpacing: -0.1,
   },
 });

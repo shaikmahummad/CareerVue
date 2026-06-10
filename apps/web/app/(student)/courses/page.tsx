@@ -139,7 +139,7 @@ function CoursesContent() {
   return (
     <div className="min-h-screen bg-[#050508] flex">
       <StudentNavbar />
-      <main className="flex-1 ml-60 p-8 overflow-y-auto">
+      <main className="flex-1 p-8 overflow-y-auto" style={{ marginLeft: "var(--sidebar-w, 15rem)", transition: "margin-left 0.2s ease" }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
