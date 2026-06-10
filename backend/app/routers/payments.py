@@ -12,6 +12,7 @@ from app.dependencies import StudentUser
 from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment
+from app.models.user import Student
 from app.services import payment_service
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -28,6 +29,20 @@ class VerifyPaymentBody(BaseModel):
     gateway_order_id: str
     gateway_payment_id: str
     gateway_signature: str
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+async def _get_student(db: AsyncSession, profile_id: uuid.UUID) -> Student:
+    student = (
+        await db.execute(select(Student).where(Student.profile_id == profile_id))
+    ).scalar_one_or_none()
+    if not student:
+        student = Student(profile_id=profile_id)
+        db.add(student)
+        await db.commit()
+        await db.refresh(student)
+    return student
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -49,11 +64,12 @@ async def create_order(
     if course.is_free:
         raise HTTPException(status_code=400, detail="This course is free — enroll directly")
 
-    # Check not already enrolled
+    student = await _get_student(db, current_user.id)
+
     existing_enr = (
         await db.execute(
             select(Enrollment).where(
-                Enrollment.student_id == current_user.id,
+                Enrollment.student_id == student.id,
                 Enrollment.course_id == cid,
             )
         )
@@ -62,16 +78,15 @@ async def create_order(
         raise HTTPException(status_code=409, detail="Already enrolled in this course")
 
     amount_inr = float(course.price)
-    receipt = f"course_{cid}_{current_user.id}"
+    receipt = f"course_{cid}_{student.id}"
 
     try:
         order = payment_service.create_order(amount_inr=amount_inr, receipt=receipt)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Payment gateway error: {exc}")
 
-    # Persist pending payment record
     payment = Payment(
-        student_id=current_user.id,
+        student_id=student.id,
         course_id=cid,
         amount=amount_inr,
         currency=order.get("currency", "INR"),
@@ -85,7 +100,7 @@ async def create_order(
 
     data = {
         "order_id": order["id"],
-        "amount": order["amount"],  # in paise
+        "amount": order["amount"],
         "currency": order.get("currency", "INR"),
         "key_id": settings.razorpay_key_id,
         "payment_id": str(payment.id),
@@ -104,7 +119,6 @@ async def verify_payment(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid course_id")
 
-    # Verify Razorpay signature
     is_valid = payment_service.verify_signature(
         order_id=body.gateway_order_id,
         payment_id=body.gateway_payment_id,
@@ -113,11 +127,12 @@ async def verify_payment(
     if not is_valid:
         raise HTTPException(status_code=400, detail="Invalid payment signature")
 
-    # Update Payment record
+    student = await _get_student(db, current_user.id)
+
     payment = (
         await db.execute(
             select(Payment).where(
-                Payment.student_id == current_user.id,
+                Payment.student_id == student.id,
                 Payment.course_id == cid,
                 Payment.gateway_order_id == body.gateway_order_id,
             )
@@ -131,11 +146,10 @@ async def verify_payment(
     payment.gateway_payment_id = body.gateway_payment_id
     payment.paid_at = datetime.now(timezone.utc)
 
-    # Check not already enrolled
     existing_enr = (
         await db.execute(
             select(Enrollment).where(
-                Enrollment.student_id == current_user.id,
+                Enrollment.student_id == student.id,
                 Enrollment.course_id == cid,
             )
         )
@@ -143,12 +157,11 @@ async def verify_payment(
 
     if not existing_enr:
         enrollment = Enrollment(
-            student_id=current_user.id,
+            student_id=student.id,
             course_id=cid,
         )
         db.add(enrollment)
 
-        # Increment enrolled_count
         await db.execute(
             update(Course)
             .where(Course.id == cid)
@@ -173,10 +186,11 @@ async def my_payments(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    student = await _get_student(db, current_user.id)
     stmt = (
         select(Payment, Course)
         .join(Course, Payment.course_id == Course.id)
-        .where(Payment.student_id == current_user.id)
+        .where(Payment.student_id == student.id)
         .order_by(Payment.created_at.desc())
     )
     rows = (await db.execute(stmt)).all()

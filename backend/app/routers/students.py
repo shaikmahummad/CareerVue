@@ -168,7 +168,7 @@ async def get_student_stats(
             select(
                 func.count().label("enrolled_count"),
                 func.count(Enrollment.completed_at).label("completed_count"),
-            ).where(Enrollment.student_id == current_user.id)
+            ).where(Enrollment.student_id == student.id)
         )
     ).one()
     enrolled_count  = row.enrolled_count

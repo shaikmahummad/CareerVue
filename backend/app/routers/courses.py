@@ -13,7 +13,7 @@ from app.dependencies import StudentUser, TutorUser
 from app.models.course import Course, CourseApproval, CourseModule
 from app.models.enrollment import Enrollment
 from app.models.social import Review
-from app.models.user import Profile, Tutor
+from app.models.user import Profile, Student, Tutor
 
 _optional_bearer = HTTPBearer(auto_error=False)
 
@@ -279,12 +279,17 @@ async def get_course(
     # Enrollment status for authenticated students
     is_enrolled = False
     if current_user and current_user.role == "student":
-        enr_stmt = select(Enrollment).where(
-            Enrollment.student_id == current_user.id,
-            Enrollment.course_id == cid,
-        )
-        enr = (await db.execute(enr_stmt)).scalar_one_or_none()
-        is_enrolled = enr is not None
+        student = (await db.execute(
+            select(Student).where(Student.profile_id == current_user.id)
+        )).scalar_one_or_none()
+        if student:
+            enr = (await db.execute(
+                select(Enrollment).where(
+                    Enrollment.student_id == student.id,
+                    Enrollment.course_id == cid,
+                )
+            )).scalar_one_or_none()
+            is_enrolled = enr is not None
 
     course_data = _course_dict(course, tutor_profile)
     course_data["modules"] = [_module_dict(m) for m in modules]
@@ -519,9 +524,15 @@ async def add_review(
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
 
+    student = (await db.execute(
+        select(Student).where(Student.profile_id == current_user.id)
+    )).scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=403, detail="Student profile not found")
+
     # Must be enrolled
     enr_stmt = select(Enrollment).where(
-        Enrollment.student_id == current_user.id,
+        Enrollment.student_id == student.id,
         Enrollment.course_id == cid,
     )
     enrollment = (await db.execute(enr_stmt)).scalar_one_or_none()
@@ -530,7 +541,7 @@ async def add_review(
 
     # Upsert review
     review_stmt = select(Review).where(
-        Review.student_id == current_user.id,
+        Review.student_id == student.id,
         Review.course_id == cid,
     )
     review = (await db.execute(review_stmt)).scalar_one_or_none()
@@ -540,7 +551,7 @@ async def add_review(
         review.comment = body.comment
     else:
         review = Review(
-            student_id=current_user.id,
+            student_id=student.id,
             course_id=cid,
             rating=body.rating,
             comment=body.comment,

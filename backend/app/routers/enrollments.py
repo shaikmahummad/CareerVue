@@ -28,6 +28,18 @@ class ModuleProgressBody(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+async def _get_student(db: AsyncSession, profile_id: uuid.UUID) -> Student:
+    student = (
+        await db.execute(select(Student).where(Student.profile_id == profile_id))
+    ).scalar_one_or_none()
+    if not student:
+        student = Student(profile_id=profile_id)
+        db.add(student)
+        await db.commit()
+        await db.refresh(student)
+    return student
+
+
 def _enrollment_dict(e: Enrollment, course: Course | None = None) -> dict:
     data: dict = {
         "id": str(e.id),
@@ -93,11 +105,13 @@ async def enroll_in_course(
     if not course or course.status != "approved":
         raise HTTPException(status_code=404, detail="Course not found or not yet approved")
 
+    student = await _get_student(db, current_user.id)
+
     # Prevent duplicate enrollment
     existing = (
         await db.execute(
             select(Enrollment).where(
-                Enrollment.student_id == current_user.id,
+                Enrollment.student_id == student.id,
                 Enrollment.course_id == cid,
             )
         )
@@ -106,11 +120,10 @@ async def enroll_in_course(
         raise HTTPException(status_code=409, detail="Already enrolled in this course")
 
     if not course.is_free:
-        # Check that a completed payment exists
         payment = (
             await db.execute(
                 select(Payment).where(
-                    Payment.student_id == current_user.id,
+                    Payment.student_id == student.id,
                     Payment.course_id == cid,
                     Payment.status == "completed",
                 )
@@ -123,12 +136,11 @@ async def enroll_in_course(
             )
 
     enrollment = Enrollment(
-        student_id=current_user.id,
+        student_id=student.id,
         course_id=cid,
     )
     db.add(enrollment)
 
-    # Increment enrolled_count
     await db.execute(
         update(Course)
         .where(Course.id == cid)
@@ -149,10 +161,11 @@ async def my_enrollments(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    student = await _get_student(db, current_user.id)
     stmt = (
         select(Enrollment, Course)
         .join(Course, Enrollment.course_id == Course.id)
-        .where(Enrollment.student_id == current_user.id)
+        .where(Enrollment.student_id == student.id)
         .order_by(Enrollment.enrolled_at.desc())
     )
     rows = (await db.execute(stmt)).all()
@@ -174,12 +187,13 @@ async def get_enrollment(
     enrollment = await db.get(Enrollment, eid)
     if not enrollment:
         raise HTTPException(status_code=404, detail="Enrollment not found")
-    if enrollment.student_id != current_user.id:
+
+    student = await _get_student(db, current_user.id)
+    if enrollment.student_id != student.id:
         raise HTTPException(status_code=403, detail="Not your enrollment")
 
     course = await db.get(Course, enrollment.course_id)
 
-    # Module progress list
     mp_stmt = select(ModuleProgress).where(ModuleProgress.enrollment_id == eid)
     module_progresses = (await db.execute(mp_stmt)).scalars().all()
 
@@ -211,15 +225,15 @@ async def update_module_progress(
     enrollment = await db.get(Enrollment, eid)
     if not enrollment:
         raise HTTPException(status_code=404, detail="Enrollment not found")
-    if enrollment.student_id != current_user.id:
+
+    student = await _get_student(db, current_user.id)
+    if enrollment.student_id != student.id:
         raise HTTPException(status_code=403, detail="Not your enrollment")
 
-    # Verify module belongs to the enrolled course
     module = await db.get(CourseModule, mid)
     if not module or module.course_id != enrollment.course_id:
         raise HTTPException(status_code=404, detail="Module not found for this course")
 
-    # Create progress record only if not already exists
     existing_mp = (
         await db.execute(
             select(ModuleProgress).where(
@@ -234,7 +248,6 @@ async def update_module_progress(
         db.add(mp)
         await db.flush()
 
-    # Recalculate progress
     pct = await _recalculate_progress(db, enrollment)
     enrollment.progress_pct = pct
 
@@ -261,18 +274,19 @@ async def complete_course(
     enrollment = await db.get(Enrollment, eid)
     if not enrollment:
         raise HTTPException(status_code=404, detail="Enrollment not found")
-    if enrollment.student_id != current_user.id:
+
+    student = await _get_student(db, current_user.id)
+    if enrollment.student_id != student.id:
         raise HTTPException(status_code=403, detail="Not your enrollment")
 
     now = datetime.now(timezone.utc)
     enrollment.completed_at = now
     enrollment.progress_pct = 100
 
-    # Issue certificate if not already issued
     existing_cert = (
         await db.execute(
             select(Certificate).where(
-                Certificate.student_id == current_user.id,
+                Certificate.student_id == student.id,
                 Certificate.course_id == enrollment.course_id,
             )
         )
@@ -280,15 +294,14 @@ async def complete_course(
 
     if not existing_cert:
         cert = Certificate(
-            student_id=current_user.id,
+            student_id=student.id,
             course_id=enrollment.course_id,
         )
         db.add(cert)
 
-    # Award XP points
     await db.execute(
         update(Student)
-        .where(Student.id == current_user.id)
+        .where(Student.id == student.id)
         .values(xp_points=Student.xp_points + 100)
     )
 
