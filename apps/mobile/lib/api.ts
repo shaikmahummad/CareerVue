@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://careervue.welcos.in";
 
 // In-memory token cache — updated by auth state listener, eliminates per-call getSession() I/O
 let _token: string | null = null;
