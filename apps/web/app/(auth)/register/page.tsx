@@ -18,7 +18,7 @@ interface TutorFields {
   expertise_tags: string; linkedin_url: string; website_url: string;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || "https://careervue.welcos.in";
+const API = process.env.NEXT_PUBLIC_API_URL || "https://careervue-api.welcos.in";
 
 const FEATURES = [
   { icon: Zap,      label: "AI Roadmaps",       desc: "Data-driven career paths tailored to your goals." },

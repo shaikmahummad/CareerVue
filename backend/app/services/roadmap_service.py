@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,6 +9,100 @@ from app.models.roadmap import Roadmap, RoadmapCourse
 from app.models.user import SkillProfile
 from app.models.course import Course
 from app.services.ai_service import generate_roadmap
+
+
+logger = logging.getLogger(__name__)
+
+
+def _fallback_roadmap(goal: str, skill_profile: list[dict]) -> list[dict]:
+    """Build a useful roadmap without depending on the AI provider."""
+    sorted_skills = sorted(
+        skill_profile, key=lambda skill: int(skill.get("score_pct") or 0)
+    )
+    items: list[dict] = []
+    for skill in sorted_skills[:6]:
+        topic = str(skill.get("topic") or "").strip()
+        if not topic:
+            continue
+        score = int(skill.get("score_pct") or 0)
+        course_type = (
+            "beginner"
+            if score < 40
+            else "intermediate"
+            if score < 75
+            else "advanced"
+        )
+        index = len(items) + 1
+        items.append({
+            "topic": topic,
+            "reason": (
+                f"Strengthen {topic} for the {goal} path based on your "
+                f"assessment score of {score}%."
+            ),
+            "priority": index,
+            "recommended_course_type": course_type,
+            "search_keywords": [topic, goal, f"{course_type} {topic}"],
+            "order_index": index,
+        })
+    if items:
+        return items
+    return [
+        {
+            "topic": f"{goal} Fundamentals",
+            "reason": f"Build the core knowledge required for a career as a {goal}.",
+            "priority": 1,
+            "recommended_course_type": "beginner",
+            "search_keywords": [goal, f"{goal} fundamentals"],
+            "order_index": 1,
+        },
+        {
+            "topic": f"Applied {goal} Projects",
+            "reason": "Apply the fundamentals through portfolio-ready projects.",
+            "priority": 2,
+            "recommended_course_type": "intermediate",
+            "search_keywords": [f"{goal} projects", f"{goal} portfolio"],
+            "order_index": 2,
+        },
+        {
+            "topic": f"Advanced {goal} Practice",
+            "reason": "Develop production-level skills and prepare for interviews.",
+            "priority": 3,
+            "recommended_course_type": "advanced",
+            "search_keywords": [f"advanced {goal}", f"{goal} interview"],
+            "order_index": 3,
+        },
+    ]
+
+
+def _normalize_roadmap_items(items: object) -> list[dict]:
+    """Validate untrusted AI output before database insertion."""
+    if not isinstance(items, list):
+        return []
+    normalized: list[dict] = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        topic = str(raw.get("topic") or "").strip()
+        if not topic:
+            continue
+        index = len(normalized) + 1
+        priority = raw.get("priority", index)
+        keywords = raw.get("search_keywords")
+        normalized.append({
+            "topic": topic,
+            "reason": str(raw.get("reason") or "").strip(),
+            "priority": priority if isinstance(priority, int) else index,
+            "recommended_course_type": str(
+                raw.get("recommended_course_type") or "beginner"
+            ).strip().lower(),
+            "search_keywords": (
+                [str(value).strip() for value in keywords if str(value).strip()]
+                if isinstance(keywords, list)
+                else []
+            ),
+            "order_index": index,
+        })
+    return normalized
 
 
 async def generate_student_roadmap(
@@ -45,18 +140,33 @@ async def generate_student_roadmap(
         loop = asyncio.get_running_loop()
         roadmap_items = await loop.run_in_executor(None, generate_roadmap, goal, skill_profile)
     except Exception as exc:
-        raise ValueError(f"AI roadmap generation failed: {exc}") from exc
+        logger.exception(
+            "AI roadmap generation failed for student_id=%s goal=%r",
+            student_id,
+            goal,
+        )
+        roadmap_items = _fallback_roadmap(goal, skill_profile)
 
-    if not isinstance(roadmap_items, list) or not roadmap_items:
-        raise ValueError("AI returned an empty or invalid roadmap — try again")
+    roadmap_items = _normalize_roadmap_items(roadmap_items)
+    if not roadmap_items:
+        logger.error(
+            "AI returned invalid roadmap data for student_id=%s goal=%r: type=%s",
+            student_id,
+            goal,
+            type(roadmap_items).__name__,
+        )
+        roadmap_items = _normalize_roadmap_items(
+            _fallback_roadmap(goal, skill_profile)
+        )
 
     # 3. Archive existing active roadmap (if any)
     existing_result = await db.execute(
         select(Roadmap).where(Roadmap.student_id == student_id, Roadmap.is_active == True)
     )
-    old_roadmap = existing_result.scalar_one_or_none()
-    if old_roadmap:
+    old_roadmaps = existing_result.scalars().all()
+    for old_roadmap in old_roadmaps:
         old_roadmap.is_active = False
+    if old_roadmaps:
         await db.flush()
 
     # 4. Create new roadmap
