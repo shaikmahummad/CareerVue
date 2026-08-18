@@ -1,6 +1,6 @@
 import { createClient } from "./supabase/client";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://careervue.welcos.in";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://careervue-api.welcos.in";
 
 async function authHeaders(): Promise<HeadersInit> {
   const supabase = createClient();

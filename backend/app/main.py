@@ -39,9 +39,20 @@ app = FastAPI(
     redoc_url="/redoc" if not settings.is_production else None,
 )
 
+LOCAL_DEVELOPMENT_ORIGINS = {
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+}
+
+# Keep local web/Expo development usable even when a deployment-level
+# APP_CORS_ORIGINS variable replaces the defaults from backend/.env.
+allowed_origins = sorted(set(settings.cors_origins) | LOCAL_DEVELOPMENT_ORIGINS)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

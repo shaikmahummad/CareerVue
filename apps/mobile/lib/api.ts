@@ -1,13 +1,13 @@
 import { supabase } from "./supabase";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://careervue.welcos.in";
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://careervue-api.welcos.in";
 
 // In-memory token cache — updated by auth state listener, eliminates per-call getSession() I/O
 let _token: string | null = null;
 
 supabase.auth.onAuthStateChange((_, session) => {
   _token = session?.access_token ?? null;
-});
+}); 
 supabase.auth.getSession().then(({ data: { session } }) => {
   if (!_token) _token = session?.access_token ?? null;
 });
