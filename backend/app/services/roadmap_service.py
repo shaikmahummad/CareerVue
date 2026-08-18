@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -8,6 +9,9 @@ from app.models.roadmap import Roadmap, RoadmapCourse
 from app.models.user import SkillProfile
 from app.models.course import Course
 from app.services.ai_service import generate_roadmap
+
+
+logger = logging.getLogger(__name__)
 
 
 async def generate_student_roadmap(
@@ -45,9 +49,22 @@ async def generate_student_roadmap(
         loop = asyncio.get_running_loop()
         roadmap_items = await loop.run_in_executor(None, generate_roadmap, goal, skill_profile)
     except Exception as exc:
-        raise ValueError(f"AI roadmap generation failed: {exc}") from exc
+        logger.exception(
+            "AI roadmap generation failed for student_id=%s goal=%r",
+            student_id,
+            goal,
+        )
+        raise ValueError(
+            f"AI roadmap generation failed ({type(exc).__name__}): {exc}"
+        ) from exc
 
     if not isinstance(roadmap_items, list) or not roadmap_items:
+        logger.error(
+            "AI returned invalid roadmap data for student_id=%s goal=%r: type=%s",
+            student_id,
+            goal,
+            type(roadmap_items).__name__,
+        )
         raise ValueError("AI returned an empty or invalid roadmap — try again")
 
     # 3. Archive existing active roadmap (if any)
