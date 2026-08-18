@@ -58,9 +58,16 @@ async def get_or_create_quiz_template(
         await db.refresh(template)
         return template
 
-    # Beginners get the cached template (same questions until they improve)
-    result = await db.execute(select(QuizTemplate).where(QuizTemplate.goal == goal))
-    template = result.scalar_one_or_none()
+    # Beginners reuse the first template created for this goal. Adaptive users
+    # can create additional templates for the same goal, so this query must not
+    # assume that the goal is unique.
+    result = await db.execute(
+        select(QuizTemplate)
+        .where(QuizTemplate.goal == goal)
+        .order_by(QuizTemplate.created_at.asc(), QuizTemplate.id.asc())
+        .limit(1)
+    )
+    template = result.scalars().first()
     if template:
         return template
 
