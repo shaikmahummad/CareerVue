@@ -167,6 +167,7 @@ export default function QuizScreen() {
 
   async function handleSubmit(finalAnswers: Record<string, OptionKey>) {
     if (!template) return;
+    setError("");
     setState("submitting");
     try {
       const payload = {
@@ -179,19 +180,15 @@ export default function QuizScreen() {
       setSubmitResult(result);
       setAttemptId(result.attempt_id);
       setState("results");
-    } catch {
-      // Fallback: estimate locally
-      const fallbackScore = Math.round(
-        (Object.keys(finalAnswers).length / (template?.total_questions ?? 1)) * 60
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error
+          ? `Your answers were not saved: ${e.message}`
+          : "Your answers were not saved. Please try again."
       );
-      setSubmitResult({
-        attempt_id: "",
-        score: fallbackScore,
-        total_questions: template?.total_questions ?? 0,
-        skill_assessments: [],
-      });
-      setAttemptId(null);
-      setState("results");
+      // Keep the completed answers and return to the final question so the
+      // student can retry without receiving a fabricated result.
+      setState("quiz");
     }
   }
 
@@ -389,6 +386,18 @@ export default function QuizScreen() {
           }]}
           showsVerticalScrollIndicator={false}
         >
+          {error ? (
+            <View style={[s.errorBox, { marginBottom: 16, gap: 10 }]}>
+              <Text style={s.errorText}>{error}</Text>
+              <Pressable
+                style={[s.primaryBtn, { paddingVertical: 10 }]}
+                onPress={() => handleSubmit(answers)}
+              >
+                <Text style={s.primaryBtnText}>Retry submission</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {/* Question card */}
           <View style={s.questionCard}>
             <View style={s.difficultyBadgeWrap}>
