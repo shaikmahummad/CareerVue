@@ -179,9 +179,9 @@ export default function LoginPage() {
                 />
                 <span className="text-xs text-[#7c7a8a]">Remember me</span>
               </label>
-              <a href="#" className="text-xs text-[#6c63ff] hover:text-[#00d4ff] transition-colors">
+              <Link href="/forgot-password" className="text-xs text-[#6c63ff] hover:text-[#00d4ff] transition-colors">
                 Forgot password?
-              </a>
+              </Link>
             </div>
 
             <button

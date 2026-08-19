@@ -1,4 +1,4 @@
-from sqlalchemy import Text, Boolean, Integer, Numeric, DateTime, ForeignKey
+from sqlalchemy import Text, Boolean, Integer, Numeric, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy import text
@@ -95,4 +95,23 @@ class SkillProfile(Base):
     score_percent: Mapped[int] = mapped_column(Integer, nullable=False)
     assessed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=text("now()")
+    )
+
+
+class PasswordResetOtp(Base):
+    __tablename__ = "password_reset_otps"
+    __table_args__ = (Index("ix_password_reset_otps_email_created", "email", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    otp_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reset_token_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

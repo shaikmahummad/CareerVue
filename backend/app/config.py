@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     razorpay_key_id: str
     razorpay_key_secret: str
 
+    # SMTP (password-reset OTP emails)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "CareerVue"
+    smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
+
     # App
     app_env: str = "development"
     app_cors_origins: str = '["http://localhost:3000","http://localhost:8081"]'
