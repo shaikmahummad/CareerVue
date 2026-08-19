@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { apiGet, apiPut, apiPost } from "../../../lib/api";
+import { apiDelete, apiGet, apiPut, apiPost } from "../../../lib/api";
 import { colors } from "../../../constants/theme";
 
 interface Module {
@@ -139,7 +139,7 @@ export default function CourseEditor() {
         text: "Delete", style: "destructive",
         onPress: async () => {
           try {
-            await apiPut(`/api/v1/courses/${id}/modules/${moduleId}`, { _delete: true });
+            await apiDelete(`/api/v1/courses/${id}/modules/${moduleId}`);
             setCourse((prev) =>
               prev ? { ...prev, modules: prev.modules.filter((m) => m.id !== moduleId) } : prev
             );
