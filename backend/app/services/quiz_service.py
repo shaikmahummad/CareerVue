@@ -2,6 +2,7 @@ import asyncio
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 from datetime import datetime, timezone
 
@@ -9,6 +10,7 @@ from app.models.quiz import QuizTemplate, QuizAttempt
 from app.models.user import SkillProfile, Student
 from app.services.ai_service import generate_quiz, assess_skills
 from app.rag.course_retriever import retrieve_courses
+from app.services.question_bank_service import build_verified_quiz, generation_key
 
 
 def _generate_quiz_with_context(
@@ -51,7 +53,46 @@ async def get_or_create_quiz_template(
             avg = sum(s.score_percent for s in skills) / len(skills)
             skill_level = _compute_skill_level(avg)
 
-    # For non-beginner students, always generate a fresh quiz so difficulty improves
+    # CareerVue's verified bank is the primary engine for supported careers.
+    # A stable generation key lets all students at the same level reuse the
+    # same immutable template without confusing it with legacy Groq templates.
+    bank_result = await build_verified_quiz(db, goal, skill_level)
+    if bank_result:
+        career_slug, career_title, quiz_data = bank_result
+        bank_key = generation_key(career_slug, skill_level)
+        existing = (
+            await db.execute(
+                select(QuizTemplate).where(QuizTemplate.generation_key == bank_key)
+            )
+        ).scalar_one_or_none()
+        if existing:
+            return existing
+
+        template = QuizTemplate(
+            goal=career_title,
+            topic_areas=quiz_data["topic_areas"],
+            questions=quiz_data["questions"],
+            generation_key=bank_key,
+        )
+        db.add(template)
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Another request may have created the same deterministic template.
+            await db.rollback()
+            concurrent = (
+                await db.execute(
+                    select(QuizTemplate).where(
+                        QuizTemplate.generation_key == bank_key
+                    )
+                )
+            ).scalar_one()
+            return concurrent
+        await db.refresh(template)
+        return template
+
+    # Unsupported careers (or incomplete banks) retain the existing Groq path.
+    # For non-beginner students, always generate a fresh quiz so difficulty improves.
     if skill_level != "beginner":
         context = [
             item.as_prompt_context()

@@ -16,6 +16,7 @@ class QuizTemplate(Base):
     goal: Mapped[str] = mapped_column(Text, nullable=False)
     topic_areas: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     questions: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
+    generation_key: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=text("now()")
     )

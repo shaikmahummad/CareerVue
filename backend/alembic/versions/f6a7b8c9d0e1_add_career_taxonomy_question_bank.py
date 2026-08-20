@@ -1,7 +1,7 @@
 """add career taxonomy and verified question bank
 
 Revision ID: f6a7b8c9d0e1
-Revises: e5f6a7b8c9d0
+Revises: d4e5f6a7b8c9
 """
 from alembic import op
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision = "f6a7b8c9d0e1"
-down_revision = "e5f6a7b8c9d0"
+down_revision = "d4e5f6a7b8c9"
 branch_labels = None
 depends_on = None
 

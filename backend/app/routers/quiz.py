@@ -39,7 +39,7 @@ async def get_quiz_template(
 ):
     """
     Fetch an existing quiz template for the given career goal, or generate one
-    on the fly via Claude if none exists yet.
+    from the verified question bank, with Groq fallback for unsupported goals.
 
     Correct answers are stripped from the response so clients cannot cheat.
     """
