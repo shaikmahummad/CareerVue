@@ -82,7 +82,12 @@ def _chat(system: str, user: str, max_tokens: int = 8000) -> str:
     return response.choices[0].message.content
 
 
-def generate_quiz(goal: str, num_questions: int = 20, skill_level: str = "beginner") -> dict:
+def generate_quiz(
+    goal: str,
+    num_questions: int = 20,
+    skill_level: str = "beginner",
+    knowledge_context: Optional[list[dict]] = None,
+) -> dict:
     topics_per_question = num_questions // 5
 
     difficulty_instructions = {
@@ -91,7 +96,14 @@ def generate_quiz(goal: str, num_questions: int = 20, skill_level: str = "beginn
         "advanced":     "Focus on advanced topics, edge cases, best practices, and system design. All intermediate-to-advanced questions.",
     }.get(skill_level, "Mix of beginner (60%) and intermediate (40%) questions.")
 
+    context_text = json.dumps(knowledge_context or [], indent=2)
     prompt = f"""Generate a {num_questions}-question multiple choice quiz to assess a student's current skill level for the goal: "{goal}".
+
+CareerVue approved catalog context:
+{context_text}
+
+Use this context to choose relevant topics. Do not claim that catalog context
+contains facts it does not contain. Questions must still be independently valid.
 
 Difficulty profile: {difficulty_instructions}
 
@@ -165,13 +177,21 @@ def assess_skills(goal: str, questions: list[dict], answers: list[dict]) -> list
     return results
 
 
-def generate_roadmap(goal: str, skill_profile: list[dict]) -> list[dict]:
+def generate_roadmap(
+    goal: str,
+    skill_profile: list[dict],
+    knowledge_context: Optional[list[dict]] = None,
+) -> list[dict]:
     profile_text = json.dumps(skill_profile, indent=2)
 
+    context_text = json.dumps(knowledge_context or [], indent=2)
     prompt = f"""A student's career goal is: "{goal}"
 
 Their current skill assessment:
 {profile_text}
+
+CareerVue approved courses and modules retrieved for this student:
+{context_text}
 
 Generate a personalized learning roadmap. Rules:
 - Weak topics (score < 40%): recommend beginner fundamentals first
@@ -179,6 +199,8 @@ Generate a personalized learning roadmap. Rules:
 - Strong topics (score >= 75%): recommend advanced/specialization courses (optional, for depth)
 - Order from foundational to advanced (weak topics usually first)
 - Be specific and actionable
+- Prefer topics that can be supported by the retrieved CareerVue catalog
+- Never invent a CareerVue course that is not present in the retrieved context
 
 Return ONLY valid JSON array, no markdown:
 [

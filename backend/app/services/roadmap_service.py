@@ -9,9 +9,16 @@ from app.models.roadmap import Roadmap, RoadmapCourse
 from app.models.user import SkillProfile
 from app.models.course import Course
 from app.services.ai_service import generate_roadmap
+from app.rag.course_retriever import RetrievedCourse, retrieve_courses, text_relevance
 
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_roadmap_with_context(
+    goal: str, skill_profile: list[dict], context: list[dict]
+) -> list[dict]:
+    return generate_roadmap(goal, skill_profile, context)
 
 
 def _fallback_roadmap(goal: str, skill_profile: list[dict]) -> list[dict]:
@@ -116,7 +123,8 @@ async def generate_student_roadmap(
 
     Steps:
       1. Load the student's current SkillProfile rows.
-      2. Call Claude to produce ordered roadmap items.
+      2. Retrieve approved CareerVue knowledge and ask the configured generator
+         to produce ordered roadmap items.
       3. Archive any existing active roadmap.
       4. Persist the new Roadmap + RoadmapCourse rows, attempting to match
          each item to an approved Course in the catalogue.
@@ -135,10 +143,21 @@ async def generate_student_roadmap(
         for s in skills
     ]
 
-    # 2. Generate roadmap items via AI (run sync HTTP call off the event loop)
+    # 2. Retrieve CareerVue-owned catalog context, then generate roadmap items.
+    retrieval_query = " ".join(
+        [goal, *(str(skill.get("topic") or "") for skill in skill_profile)]
+    )
+    retrieved_courses = await retrieve_courses(db, retrieval_query)
+    knowledge_context = [item.as_prompt_context() for item in retrieved_courses]
     try:
         loop = asyncio.get_running_loop()
-        roadmap_items = await loop.run_in_executor(None, generate_roadmap, goal, skill_profile)
+        roadmap_items = await loop.run_in_executor(
+            None,
+            _generate_roadmap_with_context,
+            goal,
+            skill_profile,
+            knowledge_context,
+        )
     except Exception as exc:
         logger.exception(
             "AI roadmap generation failed for student_id=%s goal=%r",
@@ -176,7 +195,9 @@ async def generate_student_roadmap(
 
     # 5. Create RoadmapCourse items, matching to real courses where possible
     for item in roadmap_items:
-        matched_course_id = await _find_matching_course(db, item)
+        matched_course_id = _match_retrieved_course(item, retrieved_courses)
+        if matched_course_id is None:
+            matched_course_id = await _find_matching_course(db, item)
 
         rc = RoadmapCourse(
             roadmap_id=roadmap.id,
@@ -194,6 +215,32 @@ async def generate_student_roadmap(
     await db.commit()
     await db.refresh(roadmap)
     return roadmap
+
+
+def _match_retrieved_course(
+    roadmap_item: dict, retrieved_courses: list[RetrievedCourse]
+) -> UUID | None:
+    """Match against the same evidence used during generation."""
+    terms = " ".join([
+        str(roadmap_item.get("topic") or ""),
+        *[str(value) for value in roadmap_item.get("search_keywords") or []],
+    ]).lower()
+    level = str(roadmap_item.get("recommended_course_type") or "").lower()
+    best: RetrievedCourse | None = None
+    best_score = 0
+    for course in retrieved_courses:
+        score = text_relevance(
+            terms,
+            course.title,
+            course.category,
+            *course.tags,
+            *course.modules,
+        )
+        if level and course.level.lower() == level:
+            score += 1
+        if score > best_score:
+            best, best_score = course, score
+    return UUID(best.id) if best else None
 
 
 async def _find_matching_course(db: AsyncSession, roadmap_item: dict) -> UUID | None:
