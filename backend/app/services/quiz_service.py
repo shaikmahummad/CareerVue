@@ -8,6 +8,13 @@ from datetime import datetime, timezone
 from app.models.quiz import QuizTemplate, QuizAttempt
 from app.models.user import SkillProfile, Student
 from app.services.ai_service import generate_quiz, assess_skills
+from app.rag.course_retriever import retrieve_courses
+
+
+def _generate_quiz_with_context(
+    goal: str, skill_level: str, context: list[dict]
+) -> dict:
+    return generate_quiz(goal, 20, skill_level, context)
 
 
 async def get_student_pk(db: AsyncSession, profile_id: UUID) -> UUID:
@@ -46,8 +53,14 @@ async def get_or_create_quiz_template(
 
     # For non-beginner students, always generate a fresh quiz so difficulty improves
     if skill_level != "beginner":
+        context = [
+            item.as_prompt_context()
+            for item in await retrieve_courses(db, goal)
+        ]
         loop = asyncio.get_running_loop()
-        quiz_data = await loop.run_in_executor(None, generate_quiz, goal, 20, skill_level)
+        quiz_data = await loop.run_in_executor(
+            None, _generate_quiz_with_context, goal, skill_level, context
+        )
         template = QuizTemplate(
             goal=goal,
             topic_areas=quiz_data["topic_areas"],
@@ -72,7 +85,13 @@ async def get_or_create_quiz_template(
         return template
 
     loop = asyncio.get_running_loop()
-    quiz_data = await loop.run_in_executor(None, generate_quiz, goal, 20, "beginner")
+    context = [
+        item.as_prompt_context()
+        for item in await retrieve_courses(db, goal)
+    ]
+    quiz_data = await loop.run_in_executor(
+        None, _generate_quiz_with_context, goal, "beginner", context
+    )
     template = QuizTemplate(
         goal=goal,
         topic_areas=quiz_data["topic_areas"],
