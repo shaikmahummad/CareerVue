@@ -611,6 +611,22 @@ export default function QuizPage() {
     init();
   }, []);
 
+  // Protect an in-progress assessment from an accidental refresh, tab close,
+  // or browser navigation. Browsers intentionally display their own generic
+  // confirmation text for beforeunload prompts.
+  useEffect(() => {
+    const hasActiveQuiz = step === "quiz" || step === "review";
+    if (!hasActiveQuiz) return;
+
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [step]);
+
   // Countdown tick
   useEffect(() => {
     if (!timerActive || timeLeft <= 0) return;
