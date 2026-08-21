@@ -13,7 +13,7 @@ import { apiGet, apiPost, apiPut } from "../../../lib/api";
 const SECS_PER_QUESTION = 90;
 const OPT_KEYS = ["A", "B", "C", "D"] as const;
 type OptionKey = (typeof OPT_KEYS)[number];
-type AppStep = "loading" | "assessment" | "goal" | "quiz" | "review" | "results";
+type AppStep = "loading" | "assessment" | "goal" | "quiz" | "review" | "results" | "attempt-detail";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -31,7 +31,17 @@ interface QuizResult {
   attempt_id: string; score: number; total_questions: number; skill_assessments: SkillAssessment[];
 }
 interface Attempt {
-  id: string; quiz_id: string; score: number; total_questions: number; time_taken_secs: number; completed_at: string;
+  id: string; quiz_id: string; goal: string; score: number; total_questions: number;
+  correct_count: number; wrong_count: number; time_taken_secs: number; completed_at: string;
+}
+interface AttemptQuestion {
+  id: string; topic: string; question: string;
+  options: { A: string; B: string; C: string; D: string };
+  your_answer: string | null; correct_answer: string; is_correct: boolean;
+  explanation: string | null;
+}
+interface AttemptDetail extends Attempt {
+  questions: AttemptQuestion[];
 }
 
 const CAREER_GOALS = [
@@ -64,6 +74,66 @@ function timerColor(secs: number, total: number) {
   if (p > 0.4) return "#00d4ff";
   if (p > 0.15) return "#e7c365";
   return "#ef4444";
+}
+
+function AttemptDetailView({ detail, onBack }: { detail: AttemptDetail; onBack: () => void }) {
+  return (
+    <div className="max-w-3xl mx-auto">
+      <button onClick={onBack} className="inline-flex items-center gap-2 text-sm text-[#a9a6b3] hover:text-white mb-6 transition-colors">
+        <ChevronLeft size={17} /> Back to past attempts
+      </button>
+
+      <div className="glass-card rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-[#7c7a8a] mb-1">Attempt review</p>
+          <h1 className="text-xl font-bold text-white">{detail.goal}</h1>
+          <p className="text-xs text-[#7c7a8a] mt-1">
+            {new Date(detail.completed_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+          </p>
+        </div>
+        <div className="flex gap-3 text-center">
+          <div className="rounded-xl bg-cyan-400/10 px-4 py-2"><p className="text-lg font-bold text-cyan-300">{detail.correct_count}</p><p className="text-[10px] text-[#7c7a8a]">Correct</p></div>
+          <div className="rounded-xl bg-red-400/10 px-4 py-2"><p className="text-lg font-bold text-red-300">{detail.wrong_count}</p><p className="text-[10px] text-[#7c7a8a]">Wrong</p></div>
+          <div className="rounded-xl bg-white/[0.04] px-4 py-2"><p className="text-lg font-bold text-white">{detail.score}%</p><p className="text-[10px] text-[#7c7a8a]">Score</p></div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {detail.questions.map((q, idx) => (
+          <div key={q.id} className="glass-card rounded-2xl p-5">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-[#7c7a8a] mb-1">Question {idx + 1} · {q.topic}</p>
+                <p className="text-sm font-semibold text-white leading-6">{q.question}</p>
+              </div>
+              {q.is_correct ? <CheckCircle2 size={20} className="text-cyan-300 shrink-0" /> : <XCircle size={20} className="text-red-300 shrink-0" />}
+            </div>
+
+            <div className="space-y-2">
+              {OPT_KEYS.map((opt) => {
+                const correct = q.correct_answer === opt;
+                const selectedWrong = q.your_answer === opt && !q.is_correct;
+                return (
+                  <div key={opt} className={`rounded-xl border px-3 py-2.5 flex items-center gap-3 ${correct ? "border-cyan-400/40 bg-cyan-400/10" : selectedWrong ? "border-red-400/40 bg-red-400/10" : "border-white/[0.06] bg-white/[0.02]"}`}>
+                    <span className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs font-bold ${correct ? "bg-cyan-300 text-[#050508]" : selectedWrong ? "bg-red-300 text-[#050508]" : "bg-white/[0.06] text-[#a9a6b3]"}`}>{opt}</span>
+                    <span className={`text-sm ${correct ? "text-cyan-200" : selectedWrong ? "text-red-200" : "text-[#a9a6b3]"}`}>{q.options[opt]}</span>
+                    {q.your_answer === opt && <span className="ml-auto text-[10px] uppercase tracking-wider text-[#7c7a8a]">Your answer</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {q.explanation && (
+              <div className="mt-4 rounded-xl border border-[#6c63ff]/20 bg-[#6c63ff]/10 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-wider text-[#9d96ff] mb-1">Explanation</p>
+                <p className="text-sm leading-6 text-[#cbc4d2]">{q.explanation}</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /* ─── Radar SVG ──────────────────────────────────────────────────────────── */
@@ -582,6 +652,9 @@ export default function QuizPage() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [attemptDetail, setAttemptDetail] = useState<AttemptDetail | null>(null);
+  const [attemptLoading, setAttemptLoading] = useState(false);
+  const [attemptError, setAttemptError] = useState("");
   const [existingGoal, setExistingGoal] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
@@ -589,6 +662,7 @@ export default function QuizPage() {
   const [timeExpired, setTimeExpired] = useState(false);
   const startTimeRef = useRef<number>(0);
   const stepRef = useRef<AppStep>("loading");
+  const attemptReturnStepRef = useRef<"assessment" | "goal">("assessment");
   stepRef.current = step;
 
   useEffect(() => {
@@ -700,6 +774,21 @@ export default function QuizPage() {
     });
   }
 
+  async function handleViewAttempt(attemptId: string) {
+    attemptReturnStepRef.current = step === "goal" ? "goal" : "assessment";
+    setAttemptLoading(true);
+    setAttemptError("");
+    setAttemptDetail(null);
+    setStep("attempt-detail");
+    try {
+      setAttemptDetail(await apiGet<AttemptDetail>(`/api/v1/quiz/attempt/${attemptId}`));
+    } catch (err) {
+      setAttemptError(err instanceof Error ? err.message : "Failed to load attempt details");
+    } finally {
+      setAttemptLoading(false);
+    }
+  }
+
   async function handleGenerateRoadmap() {
     setGenerating(true);
     setGenerateError("");
@@ -722,6 +811,22 @@ export default function QuizPage() {
           <div className="flex items-center justify-center min-h-[60vh]">
             <Loader2 size={32} className="animate-spin text-[#6c63ff]" />
           </div>
+        )}
+
+        {step === "attempt-detail" && (
+          attemptLoading ? (
+            <div className="flex items-center justify-center min-h-[60vh]">
+              <Loader2 size={32} className="animate-spin text-[#6c63ff]" />
+            </div>
+          ) : attemptDetail ? (
+            <AttemptDetailView detail={attemptDetail} onBack={() => setStep(attemptReturnStepRef.current)} />
+          ) : (
+            <div className="max-w-xl mx-auto glass-card rounded-2xl p-6 text-center">
+              <AlertTriangle size={28} className="text-red-300 mx-auto mb-3" />
+              <p className="text-sm text-red-300 mb-4">{attemptError || "Attempt details are unavailable."}</p>
+              <button onClick={() => setStep(attemptReturnStepRef.current)} className="btn-primary px-5 py-2.5 rounded-xl text-sm">Back to attempts</button>
+            </div>
+          )
         )}
 
         {step === "assessment" && existingGoal && (
@@ -771,7 +876,7 @@ export default function QuizPage() {
                 <p className="text-xs font-semibold text-[#7c7a8a] uppercase tracking-wider mb-3">Past Attempts</p>
                 <div className="space-y-2">
                   {attempts.map((a) => (
-                    <div key={a.id} className="glass-card rounded-xl px-4 py-3 flex items-center justify-between">
+                    <button key={a.id} onClick={() => handleViewAttempt(a.id)} className="glass-card rounded-xl px-4 py-3 flex items-center justify-between w-full text-left hover:border-[#6c63ff]/40 transition-colors">
                       <div>
                         <p className="text-xs text-[#7c7a8a]">
                           {new Date(a.completed_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
@@ -782,7 +887,7 @@ export default function QuizPage() {
                         <p className="text-xl font-bold" style={{ color: a.score >= 70 ? "#00d4ff" : a.score >= 50 ? "#6c63ff" : "#e7c365" }}>{a.score}%</p>
                         <p className="text-[10px] text-[#7c7a8a]">{a.score >= 70 ? "Senior" : a.score >= 50 ? "Intermediate" : "Junior"}</p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -798,7 +903,7 @@ export default function QuizPage() {
                 <p className="text-xs font-semibold text-[#7c7a8a] uppercase tracking-wider mb-3">Past Attempts</p>
                 <div className="space-y-2">
                   {attempts.map((a) => (
-                    <div key={a.id} className="glass-card rounded-xl px-4 py-3 flex items-center justify-between">
+                    <button key={a.id} onClick={() => handleViewAttempt(a.id)} className="glass-card rounded-xl px-4 py-3 flex items-center justify-between w-full text-left hover:border-[#6c63ff]/40 transition-colors">
                       <div>
                         <p className="text-xs text-[#7c7a8a]">
                           {new Date(a.completed_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
@@ -809,7 +914,7 @@ export default function QuizPage() {
                         <p className="text-xl font-bold" style={{ color: a.score >= 70 ? "#00d4ff" : a.score >= 50 ? "#6c63ff" : "#e7c365" }}>{a.score}%</p>
                         <p className="text-[10px] text-[#7c7a8a]">{a.score >= 70 ? "Senior" : a.score >= 50 ? "Intermediate" : "Junior"}</p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
