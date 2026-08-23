@@ -176,7 +176,7 @@ function GoalSelect({ onSelect, loading, error }: {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <span className="ai-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">SKILL ASSESSMENT</span>
+        <span className="accent-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">SKILL ASSESSMENT</span>
         <h1 className="text-2xl font-bold text-white mb-2">Choose Your Career Goal</h1>
         <p className="text-sm text-[#7c7a8a]">
           Select your target role and we&apos;ll generate a 20-question quiz to assess your current level.
@@ -306,7 +306,7 @@ function QuizInterface({
               className="glass-card rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="ai-chip text-[10px] font-semibold px-2.5 py-1 rounded-full">{question.topic}</span>
+                  <span className="accent-chip text-[10px] font-semibold px-2.5 py-1 rounded-full">{question.topic}</span>
                   <span className="text-[10px] text-[#7c7a8a] capitalize">{question.difficulty}</span>
                 </div>
                 <button onClick={() => onFlag(question.id)} title="Flag for review (F)"
@@ -404,7 +404,7 @@ function QuizInterface({
           <div className="glass-card rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-2">
               <Brain size={14} className="text-[#00d4ff]" />
-              <p className="text-xs font-semibold text-white">AI Career Coach</p>
+              <p className="text-xs font-semibold text-white">CareerVue Skill Guide</p>
             </div>
             <p className="text-xs text-[#7c7a8a] leading-relaxed">
               Answer each question based on your current knowledge. Your results will power a personalised learning roadmap.
@@ -440,7 +440,7 @@ function QuizReview({
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <span className="ai-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">REVIEW</span>
+        <span className="accent-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">REVIEW</span>
         <h1 className="text-2xl font-bold text-white mb-1">Review Your Answers</h1>
         <p className="text-sm text-[#7c7a8a]">{template.goal} · {total} questions</p>
       </div>
@@ -565,9 +565,9 @@ function QuizResults({ result, goal, onGenerateRoadmap, generating, error }: {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="text-center mb-8">
-        <span className="ai-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">ASSESSMENT COMPLETE</span>
+        <span className="accent-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">ASSESSMENT COMPLETE</span>
         <h1 className="text-3xl font-bold text-white mb-2">Assessment Complete!</h1>
-        <p className="text-sm text-[#7c7a8a]">Your technical profile is ready for AI optimisation — {goal}</p>
+        <p className="text-sm text-[#7c7a8a]">Your technical profile is ready for roadmap planning — {goal}</p>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
@@ -588,7 +588,7 @@ function QuizResults({ result, goal, onGenerateRoadmap, generating, error }: {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-3xl font-extrabold gradient-text">{pct}%</span>
-              <span className="text-[10px] text-[#7c7a8a]">AI Benchmarked</span>
+              <span className="text-[10px] text-[#7c7a8a]">Question-Bank Benchmarked</span>
             </div>
           </div>
           <p className={`text-sm font-semibold ${pct >= 70 ? "text-[#00d4ff]" : pct >= 50 ? "text-[#6c63ff]" : "text-[#e7c365]"}`}>
@@ -631,7 +631,7 @@ function QuizResults({ result, goal, onGenerateRoadmap, generating, error }: {
         className="w-full btn-primary py-4 rounded-xl text-base font-semibold flex items-center justify-center gap-2 disabled:opacity-60 mb-3">
         {generating ? <><Loader2 size={18} className="animate-spin" /> Generating your roadmap…</> : <><Sparkles size={18} /> Generate My Personalized Roadmap</>}
       </button>
-      <p className="text-center text-xs text-[#7c7a8a]">Privacy first — AI generates data-driven paths locally</p>
+      <p className="text-center text-xs text-[#7c7a8a]">Privacy first — your roadmap is built from verified CareerVue data</p>
     </div>
   );
 }
@@ -833,7 +833,7 @@ export default function QuizPage() {
           <>
             <div className="max-w-2xl mx-auto">
               <div className="mb-8">
-                <span className="ai-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">SKILL ASSESSMENT</span>
+                <span className="accent-chip text-[10px] font-semibold px-3 py-1 rounded-full inline-block mb-4">SKILL ASSESSMENT</span>
                 <h1 className="text-2xl font-bold text-white mb-2">Ready to Assess?</h1>
                 <p className="text-sm text-[#7c7a8a]">
                   Retake your assessment to track improvement. Each attempt adapts to your current level.

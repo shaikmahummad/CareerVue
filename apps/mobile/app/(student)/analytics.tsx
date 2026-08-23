@@ -120,14 +120,14 @@ export default function StudentAnalytics() {
           <Row icon="checkmark-circle-outline" color={colors.success}  label="Completed"  value={String(profile?.completed ?? "—")} borderTop />
         </View>
 
-        {/* ── AI Recommendation ─────────────────────────────────────── */}
+        {/* ── Score-based recommendation ───────────────────────────── */}
         {topicScores.length > 0 && (() => {
           const weakest = topicScores.slice(-1)[0];
           return (
             <View style={s.aiCard}>
               <View style={s.aiHeader}>
                 <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
-                <Text style={s.aiLabel}>AI Recommendation</Text>
+                <Text style={s.aiLabel}>Score-Based Recommendation</Text>
               </View>
               <Text style={s.aiText}>
                 Your weakest area is{" "}

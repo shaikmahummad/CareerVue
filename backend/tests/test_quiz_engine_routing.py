@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.services.quiz_service import get_or_create_quiz_template
+from app.services.quiz_service import QuizUnavailableError, get_or_create_quiz_template
 
 
 QUIZ_DATA = {
@@ -38,7 +38,7 @@ def fake_db():
 
 
 class QuizEngineRoutingTests(unittest.IsolatedAsyncioTestCase):
-    async def test_supported_career_uses_bank_without_groq(self):
+    async def test_supported_career_uses_verified_bank(self):
         db = fake_db()
         with (
             patch(
@@ -47,11 +47,9 @@ class QuizEngineRoutingTests(unittest.IsolatedAsyncioTestCase):
                     "frontend-developer", "Frontend Developer", QUIZ_DATA
                 )),
             ),
-            patch("app.services.quiz_service._generate_quiz_with_context") as groq,
         ):
             template = await get_or_create_quiz_template(db, "React Developer")
 
-        groq.assert_not_called()
         self.assertEqual(template.goal, "Frontend Developer")
         self.assertEqual(
             template.generation_key,
@@ -59,27 +57,18 @@ class QuizEngineRoutingTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(template.questions, QUIZ_DATA["questions"])
 
-    async def test_unsupported_career_falls_back_to_groq(self):
+    async def test_unsupported_career_returns_clear_availability_error(self):
         db = fake_db()
         with (
             patch(
                 "app.services.quiz_service.build_verified_quiz",
                 new=AsyncMock(return_value=None),
             ),
-            patch(
-                "app.services.quiz_service.retrieve_courses",
-                new=AsyncMock(return_value=[]),
-            ),
-            patch(
-                "app.services.quiz_service._generate_quiz_with_context",
-                return_value=QUIZ_DATA,
-            ) as groq,
         ):
-            template = await get_or_create_quiz_template(db, "Backend Developer")
-
-        groq.assert_called_once_with("Backend Developer", "beginner", [])
-        self.assertEqual(template.goal, "Backend Developer")
-        self.assertIsNone(template.generation_key)
+            with self.assertRaisesRegex(
+                QuizUnavailableError, "verified quiz is not available"
+            ):
+                await get_or_create_quiz_template(db, "Backend Developer")
 
 
 if __name__ == "__main__":

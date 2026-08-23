@@ -16,13 +16,13 @@ const BTN_W = width - 32;
 const SLIDES = [
   {
     title:       "Build Your Dream Career",
-    description: "CareerVue maps your unique skills and goals into a personalised step-by-step roadmap curated by AI.",
+    description: "CareerVue maps your skills and goals into a personalised step-by-step roadmap using verified course data.",
     icon:        "map-outline" as const,
     iconColor:   colors.primary,
   },
   {
     title:       "Discover Your Skill Level",
-    description: "Our AI quiz identifies exactly where you're strong and where you can grow to reach your career goals.",
+    description: "Our reviewed quiz identifies where you're strong and where you can grow to reach your career goals.",
     icon:        "bulb-outline" as const,
     iconColor:   colors.secondary,
   },
@@ -65,13 +65,13 @@ function QuizIllustration() {
         ))}
       </View>
 
-      {/* Floating AI analysis badge */}
+      {/* Floating assessment badge */}
       <View style={il.floatingBadge}>
         <View style={il.badgeIcon}>
           <Ionicons name="hardware-chip-outline" size={16} color={colors.tertiary} />
         </View>
         <View style={il.badgeInfo}>
-          <Text style={il.badgeLabel}>AI ANALYSIS</Text>
+          <Text style={il.badgeLabel}>SKILL ANALYSIS</Text>
           <Text style={il.badgeValue}>Skill Level: Expert</Text>
         </View>
       </View>

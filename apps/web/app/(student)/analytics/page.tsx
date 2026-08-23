@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
               <Zap size={18} className="text-[#6c63ff]" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white mb-1">AI Recommendation</p>
+              <p className="text-sm font-semibold text-white mb-1">Score-Based Recommendation</p>
               <p className="text-sm text-[#7c7a8a] leading-relaxed">
                 Your weakest areas are <span className="text-white font-medium">System Design</span> and <span className="text-white font-medium">Testing</span>.
                 Retaking your assessment after studying these topics could push your score above 90%.

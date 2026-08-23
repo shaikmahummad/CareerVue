@@ -322,7 +322,7 @@ export default function StudentDashboardPage() {
                 <div className="glass-card rounded-2xl p-5">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-xs font-semibold text-white">Skill Profile</p>
-                    <span className="ai-chip text-[9px] font-semibold px-2 py-0.5 rounded-full">AI ANALYSED</span>
+                    <span className="accent-chip text-[9px] font-semibold px-2 py-0.5 rounded-full">SCORE ANALYSED</span>
                   </div>
                   <div className="flex justify-center py-3">
                     <SkillRadar skills={SKILL_DATA} />

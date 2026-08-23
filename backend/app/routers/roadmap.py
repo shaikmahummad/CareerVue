@@ -72,10 +72,9 @@ async def generate_roadmap_endpoint(
         except ValueError:
             pass
 
-    try:
-        roadmap = await generate_student_roadmap(db, student_pk, student.current_goal, attempt_id=attempt_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+    roadmap = await generate_student_roadmap(
+        db, student_pk, student.current_goal, attempt_id=attempt_id
+    )
 
     items = (await db.execute(
         select(RoadmapCourse).where(RoadmapCourse.roadmap_id == roadmap.id).order_by(RoadmapCourse.order_index)

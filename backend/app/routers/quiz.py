@@ -11,7 +11,12 @@ from app.dependencies import AnyUser, StudentUser
 from app.models.quiz import QuizAttempt, QuizTemplate
 from app.models.roadmap import Roadmap
 from app.models.user import SkillProfile
-from app.services.quiz_service import get_or_create_quiz_template, get_student_pk, submit_quiz_attempt
+from app.services.quiz_service import (
+    QuizUnavailableError,
+    get_or_create_quiz_template,
+    get_student_pk,
+    submit_quiz_attempt,
+)
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
 
@@ -38,13 +43,17 @@ async def get_quiz_template(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Fetch an existing quiz template for the given career goal, or generate one
-    from the verified question bank, with Groq fallback for unsupported goals.
+    Fetch or assemble a quiz from CareerVue's reviewed question bank.
 
     Correct answers are stripped from the response so clients cannot cheat.
     """
     student_pk = await get_student_pk(db, current_user.id)
-    template = await get_or_create_quiz_template(db, goal, student_id=student_pk)
+    try:
+        template = await get_or_create_quiz_template(
+            db, goal, student_id=student_pk
+        )
+    except QuizUnavailableError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     # Omit correct answer + explanation from client payload
     safe_questions = [

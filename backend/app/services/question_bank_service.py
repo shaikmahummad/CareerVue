@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import CareerRole, CareerSkill, QuizQuestion, Skill
@@ -29,7 +29,7 @@ def _normalize_goal(goal: str) -> str:
 
 
 def resolve_career_slug(goal: str) -> str | None:
-    """Resolve only deliberate aliases; broad goals continue to Groq."""
+    """Resolve deliberate aliases without guessing a user's career."""
     return "frontend-developer" if _normalize_goal(goal) in _FRONTEND_ALIASES else None
 
 
@@ -106,8 +106,20 @@ async def build_verified_quiz(
     num_questions: int = DEFAULT_QUESTION_COUNT,
 ) -> tuple[str, str, dict] | None:
     """Load approved questions for a supported career and assemble a quiz."""
-    career_slug = resolve_career_slug(goal)
-    if career_slug is None:
+    normalized_goal = _normalize_goal(goal)
+    requested_slug = resolve_career_slug(goal) or normalized_goal.replace(" ", "-")
+    career = (
+        await db.execute(
+            select(CareerRole).where(
+                CareerRole.is_active.is_(True),
+                or_(
+                    CareerRole.slug == requested_slug,
+                    func.lower(CareerRole.title) == normalized_goal,
+                ),
+            )
+        )
+    ).scalar_one_or_none()
+    if career is None:
         return None
 
     rows = (
@@ -117,7 +129,7 @@ async def build_verified_quiz(
             .join(CareerSkill, CareerSkill.skill_id == Skill.id)
             .join(CareerRole, CareerSkill.career_id == CareerRole.id)
             .where(
-                CareerRole.slug == career_slug,
+                CareerRole.id == career.id,
                 CareerRole.is_active.is_(True),
                 Skill.is_active.is_(True),
                 QuizQuestion.status == "approved",
@@ -141,4 +153,4 @@ async def build_verified_quiz(
         for question, skill, career_skill in rows
     ]
     quiz = assemble_quiz(candidates, skill_level, num_questions=num_questions)
-    return (career_slug, "Frontend Developer", quiz) if quiz else None
+    return (career.slug, career.title, quiz) if quiz else None

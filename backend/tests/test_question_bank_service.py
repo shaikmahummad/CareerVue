@@ -61,7 +61,7 @@ class QuestionBankServiceTests(unittest.TestCase):
         self.assertEqual(intermediate["questions"][0]["difficulty"], "intermediate")
         self.assertEqual(advanced["questions"][0]["difficulty"], "advanced")
 
-    def test_incomplete_bank_returns_none_for_groq_fallback(self):
+    def test_incomplete_bank_returns_none(self):
         self.assertIsNone(assemble_quiz(make_questions()[:19], "beginner"))
 
     def test_generation_key_is_versioned_and_level_specific(self):

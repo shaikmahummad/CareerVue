@@ -15,7 +15,7 @@ depends_on = None
 
 def upgrade() -> None:
     # Drop the unique constraint that prevents multiple items in a roadmap
-    # from referencing the same course (common when AI generates overlapping topics)
+    # from referencing the same course when roadmap topics overlap
     op.drop_constraint('roadmap_courses_roadmap_id_course_id_key', 'roadmap_courses', type_='unique')
 
 

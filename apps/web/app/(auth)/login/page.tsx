@@ -54,7 +54,7 @@ export default function LoginPage() {
           <div className="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center">
             <TrendingUp size={15} className="text-white" />
           </div>
-          <span className="text-base font-bold text-white">CareerVue AI</span>
+          <span className="text-base font-bold text-white">CareerVue</span>
         </div>
 
         {/* Main text */}
@@ -82,7 +82,7 @@ export default function LoginPage() {
           {/* Testimonial */}
           <blockquote className="border-l-2 border-[#6c63ff]/40 pl-4">
             <p className="text-sm text-[#cbc4d2] leading-relaxed italic mb-3">
-              &ldquo;CareerVue AI didn&apos;t just suggest jobs; it mapped out a precise trajectory
+              &ldquo;CareerVue didn&apos;t just suggest jobs; it mapped out a precise trajectory
               that shaved two years off my senior promotion.&rdquo;
             </p>
             <div className="flex items-center gap-2">
@@ -98,7 +98,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-[11px] text-[#7c7a8a] relative z-10">
-          &copy; 2024 CareerVue AI. Accelerating Futures.
+          &copy; 2024 CareerVue. Accelerating Futures.
         </p>
       </div>
 
@@ -110,11 +110,11 @@ export default function LoginPage() {
             <div className="w-7 h-7 rounded-lg gradient-primary flex items-center justify-center">
               <TrendingUp size={13} className="text-white" />
             </div>
-            <span className="text-sm font-bold text-white">CareerVue AI</span>
+            <span className="text-sm font-bold text-white">CareerVue</span>
           </div>
 
           <h2 className="text-2xl font-bold text-white mb-1">Sign in to CareerVue</h2>
-          <p className="text-sm text-[#7c7a8a] mb-8">Access your AI-powered career dashboard</p>
+          <p className="text-sm text-[#7c7a8a] mb-8">Access your personalised career dashboard</p>
 
           {/* Google */}
           <button className="w-full flex items-center justify-center gap-3 glass-card rounded-xl py-3 text-sm font-medium text-[#e6e0e9] hover:bg-white/[0.05] transition-colors mb-5">

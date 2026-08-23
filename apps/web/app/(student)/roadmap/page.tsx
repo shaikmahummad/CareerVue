@@ -192,7 +192,7 @@ export default function RoadmapPage() {
             </div>
             <h1 className="text-2xl font-bold text-white mb-3">No roadmap yet</h1>
             <p className="text-[#7c7a8a] mb-8 max-w-sm">
-              Take the skill assessment quiz first — our AI will build a personalised learning roadmap based on your results.
+              Take the skill assessment quiz first — CareerVue will build a personalised learning roadmap from your results and approved courses.
             </p>
             <button onClick={() => router.push("/quiz")}
               className="btn-primary inline-flex items-center gap-2 px-7 py-3 rounded-xl text-sm">

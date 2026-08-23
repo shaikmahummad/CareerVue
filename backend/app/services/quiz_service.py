@@ -1,5 +1,3 @@
-import asyncio
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -8,15 +6,45 @@ from datetime import datetime, timezone
 
 from app.models.quiz import QuizTemplate, QuizAttempt
 from app.models.user import SkillProfile, Student
-from app.services.ai_service import generate_quiz, assess_skills
-from app.rag.course_retriever import retrieve_courses
 from app.services.question_bank_service import build_verified_quiz, generation_key
 
 
-def _generate_quiz_with_context(
-    goal: str, skill_level: str, context: list[dict]
-) -> dict:
-    return generate_quiz(goal, 20, skill_level, context)
+class QuizUnavailableError(ValueError):
+    """Raised when CareerVue has no complete, reviewed bank for a career."""
+
+
+def assess_skills(questions: list[dict], answers: list[dict]) -> list[dict]:
+    """Score answers locally using the verified answers stored with the bank."""
+    question_map = {question["id"]: question for question in questions}
+    topic_stats: dict[str, dict[str, int]] = {}
+    for answer in answers:
+        question = question_map.get(answer["question_id"])
+        if not question:
+            continue
+        topic = question["topic"]
+        stats = topic_stats.setdefault(topic, {"correct": 0, "total": 0})
+        stats["total"] += 1
+        if answer["selected_option"] == question["correct"]:
+            stats["correct"] += 1
+
+    results = []
+    for topic, stats in topic_stats.items():
+        score_pct = int(stats["correct"] / stats["total"] * 100)
+        level = (
+            "strong"
+            if score_pct >= 75
+            else "intermediate"
+            if score_pct >= 40
+            else "weak"
+        )
+        results.append({
+            "topic": topic,
+            "level": level,
+            "score_pct": score_pct,
+            "correct_count": stats["correct"],
+            "total_count": stats["total"],
+        })
+    return results
 
 
 async def get_student_pk(db: AsyncSession, profile_id: UUID) -> UUID:
@@ -55,7 +83,7 @@ async def get_or_create_quiz_template(
 
     # CareerVue's verified bank is the primary engine for supported careers.
     # A stable generation key lets all students at the same level reuse the
-    # same immutable template without confusing it with legacy Groq templates.
+    # same immutable template without confusing it with legacy templates.
     bank_result = await build_verified_quiz(db, goal, skill_level)
     if bank_result:
         career_slug, career_title, quiz_data = bank_result
@@ -91,57 +119,11 @@ async def get_or_create_quiz_template(
         await db.refresh(template)
         return template
 
-    # Unsupported careers (or incomplete banks) retain the existing Groq path.
-    # For non-beginner students, always generate a fresh quiz so difficulty improves.
-    if skill_level != "beginner":
-        context = [
-            item.as_prompt_context()
-            for item in await retrieve_courses(db, goal)
-        ]
-        loop = asyncio.get_running_loop()
-        quiz_data = await loop.run_in_executor(
-            None, _generate_quiz_with_context, goal, skill_level, context
-        )
-        template = QuizTemplate(
-            goal=goal,
-            topic_areas=quiz_data["topic_areas"],
-            questions=quiz_data["questions"],
-        )
-        db.add(template)
-        await db.commit()
-        await db.refresh(template)
-        return template
-
-    # Beginners reuse the first template created for this goal. Adaptive users
-    # can create additional templates for the same goal, so this query must not
-    # assume that the goal is unique.
-    result = await db.execute(
-        select(QuizTemplate)
-        .where(QuizTemplate.goal == goal)
-        .order_by(QuizTemplate.created_at.asc(), QuizTemplate.id.asc())
-        .limit(1)
+    raise QuizUnavailableError(
+        f'A verified quiz is not available for "{goal}" yet. '
+        "Choose a supported career or ask an administrator to publish at least "
+        "20 reviewed questions for this career."
     )
-    template = result.scalars().first()
-    if template:
-        return template
-
-    loop = asyncio.get_running_loop()
-    context = [
-        item.as_prompt_context()
-        for item in await retrieve_courses(db, goal)
-    ]
-    quiz_data = await loop.run_in_executor(
-        None, _generate_quiz_with_context, goal, "beginner", context
-    )
-    template = QuizTemplate(
-        goal=goal,
-        topic_areas=quiz_data["topic_areas"],
-        questions=quiz_data["questions"],
-    )
-    db.add(template)
-    await db.commit()
-    await db.refresh(template)
-    return template
 
 
 async def submit_quiz_attempt(
@@ -160,7 +142,7 @@ async def submit_quiz_attempt(
 
     questions: list[dict] = template.questions  # type: ignore[assignment]
 
-    skill_results = assess_skills(template.goal, questions, answers)
+    skill_results = assess_skills(questions, answers)
 
     total_correct = sum(r["correct_count"] for r in skill_results)
     total_questions = len(questions)

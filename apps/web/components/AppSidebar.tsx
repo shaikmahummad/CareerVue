@@ -91,7 +91,7 @@ export default function AppSidebar({
             <div className="w-7 h-7 rounded-lg gradient-primary flex items-center justify-center flex-shrink-0">
               <TrendingUp size={13} className="text-white" />
             </div>
-            <span className="text-[13px] font-bold text-white leading-none truncate">CareerVue AI</span>
+            <span className="text-[13px] font-bold text-white leading-none truncate">CareerVue</span>
           </Link>
         )}
         {collapsed && (

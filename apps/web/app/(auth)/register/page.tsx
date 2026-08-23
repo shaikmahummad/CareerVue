@@ -21,7 +21,7 @@ interface TutorFields {
 const API = process.env.NEXT_PUBLIC_API_URL || "https://careervue-api.welcos.in";
 
 const FEATURES = [
-  { icon: Zap,      label: "AI Roadmaps",       desc: "Data-driven career paths tailored to your goals." },
+  { icon: Zap,      label: "Skill Roadmaps",    desc: "Data-driven career paths tailored to your goals." },
   { icon: BookOpen, label: "Curated Learning",   desc: "Top-tier courses selected by industry experts." },
 ];
 
@@ -138,12 +138,12 @@ export default function RegisterPage() {
           <div className="w-8 h-8 rounded-xl gradient-primary flex items-center justify-center">
             <TrendingUp size={15} className="text-white" />
           </div>
-          <span className="text-base font-bold text-white">CareerVue AI</span>
+          <span className="text-base font-bold text-white">CareerVue</span>
         </div>
 
         <div className="relative z-10">
           <h2 className="text-3xl font-extrabold text-white mb-4 leading-tight tracking-tight">
-            Join the elite circle of professionals leveraging AI to redefine career trajectories.
+            Join professionals using verified skills data to redefine career trajectories.
           </h2>
           <div className="space-y-3 mt-8">
             {FEATURES.map((f) => (
@@ -161,7 +161,7 @@ export default function RegisterPage() {
         </div>
 
         <p className="text-[11px] text-[#7c7a8a] relative z-10">
-          &copy; 2024 CareerVue AI. Accelerating Futures.
+          &copy; 2024 CareerVue. Accelerating Futures.
         </p>
       </div>
 

@@ -4,7 +4,11 @@ import json
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # Database
     database_url: str
@@ -17,9 +21,6 @@ class Settings(BaseSettings):
     # JWT
     jwt_secret: str
     jwt_algorithm: str = "HS256"
-
-    # Groq
-    groq_api_key: str
 
     # Razorpay
     razorpay_key_id: str

@@ -1,6 +1,3 @@
-import asyncio
-import logging
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -8,23 +5,21 @@ from uuid import UUID
 from app.models.roadmap import Roadmap, RoadmapCourse
 from app.models.user import SkillProfile
 from app.models.course import Course
-from app.services.ai_service import generate_roadmap
 from app.rag.course_retriever import RetrievedCourse, retrieve_courses, text_relevance
 
 
-logger = logging.getLogger(__name__)
-
-
-def _generate_roadmap_with_context(
-    goal: str, skill_profile: list[dict], context: list[dict]
+def build_catalog_roadmap(
+    goal: str,
+    skill_profile: list[dict],
+    retrieved_courses: list[RetrievedCourse],
 ) -> list[dict]:
-    return generate_roadmap(goal, skill_profile, context)
-
-
-def _fallback_roadmap(goal: str, skill_profile: list[dict]) -> list[dict]:
-    """Build a useful roadmap without depending on the AI provider."""
+    """Build a deterministic roadmap from scores and CareerVue-owned courses."""
     sorted_skills = sorted(
-        skill_profile, key=lambda skill: int(skill.get("score_pct") or 0)
+        skill_profile,
+        key=lambda skill: (
+            int(skill.get("score_pct") or 0),
+            str(skill.get("topic") or "").lower(),
+        ),
     )
     items: list[dict] = []
     for skill in sorted_skills[:6]:
@@ -53,6 +48,30 @@ def _fallback_roadmap(goal: str, skill_profile: list[dict]) -> list[dict]:
         })
     if items:
         return items
+
+    for course in retrieved_courses[:6]:
+        index = len(items) + 1
+        course_level = course.level.lower()
+        if course_level not in {"beginner", "intermediate", "advanced"}:
+            course_level = "beginner"
+        items.append({
+            "topic": course.title,
+            "reason": (
+                f"Build skills for the {goal} path with an approved "
+                "CareerVue course."
+            ),
+            "priority": index,
+            "recommended_course_type": course_level,
+            "search_keywords": [
+                course.title,
+                course.category,
+                *list(course.tags)[:3],
+            ],
+            "order_index": index,
+        })
+    if items:
+        return items
+
     return [
         {
             "topic": f"{goal} Fundamentals",
@@ -82,7 +101,7 @@ def _fallback_roadmap(goal: str, skill_profile: list[dict]) -> list[dict]:
 
 
 def _normalize_roadmap_items(items: object) -> list[dict]:
-    """Validate untrusted AI output before database insertion."""
+    """Normalize roadmap items before database insertion."""
     if not isinstance(items, list):
         return []
     normalized: list[dict] = []
@@ -119,12 +138,11 @@ async def generate_student_roadmap(
     attempt_id: UUID | None = None,
 ) -> Roadmap:
     """
-    Generate an AI-powered learning roadmap for a student.
+    Generate a learning roadmap from assessment results and approved courses.
 
     Steps:
       1. Load the student's current SkillProfile rows.
-      2. Retrieve approved CareerVue knowledge and ask the configured generator
-         to produce ordered roadmap items.
+      2. Rank approved CareerVue courses and build ordered roadmap items.
       3. Archive any existing active roadmap.
       4. Persist the new Roadmap + RoadmapCourse rows, attempting to match
          each item to an approved Course in the catalogue.
@@ -143,40 +161,14 @@ async def generate_student_roadmap(
         for s in skills
     ]
 
-    # 2. Retrieve CareerVue-owned catalog context, then generate roadmap items.
+    # 2. Retrieve CareerVue-owned catalog data, then build roadmap items.
     retrieval_query = " ".join(
         [goal, *(str(skill.get("topic") or "") for skill in skill_profile)]
     )
     retrieved_courses = await retrieve_courses(db, retrieval_query)
-    knowledge_context = [item.as_prompt_context() for item in retrieved_courses]
-    try:
-        loop = asyncio.get_running_loop()
-        roadmap_items = await loop.run_in_executor(
-            None,
-            _generate_roadmap_with_context,
-            goal,
-            skill_profile,
-            knowledge_context,
-        )
-    except Exception as exc:
-        logger.exception(
-            "AI roadmap generation failed for student_id=%s goal=%r",
-            student_id,
-            goal,
-        )
-        roadmap_items = _fallback_roadmap(goal, skill_profile)
-
-    roadmap_items = _normalize_roadmap_items(roadmap_items)
-    if not roadmap_items:
-        logger.error(
-            "AI returned invalid roadmap data for student_id=%s goal=%r: type=%s",
-            student_id,
-            goal,
-            type(roadmap_items).__name__,
-        )
-        roadmap_items = _normalize_roadmap_items(
-            _fallback_roadmap(goal, skill_profile)
-        )
+    roadmap_items = _normalize_roadmap_items(
+        build_catalog_roadmap(goal, skill_profile, retrieved_courses)
+    )
 
     # 3. Archive existing active roadmap (if any)
     existing_result = await db.execute(

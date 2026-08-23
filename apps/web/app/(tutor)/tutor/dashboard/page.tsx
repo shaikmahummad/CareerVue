@@ -182,7 +182,7 @@ export default function TutorDashboardPage() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-white">My Courses</h2>
-                <Link href="/tutor/courses/new" className="ai-chip text-[10px] font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                <Link href="/tutor/courses/new" className="accent-chip text-[10px] font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5">
                   <PlusCircle size={11} /> Create New
                 </Link>
               </div>
