@@ -261,6 +261,8 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_postgresql_cleanup_workers_do_not_duplicate_processing(self):
         now = datetime.now(timezone.utc)
         attempt_ids = [uuid.uuid4() for _ in range(4)]
+        active_attempt_id = uuid.uuid4()
+        submitted_attempt_id = uuid.uuid4()
         async with self.session_factory() as session:
             for attempt_id in attempt_ids:
                 session.add(QuizAttempt(
@@ -276,6 +278,35 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     started_at=now - timedelta(minutes=10),
                     expires_at=now - timedelta(minutes=5),
                 ))
+            session.add(QuizAttempt(
+                id=active_attempt_id,
+                student_id=self.student_id,
+                quiz_id=self.legacy_template_id,
+                template_version=2,
+                question_ids=[question["id"] for question in QUESTIONS],
+                question_set_hash=_question_set_hash(QUESTIONS),
+                status="in_progress",
+                answers=[],
+                total_questions=len(QUESTIONS),
+                started_at=now,
+                expires_at=now + timedelta(minutes=5),
+            ))
+            session.add(QuizAttempt(
+                id=submitted_attempt_id,
+                student_id=self.student_id,
+                quiz_id=self.legacy_template_id,
+                template_version=2,
+                question_ids=[question["id"] for question in QUESTIONS],
+                question_set_hash=_question_set_hash(QUESTIONS),
+                status="submitted",
+                answers=ANSWERS,
+                score=100,
+                total_questions=len(QUESTIONS),
+                time_taken_secs=10,
+                started_at=now - timedelta(minutes=10),
+                expires_at=now - timedelta(minutes=5),
+                completed_at=now - timedelta(minutes=9),
+            ))
             await session.commit()
 
         async def cleanup_once():
@@ -287,15 +318,26 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
         results = await asyncio.gather(cleanup_once(), cleanup_once())
         self.assertEqual(sum(result.marked_abandoned for result in results), 4)
         async with self.session_factory() as session:
-            abandoned = (
+            statuses = dict(
                 await session.execute(
-                    select(func.count(QuizAttempt.id)).where(
-                        QuizAttempt.id.in_(attempt_ids),
-                        QuizAttempt.status == "abandoned",
+                    select(QuizAttempt.id, QuizAttempt.status).where(
+                        QuizAttempt.id.in_([
+                            *attempt_ids,
+                            active_attempt_id,
+                            submitted_attempt_id,
+                        ])
                     )
                 )
-            ).scalar_one()
-        self.assertEqual(abandoned, 4)
+            )
+        self.assertTrue(all(statuses[attempt_id] == "abandoned" for attempt_id in attempt_ids))
+        self.assertEqual(statuses[active_attempt_id], "in_progress")
+        self.assertEqual(statuses[submitted_attempt_id], "submitted")
+
+        async with self.session_factory() as session:
+            repeated = await mark_abandoned_attempts(
+                session, now=now, grace_secs=0, batch_size=10
+            )
+        self.assertEqual(repeated.marked_abandoned, 0)
 
     async def test_postgresql_submission_failure_rolls_back_atomically(self):
         now = datetime.now(timezone.utc)
