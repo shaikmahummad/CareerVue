@@ -2,21 +2,24 @@
 
 ## Current safety status
 
-No staging resource has been provisioned from this workspace. `flyctl auth
-whoami` reports that no access token is available, no Supabase or Railway CLI is
-installed, and the repository contains no staging project identifier or staging
-credentials.
+On 2026-08-24, the guarded staging configuration was verified against a distinct
+Supabase project, its initially empty database completed the full migration
+upgrade/downgrade/rebuild cycle, and it was seeded with the reviewed taxonomy and
+question banks. The database is at `c9d0e1f2a3b4` with 25 public tables.
 
-The known Fly app `careervue-api` is explicitly production. The existing remote
-Supabase project is unclassified. Both are prohibited targets for this runbook.
+Fly authentication is configured for the operator's personal organization, but
+creating `careervue-api-staging` is blocked until Fly billing is configured. No
+Fly staging app or secrets exist yet. The known Fly app `careervue-api` remains
+explicitly production and prohibited for this runbook.
 
 | Environment | Identified? | Safe to modify? | Reason |
 | --- | --- | --- | --- |
 | Development | Yes | Yes, locally | Local environment files are labelled development. |
 | Test | Yes | Yes, disposable only | CI creates an isolated PostgreSQL 16 `careervue_quiz_test` database. |
-| Staging | No | No, until provisioned and labelled | No project, database, credentials, or authenticated platform context exists. |
+| Staging database | Yes | Yes, through this runbook | Distinct staging Supabase project; migrated, rebuilt, and seeded on 2026-08-24. |
+| Staging API | No | No, until Fly billing is configured | `careervue-api-staging` creation was rejected before any app or secret was created. |
 | Production | Yes | Never through this runbook | Fly app `careervue-api` declares `APP_ENV=production`. |
-| Unknown Supabase | Yes | No | Nothing proves that the existing remote project is non-production staging. |
+| Unknown Supabase | Yes | No | Any project not matched by the guarded staging configuration remains prohibited. |
 
 ## Migration baseline
 
