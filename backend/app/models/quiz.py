@@ -45,7 +45,7 @@ class QuizAttempt(Base):
     __tablename__ = "quiz_attempts"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('in_progress', 'submitted', 'expired')",
+            "status IN ('in_progress', 'submitted', 'expired', 'abandoned')",
             name="quiz_attempts_status_check",
         ),
         CheckConstraint(
@@ -80,10 +80,12 @@ class QuizAttempt(Base):
             "AND time_taken_secs IS NULL AND answers = '[]'::jsonb) OR "
             "(status = 'submitted' AND completed_at IS NOT NULL AND score IS NOT NULL "
             "AND time_taken_secs IS NOT NULL) OR "
-            "(status = 'expired' AND completed_at IS NULL AND score IS NULL)",
+            "(status IN ('expired', 'abandoned') AND completed_at IS NULL "
+            "AND score IS NULL)",
             name="quiz_attempts_lifecycle_check",
         ),
         Index("ix_quiz_attempts_student_status", "student_id", "status"),
+        Index("ix_quiz_attempts_cleanup", "status", "expires_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

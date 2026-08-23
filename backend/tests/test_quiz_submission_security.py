@@ -2,14 +2,19 @@ import asyncio
 import unittest
 import uuid
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from app.models.quiz import QuizAttempt, QuizTemplate
 from app.models.user import SkillProfile, Student
 from app.schemas.quiz import QuizAttemptCreate
+from app.routers.quiz import start_quiz_attempt
 from app.services.quiz_service import (
     QuizSubmissionError,
+    QuizRateLimitError,
     _question_set_hash,
     _template_is_active_v2,
     issue_quiz_attempt,
@@ -82,6 +87,9 @@ class ScalarResult:
     def scalar_one_or_none(self):
         return self.value
 
+    def scalar_one(self):
+        return self.value
+
 
 class SharedSubmissionState:
     def __init__(self, student, attempt_row, template_row):
@@ -96,6 +104,7 @@ class SharedSubmissionState:
             score_percent=0,
         )
         self.lock = asyncio.Lock()
+        self.recent_start_count = 0
 
 
 class LockedFakeSession:
@@ -120,6 +129,8 @@ class LockedFakeSession:
         if entity is Student:
             return ScalarResult(self.state.student)
         if entity is QuizAttempt:
+            if statement.column_descriptions[0].get("name") == "count":
+                return ScalarResult(self.state.recent_start_count)
             return ScalarResult(None if self.missing_attempt else self.state.attempt)
         if entity is QuizTemplate:
             return ScalarResult(self.state.template)
@@ -282,6 +293,32 @@ class TimeAndTemplateSecurityTests(unittest.TestCase):
         self.assertFalse(_template_is_active_v2(None))
 
 
+class RateLimitEndpointTests(unittest.IsolatedAsyncioTestCase):
+    async def test_attempt_start_returns_429_and_retry_after(self):
+        with (
+            patch(
+                "app.routers.quiz.get_student_pk",
+                new=AsyncMock(return_value=uuid.uuid4()),
+            ),
+            patch(
+                "app.routers.quiz.get_or_create_quiz_template",
+                new=AsyncMock(return_value=template()),
+            ),
+            patch(
+                "app.routers.quiz.issue_quiz_attempt",
+                new=AsyncMock(side_effect=QuizRateLimitError(60)),
+            ),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await start_quiz_attempt(
+                    "Frontend Developer",
+                    SimpleNamespace(id=uuid.uuid4()),
+                    object(),
+                )
+        self.assertEqual(raised.exception.status_code, 429)
+        self.assertEqual(raised.exception.headers["Retry-After"], "60")
+
+
 class TransactionalSubmissionTests(unittest.IsolatedAsyncioTestCase):
     def state(self, **attempt_overrides):
         profile_id = uuid.uuid4()
@@ -308,6 +345,35 @@ class TransactionalSubmissionTests(unittest.IsolatedAsyncioTestCase):
             int((issued.expires_at - issued.started_at).total_seconds()),
             len(QUESTIONS) * 90,
         )
+
+    async def test_attempt_start_rate_limit_allows_normal_use_and_throttles_abuse(self):
+        profile_id, state = self.state()
+        state.recent_start_count = 1
+        allowed = LockedFakeSession(state)
+        issued = await issue_quiz_attempt(
+            allowed,
+            profile_id=profile_id,
+            template=state.template,
+            start_limit=2,
+            window_secs=60,
+        )
+        self.assertEqual(issued.status, "in_progress")
+
+        profile_id, state = self.state()
+        state.recent_start_count = 2
+        throttled = LockedFakeSession(state)
+        with self.assertRaises(QuizRateLimitError) as raised:
+            await issue_quiz_attempt(
+                throttled,
+                profile_id=profile_id,
+                template=state.template,
+                start_limit=2,
+                window_secs=60,
+            )
+        self.assertEqual(raised.exception.retry_after_secs, 60)
+        self.assertEqual(throttled.commits, 0)
+        self.assertEqual(throttled.added, [])
+        await throttled.rollback()
 
     async def test_valid_submission_is_atomic_and_uses_server_time_and_key(self):
         profile_id, state = self.state()

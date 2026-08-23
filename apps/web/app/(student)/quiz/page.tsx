@@ -669,7 +669,10 @@ export default function QuizPage() {
   const startTimeRef = useRef<number>(0);
   const stepRef = useRef<AppStep>("loading");
   const attemptReturnStepRef = useRef<"assessment" | "goal">("assessment");
-  stepRef.current = step;
+
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   useEffect(() => {
     async function init() {
@@ -710,17 +713,15 @@ export default function QuizPage() {
   // Countdown tick
   useEffect(() => {
     if (!timerActive || timeLeft <= 0) return;
-    const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
+    const id = setTimeout(() => {
+      setTimeLeft((t) => Math.max(0, t - 1));
+      if (timeLeft === 1) {
+        setTimerActive(false);
+        setTimeExpired(true);
+        if (stepRef.current === "quiz") setStep("review");
+      }
+    }, 1000);
     return () => clearTimeout(id);
-  }, [timeLeft, timerActive]);
-
-  // Auto-expire: go to review if still in quiz step
-  useEffect(() => {
-    if (timerActive && timeLeft === 0) {
-      setTimerActive(false);
-      setTimeExpired(true);
-      if (stepRef.current === "quiz") setStep("review");
-    }
   }, [timeLeft, timerActive]);
 
   async function handleGoalSelect(goal: string) {
@@ -778,7 +779,8 @@ export default function QuizPage() {
   function toggleFlag(qId: string) {
     setFlagged((prev) => {
       const next = new Set(prev);
-      next.has(qId) ? next.delete(qId) : next.add(qId);
+      if (next.has(qId)) next.delete(qId);
+      else next.add(qId);
       return next;
     });
   }

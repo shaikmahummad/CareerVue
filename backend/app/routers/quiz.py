@@ -12,6 +12,7 @@ from app.models.user import SkillProfile
 from app.schemas.quiz import QuizAttemptCreate
 from app.services.quiz_service import (
     QuizSubmissionError,
+    QuizRateLimitError,
     QuizUnavailableError,
     get_or_create_quiz_template,
     get_student_pk,
@@ -47,6 +48,12 @@ async def start_quiz_attempt(
         )
     except QuizUnavailableError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except QuizRateLimitError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after_secs)},
+        ) from exc
 
     # Omit correct answer + explanation from client payload
     safe_questions = [

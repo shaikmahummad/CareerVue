@@ -4,12 +4,13 @@ import hashlib
 import json
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.quiz import QuizAttempt, QuizTemplate
 from app.models.user import SkillProfile, Student
+from app.config import settings
 from app.services.question_bank_service import (
     QUESTION_BANK_VERSION,
     build_verified_quiz,
@@ -32,6 +33,14 @@ class QuizSubmissionError(ValueError):
     def __init__(self, message: str, *, status_code: int = 400):
         super().__init__(message)
         self.status_code = status_code
+
+
+class QuizRateLimitError(ValueError):
+    """Raised when a student starts too many attempts in the configured window."""
+
+    def __init__(self, retry_after_secs: int):
+        super().__init__("Too many quiz attempts started. Please try again later.")
+        self.retry_after_secs = retry_after_secs
 
 
 def _template_is_active_v2(template: QuizTemplate | None) -> bool:
@@ -273,6 +282,8 @@ async def issue_quiz_attempt(
     *,
     profile_id: UUID,
     template: QuizTemplate,
+    start_limit: int | None = None,
+    window_secs: int | None = None,
 ) -> QuizAttempt:
     """Issue an owned, expiring attempt with an immutable question-ID snapshot."""
     if not _template_is_active_v2(template):
@@ -280,9 +291,30 @@ async def issue_quiz_attempt(
     questions = _template_questions(template)
     student_id = await get_student_pk(db, profile_id)
     now = datetime.now(timezone.utc)
+    limit = start_limit or settings.quiz_attempt_start_limit
+    window = window_secs or settings.quiz_attempt_start_window_secs
+
+    # The student row is the shared, database-backed rate-limit mutex. This
+    # makes the count-and-create operation safe across processes and hosts.
+    student = (
+        await db.execute(
+            select(Student).where(Student.id == student_id).with_for_update()
+        )
+    ).scalar_one()
+    recent_attempts = (
+        await db.execute(
+            select(func.count(QuizAttempt.id)).where(
+                QuizAttempt.student_id == student.id,
+                QuizAttempt.started_at >= now - timedelta(seconds=window),
+            )
+        )
+    ).scalar_one()
+    if recent_attempts >= limit:
+        raise QuizRateLimitError(window)
+
     question_ids = [question["id"] for question in questions]
     attempt = QuizAttempt(
-        student_id=student_id,
+        student_id=student.id,
         quiz_id=template.id,
         template_version=template.version,
         question_ids=question_ids,

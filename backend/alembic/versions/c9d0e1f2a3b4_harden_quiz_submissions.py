@@ -131,7 +131,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         "quiz_attempts_status_check",
         "quiz_attempts",
-        "status IN ('in_progress', 'submitted', 'expired')",
+        "status IN ('in_progress', 'submitted', 'expired', 'abandoned')",
     )
     op.create_check_constraint(
         "quiz_attempts_score_check",
@@ -178,12 +178,18 @@ def upgrade() -> None:
         "AND time_taken_secs IS NULL AND answers = '[]'::jsonb) OR "
         "(status = 'submitted' AND completed_at IS NOT NULL AND score IS NOT NULL "
         "AND time_taken_secs IS NOT NULL) OR "
-        "(status = 'expired' AND completed_at IS NULL AND score IS NULL)",
+        "(status IN ('expired', 'abandoned') AND completed_at IS NULL "
+        "AND score IS NULL)",
     )
     op.create_index(
         "ix_quiz_attempts_student_status",
         "quiz_attempts",
         ["student_id", "status"],
+    )
+    op.create_index(
+        "ix_quiz_attempts_cleanup",
+        "quiz_attempts",
+        ["status", "expires_at"],
     )
 
     op.execute("""
@@ -211,6 +217,7 @@ def downgrade() -> None:
         "uq_skill_profiles_student_topic", "skill_profiles", type_="unique"
     )
     op.drop_index("ix_quiz_attempts_student_status", table_name="quiz_attempts")
+    op.drop_index("ix_quiz_attempts_cleanup", table_name="quiz_attempts")
     for constraint in (
         "quiz_attempts_lifecycle_check",
         "quiz_attempts_expiration_check",

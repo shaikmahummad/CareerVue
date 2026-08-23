@@ -11,6 +11,7 @@ COPY alembic.ini .
 COPY question_banks/ ./question_banks/
 COPY seed_frontend_knowledge.py .
 COPY seed_question_banks.py .
+COPY cleanup_abandoned_quiz_attempts.py .
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 

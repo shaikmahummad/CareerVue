@@ -1,4 +1,5 @@
 import asyncio
+import os
 from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -11,7 +12,10 @@ from app.config import settings
 import app.models  # noqa
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option(
+    "sqlalchemy.url",
+    os.getenv("ALEMBIC_DATABASE_URL", settings.database_url),
+)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
