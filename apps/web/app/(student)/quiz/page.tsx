@@ -10,7 +10,6 @@ import {
 import StudentNavbar from "../../../components/StudentNavbar";
 import { apiGet, apiPost, apiPut } from "../../../lib/api";
 
-const SECS_PER_QUESTION = 90;
 const OPT_KEYS = ["A", "B", "C", "D"] as const;
 type OptionKey = (typeof OPT_KEYS)[number];
 type AppStep = "loading" | "assessment" | "goal" | "quiz" | "review" | "results" | "attempt-detail";
@@ -22,7 +21,8 @@ interface Question {
   options: { A: string; B: string; C: string; D: string }; difficulty: string;
 }
 interface QuizTemplate {
-  id: string; goal: string; topic_areas: string[]; questions: Question[]; total_questions: number;
+  attempt_id: string; goal: string; topic_areas: string[]; questions: Question[];
+  total_questions: number; expires_at: string;
 }
 interface SkillAssessment {
   topic: string; score_pct: number; level: "strong" | "intermediate" | "weak"; correct: number; total: number;
@@ -426,11 +426,12 @@ function QuizInterface({
 
 function QuizReview({
   template, answers, flagged, timeExpired, submitting,
-  onBack, onGoToQuestion, onSubmit,
+  onBack, onGoToQuestion, onSubmit, onRestart,
 }: {
   template: QuizTemplate; answers: Record<string, string>; flagged: Set<string>;
   timeExpired: boolean; submitting: boolean;
   onBack: () => void; onGoToQuestion: (idx: number) => void; onSubmit: () => void;
+  onRestart: () => void;
 }) {
   const total = template.questions.length;
   const answeredCount = Object.keys(answers).length;
@@ -448,7 +449,7 @@ function QuizReview({
       {timeExpired && (
         <div className="mb-5 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
           <AlertTriangle size={15} className="text-red-400 flex-shrink-0" />
-          <p className="text-xs text-red-400 font-medium">Time&apos;s up! You can no longer modify answers. Submit when ready.</p>
+          <p className="text-xs text-red-400 font-medium">This attempt has expired and cannot be submitted. Start a new attempt to continue.</p>
         </div>
       )}
 
@@ -536,13 +537,18 @@ function QuizReview({
 
       {/* Actions */}
       <div className="flex gap-3">
-        {!timeExpired && (
+        {!timeExpired ? (
           <button onClick={onBack}
             className="flex-1 glass-card py-3.5 rounded-xl text-sm font-semibold text-[#7c7a8a] hover:text-white flex items-center justify-center gap-2 transition-all hover:border-white/20">
             <ChevronLeft size={16} /> Back to Quiz
           </button>
+        ) : (
+          <button onClick={onRestart}
+            className="flex-1 glass-card py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all hover:border-white/20">
+            Start New Attempt
+          </button>
         )}
-        <button onClick={onSubmit} disabled={submitting}
+        <button onClick={onSubmit} disabled={submitting || unanswered.length > 0 || timeExpired}
           className="flex-1 btn-primary py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60">
           {submitting ? <><Loader2 size={16} className="animate-spin" /> Submitting…</> : <><Send size={16} /> Submit Quiz</>}
         </button>
@@ -722,8 +728,11 @@ export default function QuizPage() {
     setGoalError("");
     try {
       await apiPut("/api/v1/students/goal", { career_goal: goal });
-      const tmpl = await apiGet<QuizTemplate>(`/api/v1/quiz/template/${encodeURIComponent(goal)}`);
-      const t = tmpl.questions.length * SECS_PER_QUESTION;
+      const tmpl = await apiPost<QuizTemplate>(`/api/v1/quiz/attempt/start/${encodeURIComponent(goal)}`);
+      const t = Math.max(
+        1,
+        Math.floor((new Date(tmpl.expires_at).getTime() - Date.now()) / 1000),
+      );
       setTemplate(tmpl);
       setAnswers({});
       setCurrentIdx(0);
@@ -753,9 +762,9 @@ export default function QuizPage() {
     const timeTaken = Math.round((Date.now() - startTimeRef.current) / 1000);
     try {
       const res = await apiPost<QuizResult>("/api/v1/quiz/attempt", {
-        quiz_id: template.id,
+        attempt_id: template.attempt_id,
         answers: Object.entries(answers).map(([question_id, selected_option]) => ({ question_id, selected_option })),
-        time_taken_secs: timeTaken,
+        time_taken_secs: Math.max(1, timeTaken),
       });
       setResult(res);
       setStep("results");
@@ -938,6 +947,7 @@ export default function QuizPage() {
             onBack={() => setStep("quiz")}
             onGoToQuestion={handleGoToQuestion}
             onSubmit={handleSubmit}
+            onRestart={() => handleGoalSelect(template.goal)}
           />
         )}
 

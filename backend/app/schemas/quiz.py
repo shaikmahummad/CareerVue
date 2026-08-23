@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 
 # ── QuizTemplate ──────────────────────────────────────────────────────────────
@@ -20,14 +20,18 @@ class QuizTemplateOut(BaseModel):
 # ── Submission types ──────────────────────────────────────────────────────────
 
 class AnswerSubmit(BaseModel):
-    question_id: str
+    model_config = ConfigDict(extra="forbid")
+
+    question_id: str = Field(min_length=1, strict=True)
     selected_option: Literal["A", "B", "C", "D"]
 
 
 class QuizAttemptCreate(BaseModel):
-    quiz_id: uuid.UUID
-    answers: list[AnswerSubmit]
-    time_taken_secs: int
+    model_config = ConfigDict(extra="forbid")
+
+    attempt_id: uuid.UUID
+    answers: list[AnswerSubmit] = Field(min_length=1)
+    time_taken_secs: StrictInt = Field(ge=1)
 
 
 # ── QuizAttempt output ────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-from sqlalchemy import Text, Boolean, Integer, Numeric, DateTime, ForeignKey
+from sqlalchemy import Text, Boolean, Integer, Numeric, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy import text
@@ -83,6 +83,11 @@ class Tutor(Base):
 
 class SkillProfile(Base):
     __tablename__ = "skill_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "topic", name="uq_skill_profiles_student_topic"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

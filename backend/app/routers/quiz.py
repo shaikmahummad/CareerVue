@@ -1,20 +1,21 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
 
 from app.database import get_db
-from app.dependencies import AnyUser, StudentUser
+from app.dependencies import StudentUser
 from app.models.quiz import QuizAttempt, QuizTemplate
 from app.models.roadmap import Roadmap
 from app.models.user import SkillProfile
+from app.schemas.quiz import QuizAttemptCreate
 from app.services.quiz_service import (
+    QuizSubmissionError,
     QuizUnavailableError,
     get_or_create_quiz_template,
     get_student_pk,
+    issue_quiz_attempt,
     submit_quiz_attempt,
 )
 
@@ -23,23 +24,12 @@ router = APIRouter(prefix="/quiz", tags=["quiz"])
 
 # ── Request / Response bodies ─────────────────────────────────────────────────
 
-class AnswerItem(BaseModel):
-    question_id: str
-    selected_option: str  # "A" | "B" | "C" | "D"
-
-
-class SubmitQuizRequest(BaseModel):
-    quiz_id: uuid.UUID
-    answers: list[AnswerItem]
-    time_taken_secs: Optional[int] = None
-
-
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.get("/template/{goal}")
-async def get_quiz_template(
+@router.post("/attempt/start/{goal}")
+async def start_quiz_attempt(
     goal: str,
-    current_user: AnyUser,
+    current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -47,13 +37,16 @@ async def get_quiz_template(
 
     Correct answers are stripped from the response so clients cannot cheat.
     """
-    student_pk = await get_student_pk(db, current_user.id)
     try:
+        student_pk = await get_student_pk(db, current_user.id)
         template = await get_or_create_quiz_template(
             db, goal, student_id=student_pk
         )
+        attempt = await issue_quiz_attempt(
+            db, profile_id=current_user.id, template=template
+        )
     except QuizUnavailableError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # Omit correct answer + explanation from client payload
     safe_questions = [
@@ -69,20 +62,21 @@ async def get_quiz_template(
 
     return {
         "success": True,
-        "message": "Quiz template fetched",
+        "message": "Quiz attempt issued",
         "data": {
-            "id": str(template.id),
+            "attempt_id": str(attempt.id),
             "goal": template.goal,
             "topic_areas": template.topic_areas,
             "questions": safe_questions,
             "total_questions": len(safe_questions),
+            "expires_at": attempt.expires_at.isoformat(),
         },
     }
 
 
 @router.post("/attempt")
 async def submit_quiz(
-    body: SubmitQuizRequest,
+    body: QuizAttemptCreate,
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
@@ -101,12 +95,12 @@ async def submit_quiz(
         attempt, skill_results = await submit_quiz_attempt(
             db=db,
             profile_id=current_user.id,
-            quiz_id=body.quiz_id,
+            attempt_id=body.attempt_id,
             answers=answers,
-            time_taken_secs=body.time_taken_secs or 0,
+            time_taken_secs=body.time_taken_secs,
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    except QuizSubmissionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     return {
         "success": True,
@@ -137,7 +131,11 @@ async def get_attempt(
 
     student_pk = await get_student_pk(db, current_user.id)
     attempt = await db.get(QuizAttempt, aid)
-    if not attempt or attempt.student_id != student_pk:
+    if (
+        not attempt
+        or attempt.student_id != student_pk
+        or attempt.status != "submitted"
+    ):
         raise HTTPException(status_code=404, detail="Attempt not found")
 
     template = await db.get(QuizTemplate, attempt.quiz_id)
@@ -199,7 +197,10 @@ async def get_my_attempts(
     student_pk = await get_student_pk(db, current_user.id)
     result = await db.execute(
         select(QuizAttempt)
-        .where(QuizAttempt.student_id == student_pk)
+        .where(
+            QuizAttempt.student_id == student_pk,
+            QuizAttempt.status == "submitted",
+        )
         .order_by(QuizAttempt.completed_at.desc())
     )
     attempts = result.scalars().all()

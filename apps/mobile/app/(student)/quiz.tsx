@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
   ActivityIndicator, Alert,
@@ -21,10 +21,11 @@ interface Question {
 }
 
 interface QuizTemplate {
-  id: string;
+  attempt_id: string;
   goal: string;
   questions: Question[];
   total_questions: number;
+  expires_at: string;
 }
 
 interface SkillAssessment {
@@ -85,6 +86,7 @@ export default function QuizScreen() {
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
   const [attemptId,    setAttemptId]    = useState<string | null>(null);
   const [error,        setError]        = useState("");
+  const startTimeRef = useRef(0);
 
   // ── On mount: load profile to check for existing goal ─────────────────────
 
@@ -120,10 +122,11 @@ export default function QuizScreen() {
     setState("loading");
     setError("");
     try {
-      const data = await apiGet<QuizTemplate>(
-        `/api/v1/quiz/template/${encodeURIComponent(goalStr)}`
+      const data = await apiPost<QuizTemplate>(
+        `/api/v1/quiz/attempt/start/${encodeURIComponent(goalStr)}`
       );
       setTemplate(data);
+      startTimeRef.current = Date.now();
       setCurrent(0);
       setAnswers({});
       setState("quiz");
@@ -171,10 +174,11 @@ export default function QuizScreen() {
     setState("submitting");
     try {
       const payload = {
-        quiz_id: template.id,
+        attempt_id: template.attempt_id,
         answers: Object.entries(finalAnswers).map(([question_id, selected_option]) => ({
           question_id, selected_option,
         })),
+        time_taken_secs: Math.max(1, Math.floor((Date.now() - startTimeRef.current) / 1000)),
       };
       const result = await apiPost<SubmitResult>("/api/v1/quiz/attempt", payload);
       setSubmitResult(result);
