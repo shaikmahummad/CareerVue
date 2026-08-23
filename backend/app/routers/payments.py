@@ -33,6 +33,14 @@ class VerifyPaymentBody(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _require_payments_configured() -> None:
+    if not settings.payments_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payments are not configured",
+        )
+
+
 async def _get_student(db: AsyncSession, profile_id: uuid.UUID) -> Student:
     student = (
         await db.execute(select(Student).where(Student.profile_id == profile_id))
@@ -53,6 +61,7 @@ async def create_order(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    _require_payments_configured()
     try:
         cid = uuid.UUID(body.course_id)
     except ValueError:
@@ -114,6 +123,7 @@ async def verify_payment(
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
+    _require_payments_configured()
     try:
         cid = uuid.UUID(body.course_id)
     except ValueError:

@@ -1,0 +1,21 @@
+# This file intentionally has no `app` value. Pass the newly provisioned,
+# explicitly staging Fly app with `--app`; never use `careervue-api` here.
+primary_region = "bom"
+
+[build]
+
+[env]
+  APP_ENV = "staging"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

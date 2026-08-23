@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
 
-    # Razorpay
-    razorpay_key_id: str
-    razorpay_key_secret: str
+    # Razorpay is optional until the payment feature is configured.
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
 
     # App
     app_env: str = "development"
@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def payments_configured(self) -> bool:
+        values = (self.razorpay_key_id.strip(), self.razorpay_key_secret.strip())
+        return all(values) and not any("replace-with" in value for value in values)
 
 
 settings = Settings()
