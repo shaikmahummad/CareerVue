@@ -46,8 +46,8 @@ jobs:
       CAREERVUE_ALLOW_TEST_DB_RESET: "1"
       CAREERVUE_REQUIRE_POSTGRES_TESTS: "1"
       SUPABASE_URL: https://example.test
-      SUPABASE_ANON_KEY: test-anon-key
-      SUPABASE_SERVICE_ROLE_KEY: test-service-key
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InRlc3QifQ.dGVzdC1zaWduYXR1cmU
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoidGVzdCJ9.dGVzdC1zaWduYXR1cmU
       JWT_SECRET: test-only-jwt-secret
       JWT_ALGORITHM: HS256
       RAZORPAY_KEY_ID: test-key
