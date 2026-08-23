@@ -38,8 +38,10 @@ class QuizSubmissionError(ValueError):
 class QuizRateLimitError(ValueError):
     """Raised when a student starts too many attempts in the configured window."""
 
-    def __init__(self, retry_after_secs: int):
-        super().__init__("Too many quiz attempts started. Please try again later.")
+    def __init__(self, retry_after_secs: int, message: str | None = None):
+        super().__init__(
+            message or "Too many quiz attempts started. Please try again later."
+        )
         self.retry_after_secs = retry_after_secs
 
 
@@ -284,6 +286,7 @@ async def issue_quiz_attempt(
     template: QuizTemplate,
     start_limit: int | None = None,
     window_secs: int | None = None,
+    max_active_attempts: int | None = None,
 ) -> QuizAttempt:
     """Issue an owned, expiring attempt with an immutable question-ID snapshot."""
     if not _template_is_active_v2(template):
@@ -293,6 +296,7 @@ async def issue_quiz_attempt(
     now = datetime.now(timezone.utc)
     limit = start_limit or settings.quiz_attempt_start_limit
     window = window_secs or settings.quiz_attempt_start_window_secs
+    active_limit = max_active_attempts or settings.quiz_max_active_attempts
 
     # The student row is the shared, database-backed rate-limit mutex. This
     # makes the count-and-create operation safe across processes and hosts.
@@ -311,6 +315,21 @@ async def issue_quiz_attempt(
     ).scalar_one()
     if recent_attempts >= limit:
         raise QuizRateLimitError(window)
+
+    active_attempts = (
+        await db.execute(
+            select(func.count(QuizAttempt.id)).where(
+                QuizAttempt.student_id == student.id,
+                QuizAttempt.status == "in_progress",
+                QuizAttempt.expires_at > now,
+            )
+        )
+    ).scalar_one()
+    if active_attempts >= active_limit:
+        raise QuizRateLimitError(
+            SECONDS_PER_QUESTION,
+            "Too many active quiz attempts. Finish or wait for an attempt to expire.",
+        )
 
     question_ids = [question["id"] for question in questions]
     attempt = QuizAttempt(

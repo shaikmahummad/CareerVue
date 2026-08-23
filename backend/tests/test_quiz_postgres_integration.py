@@ -31,6 +31,7 @@ from app.services.quiz_service import (
     _question_set_hash,
     submit_quiz_attempt,
 )
+from app.services.quiz_maintenance_service import mark_abandoned_attempts
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -193,6 +194,24 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     index["name"]
                     for index in inspect(sync_connection).get_indexes("quiz_attempts")
                 },
+                "attempt_foreign_keys": {
+                    tuple(foreign_key["constrained_columns"])
+                    for foreign_key in inspect(sync_connection).get_foreign_keys(
+                        "quiz_attempts"
+                    )
+                },
+                "attempt_checks": {
+                    constraint["name"]
+                    for constraint in inspect(sync_connection).get_check_constraints(
+                        "quiz_attempts"
+                    )
+                },
+                "skill_uniques": {
+                    tuple(constraint["column_names"])
+                    for constraint in inspect(sync_connection).get_unique_constraints(
+                        "skill_profiles"
+                    )
+                },
             })
 
         async with self.session_factory() as session:
@@ -217,11 +236,131 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
             schema["template_columns"]
         ))
         self.assertIn("ix_quiz_attempts_cleanup", schema["attempt_indexes"])
+        self.assertIn(("student_id",), schema["attempt_foreign_keys"])
+        self.assertIn(("quiz_id",), schema["attempt_foreign_keys"])
+        self.assertIn("quiz_attempts_lifecycle_check", schema["attempt_checks"])
+        self.assertIn(("student_id", "topic"), schema["skill_uniques"])
         self.assertEqual(row.status, "submitted")
         self.assertEqual(row.answers, ANSWERS)
         self.assertEqual(row.question_ids, [question["id"] for question in QUESTIONS])
         self.assertEqual(template.version, 2)
         self.assertTrue(template.is_active)
+
+    async def test_postgresql_cleanup_workers_do_not_duplicate_processing(self):
+        now = datetime.now(timezone.utc)
+        attempt_ids = [uuid.uuid4() for _ in range(4)]
+        async with self.session_factory() as session:
+            for attempt_id in attempt_ids:
+                session.add(QuizAttempt(
+                    id=attempt_id,
+                    student_id=self.student_id,
+                    quiz_id=self.legacy_template_id,
+                    template_version=2,
+                    question_ids=[question["id"] for question in QUESTIONS],
+                    question_set_hash=_question_set_hash(QUESTIONS),
+                    status="in_progress",
+                    answers=[],
+                    total_questions=len(QUESTIONS),
+                    started_at=now - timedelta(minutes=10),
+                    expires_at=now - timedelta(minutes=5),
+                ))
+            await session.commit()
+
+        async def cleanup_once():
+            async with self.session_factory() as session:
+                return await mark_abandoned_attempts(
+                    session, now=now, grace_secs=0, batch_size=10
+                )
+
+        results = await asyncio.gather(cleanup_once(), cleanup_once())
+        self.assertEqual(sum(result.marked_abandoned for result in results), 4)
+        async with self.session_factory() as session:
+            abandoned = (
+                await session.execute(
+                    select(func.count(QuizAttempt.id)).where(
+                        QuizAttempt.id.in_(attempt_ids),
+                        QuizAttempt.status == "abandoned",
+                    )
+                )
+            ).scalar_one()
+        self.assertEqual(abandoned, 4)
+
+    async def test_postgresql_submission_failure_rolls_back_atomically(self):
+        now = datetime.now(timezone.utc)
+        attempt_id = uuid.uuid4()
+        function_name = "fail_quiz_skill_profile_test"
+        trigger_name = "fail_quiz_skill_profile_test_trigger"
+        async with self.session_factory() as session:
+            session.add(QuizAttempt(
+                id=attempt_id,
+                student_id=self.student_id,
+                quiz_id=self.legacy_template_id,
+                template_version=2,
+                question_ids=[question["id"] for question in QUESTIONS],
+                question_set_hash=_question_set_hash(QUESTIONS),
+                status="in_progress",
+                answers=[],
+                total_questions=len(QUESTIONS),
+                started_at=now - timedelta(seconds=2),
+                expires_at=now + timedelta(minutes=5),
+            ))
+            await session.commit()
+
+        async with self.engine.begin() as connection:
+            await connection.execute(text(f"""
+                CREATE FUNCTION {function_name}() RETURNS trigger
+                LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.student_id = '{self.student_id}'::uuid THEN
+                        RAISE EXCEPTION 'intentional quiz rollback test';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$
+            """))
+            await connection.execute(text(f"""
+                CREATE TRIGGER {trigger_name}
+                BEFORE INSERT OR UPDATE ON skill_profiles
+                FOR EACH ROW EXECUTE FUNCTION {function_name}()
+            """))
+
+        try:
+            async with self.session_factory() as session:
+                with self.assertRaisesRegex(
+                    Exception, "intentional quiz rollback test"
+                ):
+                    await submit_quiz_attempt(
+                        session,
+                        self.profile_id,
+                        attempt_id,
+                        ANSWERS,
+                        2,
+                    )
+                await session.rollback()
+        finally:
+            async with self.engine.begin() as connection:
+                await connection.execute(text(
+                    f"DROP TRIGGER IF EXISTS {trigger_name} ON skill_profiles"
+                ))
+                await connection.execute(text(
+                    f"DROP FUNCTION IF EXISTS {function_name}()"
+                ))
+
+        async with self.session_factory() as session:
+            stored = await session.get(QuizAttempt, attempt_id)
+            skill_count = (
+                await session.execute(
+                    select(func.count(SkillProfile.id)).where(
+                        SkillProfile.student_id == self.student_id,
+                        SkillProfile.topic == "PostgreSQL Concurrency",
+                    )
+                )
+            ).scalar_one()
+        self.assertEqual(stored.status, "in_progress")
+        self.assertEqual(stored.answers, [])
+        self.assertIsNone(stored.score)
+        self.assertIsNone(stored.completed_at)
+        self.assertEqual(skill_count, 0)
 
     async def test_real_postgresql_concurrent_submission_is_deterministic(self):
         profile_id = uuid.uuid4()

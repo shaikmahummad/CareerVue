@@ -101,10 +101,13 @@ class QuizAttemptCleanupTests(unittest.IsolatedAsyncioTestCase):
         ]
         session = CleanupSession(rows)
 
-        changed = await mark_abandoned_attempts(
+        result = await mark_abandoned_attempts(
             session, now=now, grace_secs=60, batch_size=100
         )
-        self.assertEqual(changed, 1)
+        self.assertEqual(result.candidates, len(rows))
+        self.assertEqual(result.processed, len(rows))
+        self.assertEqual(result.marked_abandoned, 1)
+        self.assertGreaterEqual(result.duration_ms, 0)
         self.assertEqual(eligible.status, "abandoned")
         self.assertEqual(active.status, "in_progress")
         self.assertEqual(recently_expired.status, "in_progress")
@@ -112,10 +115,10 @@ class QuizAttemptCleanupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(already_abandoned.status, "abandoned")
         self.assertEqual(other_users_active.status, "in_progress")
 
-        changed_again = await mark_abandoned_attempts(
+        result_again = await mark_abandoned_attempts(
             session, now=now, grace_secs=60, batch_size=100
         )
-        self.assertEqual(changed_again, 0)
+        self.assertEqual(result_again.marked_abandoned, 0)
         self.assertEqual(session.commits, 2)
         self.assertTrue(all(
             statement._for_update_arg is not None

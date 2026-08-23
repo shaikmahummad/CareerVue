@@ -105,6 +105,7 @@ class SharedSubmissionState:
         )
         self.lock = asyncio.Lock()
         self.recent_start_count = 0
+        self.active_attempt_count = 0
 
 
 class LockedFakeSession:
@@ -118,6 +119,7 @@ class LockedFakeSession:
         self.added = []
         self.commits = 0
         self.rollbacks = 0
+        self.count_queries = 0
 
     async def execute(self, statement):
         entity = statement.column_descriptions[0].get("entity")
@@ -130,7 +132,12 @@ class LockedFakeSession:
             return ScalarResult(self.state.student)
         if entity is QuizAttempt:
             if statement.column_descriptions[0].get("name") == "count":
-                return ScalarResult(self.state.recent_start_count)
+                self.count_queries += 1
+                return ScalarResult(
+                    self.state.recent_start_count
+                    if self.count_queries == 1
+                    else self.state.active_attempt_count
+                )
             return ScalarResult(None if self.missing_attempt else self.state.attempt)
         if entity is QuizTemplate:
             return ScalarResult(self.state.template)
@@ -374,6 +381,49 @@ class TransactionalSubmissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(throttled.commits, 0)
         self.assertEqual(throttled.added, [])
         await throttled.rollback()
+
+    async def test_attempt_start_limit_resets_and_is_independent_per_user(self):
+        first_profile, first_state = self.state()
+        first_state.recent_start_count = 0
+        first = LockedFakeSession(first_state)
+        issued = await issue_quiz_attempt(
+            first,
+            profile_id=first_profile,
+            template=first_state.template,
+            start_limit=2,
+            window_secs=60,
+        )
+        self.assertEqual(issued.student_id, first_state.student.id)
+
+        second_profile, second_state = self.state()
+        second_state.recent_start_count = 2
+        second = LockedFakeSession(second_state)
+        with self.assertRaises(QuizRateLimitError):
+            await issue_quiz_attempt(
+                second,
+                profile_id=second_profile,
+                template=second_state.template,
+                start_limit=2,
+                window_secs=60,
+            )
+        await second.rollback()
+
+    async def test_attempt_start_rejects_too_many_simultaneous_active_attempts(self):
+        profile_id, state = self.state()
+        state.active_attempt_count = 2
+        session = LockedFakeSession(state)
+        with self.assertRaisesRegex(QuizRateLimitError, "active quiz attempts"):
+            await issue_quiz_attempt(
+                session,
+                profile_id=profile_id,
+                template=state.template,
+                start_limit=5,
+                window_secs=60,
+                max_active_attempts=2,
+            )
+        self.assertEqual(session.commits, 0)
+        self.assertEqual(session.added, [])
+        await session.rollback()
 
     async def test_valid_submission_is_atomic_and_uses_server_time_and_key(self):
         profile_id, state = self.state()

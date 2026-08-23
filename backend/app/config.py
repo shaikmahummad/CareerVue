@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # Quiz abuse protection and maintenance
     quiz_attempt_start_limit: int = Field(default=5, gt=0)
     quiz_attempt_start_window_secs: int = Field(default=600, gt=0)
+    quiz_max_active_attempts: int = Field(default=2, gt=0)
     quiz_abandoned_grace_secs: int = Field(default=3600, ge=0)
     quiz_cleanup_interval_secs: int = Field(default=900, gt=0)
     quiz_cleanup_batch_size: int = Field(default=500, gt=0, le=5000)

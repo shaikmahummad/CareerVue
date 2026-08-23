@@ -1,10 +1,20 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from time import perf_counter
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.quiz import QuizAttempt
+
+
+@dataclass(frozen=True)
+class CleanupResult:
+    candidates: int
+    processed: int
+    marked_abandoned: int
+    duration_ms: int
 
 
 def is_abandonment_eligible(
@@ -26,7 +36,7 @@ async def mark_abandoned_attempts(
     now: datetime | None = None,
     grace_secs: int | None = None,
     batch_size: int | None = None,
-) -> int:
+) -> CleanupResult:
     """Idempotently mark old, expired in-progress attempts as abandoned."""
     current_time = now or datetime.now(timezone.utc)
     grace = (
@@ -37,6 +47,7 @@ async def mark_abandoned_attempts(
     limit = batch_size or settings.quiz_cleanup_batch_size
     cutoff = current_time - timedelta(seconds=grace)
 
+    started = perf_counter()
     attempts = (
         await db.execute(
             select(QuizAttempt)
@@ -59,4 +70,9 @@ async def mark_abandoned_attempts(
             changed += 1
 
     await db.commit()
-    return changed
+    return CleanupResult(
+        candidates=len(attempts),
+        processed=len(attempts),
+        marked_abandoned=changed,
+        duration_ms=max(0, round((perf_counter() - started) * 1000)),
+    )

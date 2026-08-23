@@ -30,13 +30,19 @@ async def _quiz_cleanup_loop() -> None:
     while True:
         try:
             async with AsyncSessionLocal() as session:
-                changed = await mark_abandoned_attempts(session)
-            if changed:
-                logger.info("Marked %s abandoned quiz attempt(s)", changed)
+                result = await mark_abandoned_attempts(session)
+            logger.info(
+                "quiz_cleanup_completed candidates=%s processed=%s "
+                "marked_abandoned=%s duration_ms=%s",
+                result.candidates,
+                result.processed,
+                result.marked_abandoned,
+                result.duration_ms,
+            )
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("Quiz attempt cleanup failed")
+            logger.exception("quiz_cleanup_failed")
         await asyncio.sleep(settings.quiz_cleanup_interval_secs)
 
 

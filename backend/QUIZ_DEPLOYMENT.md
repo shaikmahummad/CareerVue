@@ -4,6 +4,21 @@ Production must not be the first database to receive revision
 `c9d0e1f2a3b4`. Apply it to a disposable local PostgreSQL database and then to
 staging before production.
 
+## Environment classification
+
+| Environment | Identified? | Safe to modify? | Reason |
+| --- | --- | --- | --- |
+| Local | No running service | No, until provisioned | Docker, `psql`, and local PostgreSQL binaries were unavailable during validation. |
+| Test | Yes, configuration only | Yes | `docker-compose.test.yml` and CI use an isolated `careervue_quiz_test` database with disposable credentials. |
+| Staging | No | No | No staging URL, project, CI environment, or deployment target is identified in the repository. |
+| Production | Yes, deployment configuration | Never automatically | Fly declares `careervue-api` with `APP_ENV=production`; production credentials are not used by tests. |
+| Remote Supabase | Yes | No | The checked local configuration points to Supabase but does not identify the project as staging; it is classified as unknown. |
+
+The GitHub Actions workflow `.github/workflows/quiz-postgres-integration.yml`
+runs the migration/data-preservation, cleanup-locking, rollback, and concurrent
+submission tests against its own PostgreSQL 16 service. It does not use repository
+or deployment secrets.
+
 ## Local PostgreSQL validation
 
 The integration test resets the complete `public` schema. Its URL must point to
@@ -55,6 +70,22 @@ A platform cron may invoke a one-shot batch instead:
 Set-Location backend
 .\venv\Scripts\python.exe cleanup_abandoned_quiz_attempts.py
 ```
+
+For a centralized scheduler, set `QUIZ_CLEANUP_ENABLED=false` on every API
+replica and run the one-shot command every 15 minutes from the platform scheduler.
+The command remains safe if invocations overlap because batches use
+`FOR UPDATE SKIP LOCKED`. Until a platform scheduler is configured, leave the
+replica-safe loop enabled.
+
+Quiz controls are configurable with:
+
+- `QUIZ_ATTEMPT_START_LIMIT` (default `5` per window)
+- `QUIZ_ATTEMPT_START_WINDOW_SECS` (default `600`)
+- `QUIZ_MAX_ACTIVE_ATTEMPTS` (default `2`)
+- `QUIZ_ABANDONED_GRACE_SECS` (default `3600`)
+- `QUIZ_CLEANUP_INTERVAL_SECS` (default `900`)
+- `QUIZ_CLEANUP_BATCH_SIZE` (default `500`)
+- `QUIZ_CLEANUP_ENABLED` (default `true`)
 
 ## Production deployment
 
