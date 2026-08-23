@@ -318,7 +318,7 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
         results = await asyncio.gather(cleanup_once(), cleanup_once())
         self.assertEqual(sum(result.marked_abandoned for result in results), 4)
         async with self.session_factory() as session:
-            statuses = dict(
+            status_rows = (
                 await session.execute(
                     select(QuizAttempt.id, QuizAttempt.status).where(
                         QuizAttempt.id.in_([
@@ -328,7 +328,8 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         ])
                     )
                 )
-            )
+            ).all()
+            statuses = dict(status_rows)
         self.assertTrue(all(statuses[attempt_id] == "abandoned" for attempt_id in attempt_ids))
         self.assertEqual(statuses[active_attempt_id], "in_progress")
         self.assertEqual(statuses[submitted_attempt_id], "submitted")
