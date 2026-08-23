@@ -8,6 +8,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app/ ./app/
 COPY backend/alembic/ ./alembic/
 COPY backend/alembic.ini .
+COPY backend/question_banks/ ./question_banks/
+COPY backend/seed_frontend_knowledge.py .
+COPY backend/seed_question_banks.py .
 COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -78,7 +79,7 @@ async def _recalculate_progress(
 
     completed = (
         await db.execute(
-            select(func.count())
+            select(func.count(func.distinct(ModuleProgress.module_id)))
             .select_from(ModuleProgress)
             .where(ModuleProgress.enrollment_id == enrollment.id)
         )
@@ -234,19 +235,13 @@ async def update_module_progress(
     if not module or module.course_id != enrollment.course_id:
         raise HTTPException(status_code=404, detail="Module not found for this course")
 
-    existing_mp = (
-        await db.execute(
-            select(ModuleProgress).where(
-                ModuleProgress.enrollment_id == eid,
-                ModuleProgress.module_id == mid,
-            )
+    await db.execute(
+        pg_insert(ModuleProgress)
+        .values(enrollment_id=eid, module_id=mid)
+        .on_conflict_do_nothing(
+            index_elements=["enrollment_id", "module_id"]
         )
-    ).scalar_one_or_none()
-
-    if not existing_mp:
-        mp = ModuleProgress(enrollment_id=eid, module_id=mid)
-        db.add(mp)
-        await db.flush()
+    )
 
     pct = await _recalculate_progress(db, enrollment)
     enrollment.progress_pct = pct
@@ -271,7 +266,13 @@ async def complete_course(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid enrollment_id")
 
-    enrollment = await db.get(Enrollment, eid)
+    enrollment = (
+        await db.execute(
+            select(Enrollment)
+            .where(Enrollment.id == eid)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
     if not enrollment:
         raise HTTPException(status_code=404, detail="Enrollment not found")
 
@@ -279,41 +280,73 @@ async def complete_course(
     if enrollment.student_id != student.id:
         raise HTTPException(status_code=403, detail="Not your enrollment")
 
-    now = datetime.now(timezone.utc)
-    enrollment.completed_at = now
-    enrollment.progress_pct = 100
+    actual_progress = await _recalculate_progress(db, enrollment)
+    enrollment.progress_pct = actual_progress
+    if actual_progress < 100:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Complete every course module before finishing the course. "
+                f"Current progress: {actual_progress}%."
+            ),
+        )
 
-    existing_cert = (
+    already_completed = enrollment.completed_at is not None
+    certificate_id = uuid.uuid4()
+    created_certificate_id = (
         await db.execute(
-            select(Certificate).where(
-                Certificate.student_id == student.id,
-                Certificate.course_id == enrollment.course_id,
+            pg_insert(Certificate)
+            .values(
+                id=certificate_id,
+                student_id=student.id,
+                course_id=enrollment.course_id,
             )
+            .on_conflict_do_nothing(
+                index_elements=["student_id", "course_id"]
+            )
+            .returning(Certificate.id)
         )
     ).scalar_one_or_none()
 
-    if not existing_cert:
-        cert = Certificate(
-            student_id=student.id,
-            course_id=enrollment.course_id,
+    xp_awarded = not already_completed and created_certificate_id is not None
+    if xp_awarded:
+        await db.execute(
+            update(Student)
+            .where(Student.id == student.id)
+            .values(xp_points=func.coalesce(Student.xp_points, 0) + 100)
         )
-        db.add(cert)
 
-    await db.execute(
-        update(Student)
-        .where(Student.id == student.id)
-        .values(xp_points=Student.xp_points + 100)
-    )
+    if created_certificate_id is None:
+        certificate_id = (
+            await db.execute(
+                select(Certificate.id).where(
+                    Certificate.student_id == student.id,
+                    Certificate.course_id == enrollment.course_id,
+                )
+            )
+        ).scalar_one()
+    else:
+        certificate_id = created_certificate_id
+
+    if not already_completed:
+        enrollment.completed_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(enrollment)
 
     return {
         "success": True,
-        "message": "Course completed! Certificate issued and 100 XP awarded.",
+        "message": (
+            "Course completed! Certificate issued and 100 XP awarded."
+            if xp_awarded
+            else "Course was already completed."
+        ),
         "data": {
             "enrollment_id": str(eid),
             "completed_at": enrollment.completed_at.isoformat(),
             "progress_pct": 100,
+            "certificate_id": str(certificate_id),
+            "xp_awarded": 100 if xp_awarded else 0,
+            "already_completed": already_completed,
         },
     }

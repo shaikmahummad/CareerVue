@@ -27,12 +27,21 @@ def make_questions() -> list[BankQuestion]:
 
 
 class QuestionBankServiceTests(unittest.TestCase):
-    def test_resolves_only_explicit_frontend_aliases(self):
-        for goal in (
-            "Frontend Developer", "front-end engineer", " React Developer ", "frontend"
-        ):
-            self.assertEqual(resolve_career_slug(goal), "frontend-developer")
-        self.assertIsNone(resolve_career_slug("Backend Developer"))
+    def test_resolves_deliberate_career_aliases(self):
+        aliases = {
+            "Frontend Developer": "frontend-developer",
+            "front-end engineer": "frontend-developer",
+            " React Developer ": "frontend-developer",
+            "Backend Developer": "backend-developer",
+            "fullstack": "full-stack-developer",
+            "ML Engineer": "machine-learning-engineer",
+            "DevOps": "devops-engineer",
+            "UX Designer": "ui-ux-designer",
+            "Security Analyst": "cybersecurity-analyst",
+            "Product Manager": "product-manager",
+        }
+        for goal, expected_slug in aliases.items():
+            self.assertEqual(resolve_career_slug(goal), expected_slug)
         self.assertIsNone(resolve_career_slug("Web Developer"))
 
     def test_assembly_is_deterministic_and_uses_existing_contract(self):
@@ -67,7 +76,7 @@ class QuestionBankServiceTests(unittest.TestCase):
     def test_generation_key_is_versioned_and_level_specific(self):
         self.assertEqual(
             generation_key("frontend-developer", "beginner"),
-            "question-bank:frontend-developer:beginner:v1",
+            "question-bank:frontend-developer:beginner:v2",
         )
         self.assertNotEqual(
             generation_key("frontend-developer", "beginner"),

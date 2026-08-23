@@ -7,19 +7,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.knowledge import CareerRole, CareerSkill, QuizQuestion, Skill
 
 
-QUESTION_BANK_VERSION = 1
+QUESTION_BANK_VERSION = 2
 DEFAULT_QUESTION_COUNT = 20
 
-_FRONTEND_ALIASES = {
-    "frontend",
-    "front end",
-    "frontend developer",
-    "front end developer",
-    "frontend engineer",
-    "front end engineer",
-    "react developer",
-    "react frontend developer",
-    "web frontend developer",
+_CAREER_ALIASES = {
+    "frontend": "frontend-developer",
+    "front end": "frontend-developer",
+    "frontend developer": "frontend-developer",
+    "front end developer": "frontend-developer",
+    "frontend engineer": "frontend-developer",
+    "front end engineer": "frontend-developer",
+    "react developer": "frontend-developer",
+    "react frontend developer": "frontend-developer",
+    "web frontend developer": "frontend-developer",
+    "backend": "backend-developer",
+    "back end": "backend-developer",
+    "backend developer": "backend-developer",
+    "back end developer": "backend-developer",
+    "backend engineer": "backend-developer",
+    "full stack": "full-stack-developer",
+    "fullstack": "full-stack-developer",
+    "full stack developer": "full-stack-developer",
+    "fullstack developer": "full-stack-developer",
+    "data scientist": "data-scientist",
+    "machine learning engineer": "machine-learning-engineer",
+    "ml engineer": "machine-learning-engineer",
+    "devops": "devops-engineer",
+    "devops engineer": "devops-engineer",
+    "android developer": "android-developer",
+    "android engineer": "android-developer",
+    "cloud architect": "cloud-architect",
+    "ui ux designer": "ui-ux-designer",
+    "ux designer": "ui-ux-designer",
+    "product designer": "ui-ux-designer",
+    "cybersecurity analyst": "cybersecurity-analyst",
+    "security analyst": "cybersecurity-analyst",
+    "product manager": "product-manager",
 }
 
 
@@ -30,7 +53,7 @@ def _normalize_goal(goal: str) -> str:
 
 def resolve_career_slug(goal: str) -> str | None:
     """Resolve deliberate aliases without guessing a user's career."""
-    return "frontend-developer" if _normalize_goal(goal) in _FRONTEND_ALIASES else None
+    return _CAREER_ALIASES.get(_normalize_goal(goal))
 
 
 def generation_key(career_slug: str, skill_level: str) -> str:

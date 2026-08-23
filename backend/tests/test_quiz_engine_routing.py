@@ -53,7 +53,7 @@ class QuizEngineRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(template.goal, "Frontend Developer")
         self.assertEqual(
             template.generation_key,
-            "question-bank:frontend-developer:beginner:v1",
+            "question-bank:frontend-developer:beginner:v2",
         )
         self.assertEqual(template.questions, QUIZ_DATA["questions"])
 
