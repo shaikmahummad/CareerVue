@@ -12,10 +12,10 @@ from app.config import settings
 import app.models  # noqa
 
 config = context.config
-config.set_main_option(
-    "sqlalchemy.url",
-    os.getenv("ALEMBIC_DATABASE_URL", settings.database_url),
-)
+database_url = os.getenv("ALEMBIC_DATABASE_URL", settings.database_url)
+# ConfigParser reserves percent signs for interpolation. Escaping them here
+# preserves percent-encoded database credentials when Alembic reads the value.
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

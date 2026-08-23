@@ -16,6 +16,8 @@ def _settings(**overrides) -> Settings:
         "supabase_anon_key": "anon",
         "supabase_service_role_key": "service",
         "jwt_secret": "test-secret",
+        "razorpay_key_id": "",
+        "razorpay_key_secret": "",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

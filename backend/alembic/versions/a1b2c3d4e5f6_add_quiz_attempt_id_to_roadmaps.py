@@ -1,7 +1,7 @@
 """add quiz_attempt_id to roadmaps
 
 Revision ID: a1b2c3d4e5f6
-Revises:
+Revises: 9f8e7d6c5b4a
 Create Date: 2026-06-02
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = 'a1b2c3d4e5f6'
-down_revision = None
+down_revision = '9f8e7d6c5b4a'
 branch_labels = None
 depends_on = None
 

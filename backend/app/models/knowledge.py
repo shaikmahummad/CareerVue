@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,6 +41,7 @@ class CareerSkill(Base):
         UniqueConstraint("career_id", "skill_id", name="uq_career_skills_career_skill"),
         CheckConstraint("target_level IN ('beginner', 'intermediate', 'advanced')", name="career_skills_target_level_check"),
         CheckConstraint("importance BETWEEN 1 AND 5", name="career_skills_importance_check"),
+        Index("ix_career_skills_order", "career_id", "order_index"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -88,6 +89,7 @@ class QuizQuestion(Base):
         CheckConstraint("status IN ('draft', 'in_review', 'approved', 'rejected', 'retired')", name="quiz_questions_status_check"),
         CheckConstraint("correct_option IN ('A', 'B', 'C', 'D')", name="quiz_questions_correct_option_check"),
         CheckConstraint("version > 0", name="quiz_questions_version_check"),
+        Index("ix_quiz_questions_selection", "skill_id", "difficulty", "status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

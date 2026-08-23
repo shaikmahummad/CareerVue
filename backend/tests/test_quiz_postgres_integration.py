@@ -23,7 +23,6 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.database import Base
 from app.models.quiz import QuizAttempt, QuizTemplate
 from app.models.user import Profile, SkillProfile, Student
 from app.services.quiz_service import (
@@ -120,15 +119,17 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
             cls.database_url, poolclass=NullPool, pool_pre_ping=True
         )
 
-        async def reset_to_current_metadata():
+        async def reset_schema():
             async with cls.engine.begin() as connection:
                 await connection.execute(text("DROP SCHEMA public CASCADE"))
                 await connection.execute(text("CREATE SCHEMA public"))
-                await connection.run_sync(Base.metadata.create_all)
 
-        asyncio.run(reset_to_current_metadata())
-        _run_alembic(cls.database_url, "stamp", HEAD_REVISION)
-        _run_alembic(cls.database_url, "downgrade", PREVIOUS_REVISION)
+        asyncio.run(reset_schema())
+        # Prove that the committed migration chain bootstraps a blank database,
+        # fully reverses, and can rebuild the legacy state used below.
+        _run_alembic(cls.database_url, "upgrade", HEAD_REVISION)
+        _run_alembic(cls.database_url, "downgrade", "base")
+        _run_alembic(cls.database_url, "upgrade", PREVIOUS_REVISION)
 
         cls.profile_id = uuid.uuid4()
         cls.student_id = uuid.uuid4()

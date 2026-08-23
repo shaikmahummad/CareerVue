@@ -18,17 +18,12 @@ Supabase project is unclassified. Both are prohibited targets for this runbook.
 | Production | Yes | Never through this runbook | Fly app `careervue-api` declares `APP_ENV=production`. |
 | Unknown Supabase | Yes | No | Nothing proves that the existing remote project is non-production staging. |
 
-## Mandatory migration prerequisite
+## Migration baseline
 
-The present Alembic history is not a fresh-database bootstrap chain. Its base
-revision, `a1b2c3d4e5f6`, starts with `ALTER TABLE roadmaps ADD COLUMN ...` and
-therefore assumes that the application tables already exist. The PostgreSQL CI
-test validates the `c9d0e1f2a3b4` upgrade and downgrade against a pre-created
-legacy schema; it does not prove `alembic upgrade head` from an empty database.
-
-Before provisioning a blank staging database, add and validate a baseline
-migration for the pre-`a1b2c3d4e5f6` schema. The validation must use a disposable
-PostgreSQL database and prove all of the following:
+Revision `9f8e7d6c5b4a` creates the complete pre-`a1b2c3d4e5f6` application
+schema. The PostgreSQL integration test starts from an empty `public` schema and
+proves the full upgrade, downgrade-to-base, rebuild, legacy-data preservation,
+rollback, and concurrent-submission behavior:
 
 ```powershell
 Set-Location backend
@@ -40,8 +35,8 @@ $env:ALEMBIC_DATABASE_URL = "postgresql+asyncpg://<disposable-test-url>"
 .\venv\Scripts\alembic.exe upgrade head
 ```
 
-Do not work around the missing baseline by running ORM `create_all` and stamping
-the database at head. That would skip the requested full-chain validation.
+Do not replace this chain with ORM `create_all` and an Alembic stamp; that would
+skip the committed migration history and its CI validation.
 
 ## Authorized operator provisioning steps
 
@@ -83,9 +78,8 @@ flyctl secrets set --app <STAGING_APP_ID> `
   APP_CORS_ORIGINS='["https://<STAGING_WEB_HOST>"]'
 ```
 
-6. After the baseline prerequisite passes, migrate explicitly before starting the
-   staging API. Confirm that `c9d0e1f2a3b4` is the reported head, then seed the
-   reviewed question banks.
+6. Migrate explicitly before starting the staging API. Confirm that
+   `c9d0e1f2a3b4` is the reported head, then seed the reviewed question banks.
 
 ```powershell
 Set-Location backend

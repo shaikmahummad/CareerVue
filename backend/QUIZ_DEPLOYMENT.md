@@ -50,10 +50,9 @@ docker compose -f backend/docker-compose.test.yml down
 Follow `STAGING_PROVISIONING.md`. Use a staging-only database URL. Do not
 substitute the production URL.
 
-Important: the current Alembic base revision assumes an existing application
-schema, so a newly empty staging database cannot yet run the complete migration
-chain. Add and validate the baseline migration described in the staging runbook
-before executing the commands below on a newly provisioned database.
+Revision `9f8e7d6c5b4a` is the explicit application-schema baseline. The PostgreSQL
+integration test now proves upgrade from an empty database, downgrade to base,
+and rebuild before exercising the legacy-data upgrade to `c9d0e1f2a3b4`.
 
 ```powershell
 Set-Location backend
