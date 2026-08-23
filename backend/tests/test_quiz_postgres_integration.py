@@ -39,6 +39,7 @@ HEAD_REVISION = "c9d0e1f2a3b4"
 PREVIOUS_REVISION = "b8c9d0e1f2a3"
 TEST_DATABASE_URL = os.getenv("QUIZ_TEST_DATABASE_URL", "")
 RESET_ALLOWED = os.getenv("CAREERVUE_ALLOW_TEST_DB_RESET") == "1"
+POSTGRES_TESTS_REQUIRED = os.getenv("CAREERVUE_REQUIRE_POSTGRES_TESTS") == "1"
 
 QUESTIONS = [
     {
@@ -60,6 +61,11 @@ ANSWERS = [
 
 def _safe_test_database_url() -> str | None:
     if not TEST_DATABASE_URL or not RESET_ALLOWED:
+        if POSTGRES_TESTS_REQUIRED:
+            raise RuntimeError(
+                "PostgreSQL integration tests are required, but the dedicated "
+                "test URL/reset acknowledgement is missing."
+            )
         return None
     parsed = make_url(TEST_DATABASE_URL)
     database_name = (parsed.database or "").lower()
@@ -69,8 +75,14 @@ def _safe_test_database_url() -> str | None:
             "contains 'test' and does not contain 'prod'."
         )
     configured_app_url = os.getenv("DATABASE_URL")
-    if configured_app_url and make_url(configured_app_url) == parsed:
-        raise RuntimeError("Refusing to reset the application's DATABASE_URL.")
+    if (
+        configured_app_url
+        and make_url(configured_app_url) == parsed
+        and os.getenv("APP_ENV") != "test"
+    ):
+        raise RuntimeError(
+            "Refusing to reset the application's DATABASE_URL outside APP_ENV=test."
+        )
     return TEST_DATABASE_URL
 
 

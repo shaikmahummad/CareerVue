@@ -40,9 +40,11 @@ jobs:
 
     env:
       APP_ENV: test
-      DATABASE_URL: postgresql+asyncpg://careervue_test:careervue_test@localhost:5432/careervue_app_unused
+      DATABASE_URL: postgresql+asyncpg://careervue_test:careervue_test@localhost:5432/careervue_quiz_test
+      ALEMBIC_DATABASE_URL: postgresql+asyncpg://careervue_test:careervue_test@localhost:5432/careervue_quiz_test
       QUIZ_TEST_DATABASE_URL: postgresql+asyncpg://careervue_test:careervue_test@localhost:5432/careervue_quiz_test
       CAREERVUE_ALLOW_TEST_DB_RESET: "1"
+      CAREERVUE_REQUIRE_POSTGRES_TESTS: "1"
       SUPABASE_URL: https://example.test
       SUPABASE_ANON_KEY: test-anon-key
       SUPABASE_SERVICE_ROLE_KEY: test-service-key
@@ -68,6 +70,8 @@ jobs:
       - name: Verify Alembic revision chain
         run: python -m alembic heads
 
-      - name: Run backend and real PostgreSQL integration tests
-        run: python -m unittest discover -s tests -v
+      - name: Run migration, cleanup-locking, rollback, and concurrency tests
+        run: python -m unittest tests.test_quiz_postgres_integration -v
 
+      - name: Run complete backend regression suite
+        run: python -m unittest discover -s tests -v
