@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, TrendingUp, CheckCircle2, Zap, BookOpen } from "lucide-react";
 import { createClient } from "../../../lib/supabase/client";
+import { isValidEmail, normalizeEmail } from "../../../lib/auth-validation";
 
 const ACHIEVEMENTS = [
   { icon: CheckCircle2, label: "Quiz complete", sub: "Skill profile analysed 100%", color: "text-emerald-400" },
@@ -12,25 +13,37 @@ const ACHIEVEMENTS = [
   { icon: BookOpen,     label: "Cert earned", sub: "Cloud Architecture Foundations", color: "text-[#00d4ff]" },
 ];
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const verified = searchParams.get("verified") === "1";
+  const verificationFailed = searchParams.get("verification") === "failed";
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
+    if (!isValidEmail(email) || !password) {
+      setError("Enter a valid email address and password.");
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email: normalizeEmail(email),
+      password,
+    });
 
     if (signInError) {
-      setError(signInError.message);
+      setError("Invalid email or password, or the account is not verified.");
       setLoading(false);
       return;
     }
@@ -138,6 +151,16 @@ export default function LoginPage() {
               {error}
             </p>
           )}
+          {verified && !error && (
+            <p className="mb-4 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl">
+              Email verified. You can now sign in.
+            </p>
+          )}
+          {verificationFailed && !error && (
+            <p className="mb-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
+              This verification link is invalid or expired. Register again or request a new link.
+            </p>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <input
@@ -210,5 +233,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   );
 }

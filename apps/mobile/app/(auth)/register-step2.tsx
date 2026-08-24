@@ -8,18 +8,25 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { supabase } from "../../lib/supabase";
+import { apiPost } from "../../lib/api";
+import {
+  isValidEmail,
+  normalizeEmail,
+  normalizeIndianPhone,
+  normalizeName,
+  validateSignup,
+} from "../../lib/auth-validation";
 import { colors } from "../../constants/theme";
 
 const { width } = Dimensions.get("window");
 const YEAR_PILLS = ["1st", "2nd", "3rd", "4th", "5th"];
 
 function Field({
-  label, placeholder, value, onChangeText, secureText, keyboardType, rightEl,
+  label, placeholder, value, onChangeText, secureText, keyboardType, rightEl, error,
 }: {
   label: string; placeholder: string; value: string;
   onChangeText: (t: string) => void; secureText?: boolean;
-  keyboardType?: any; rightEl?: React.ReactNode;
+  keyboardType?: any; rightEl?: React.ReactNode; error?: string;
 }) {
   return (
     <View style={f.wrap}>
@@ -38,6 +45,7 @@ function Field({
         />
         {rightEl && <View style={f.right}>{rightEl}</View>}
       </View>
+      {error ? <Text style={f.error}>{error}</Text> : null}
     </View>
   );
 }
@@ -70,6 +78,7 @@ const f = StyleSheet.create({
     bottom:         0,
     justifyContent: "center",
   },
+  error: { color: "#f87171", fontSize: 12, marginLeft: 4 },
 });
 
 export default function RegisterStep2Screen() {
@@ -80,33 +89,47 @@ export default function RegisterStep2Screen() {
   const [fullName,  setFullName]  = useState("");
   const [email,     setEmail]     = useState("");
   const [password,  setPassword]  = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone,     setPhone]     = useState("");
   const [college,   setCollege]   = useState("");
   const [branch,    setBranch]    = useState("");
   const [yearIdx,   setYearIdx]   = useState(2);
   const [showPass,  setShowPass]  = useState(false);
   const [loading,   setLoading]   = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const handleRegister = useCallback(async () => {
+    const errors = validateSignup({ fullName, email, phone, password, confirmPassword });
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      Alert.alert("Check your details", "Please correct the highlighted fields.");
+      return;
+    }
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          role:      role ?? "student",
-          college,
-          branch,
-          year:      YEAR_PILLS[yearIdx],
-          phone,
-        },
-      },
-    });
-    setLoading(false);
-    if (error) Alert.alert("Registration failed", error.message);
-    else Alert.alert("Success! 🎉", "Check your email to confirm your account.");
-  }, [email, password, fullName, role, college, branch, yearIdx, phone]);
+    try {
+      const accountRole = role === "tutor" ? "tutor" : "student";
+      await apiPost(`/api/v1/auth/register/${accountRole}`, {
+        full_name: normalizeName(fullName),
+        email: normalizeEmail(email),
+        password,
+        confirm_password: confirmPassword,
+        phone: normalizeIndianPhone(phone) ?? undefined,
+        email_redirect_to: "careervue://auth/callback",
+        ...(accountRole === "student" ? {
+          college: college.trim() || undefined,
+          branch: branch.trim() || undefined,
+          year_of_study: yearIdx + 1,
+        } : {}),
+      });
+      Alert.alert("Check your email", "Verify your account using the link we sent before signing in.", [
+        { text: "Go to sign in", onPress: () => router.replace("/(auth)/login") },
+      ]);
+    } catch (error) {
+      Alert.alert("Registration failed", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [email, password, confirmPassword, fullName, role, college, branch, yearIdx, phone, router]);
 
   return (
     <View style={s.root}>
@@ -144,6 +167,7 @@ export default function RegisterStep2Screen() {
             placeholder="Shaik Mohammed"
             value={fullName}
             onChangeText={setFullName}
+            error={fieldErrors.fullName}
           />
           <Field
             label="EMAIL ADDRESS"
@@ -151,7 +175,8 @@ export default function RegisterStep2Screen() {
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
-            rightEl={email.includes("@")
+            error={fieldErrors.email}
+            rightEl={isValidEmail(email)
               ? <Ionicons name="checkmark-circle" size={20} color={colors.secondary} />
               : null}
           />
@@ -161,6 +186,7 @@ export default function RegisterStep2Screen() {
             value={password}
             onChangeText={setPassword}
             secureText={!showPass}
+            error={fieldErrors.password}
             rightEl={
               <Pressable onPress={() => setShowPass(v => !v)}>
                 <Ionicons name={showPass ? "eye-off-outline" : "eye-outline"} size={20} color={colors.outline} />
@@ -168,11 +194,20 @@ export default function RegisterStep2Screen() {
             }
           />
           <Field
+            label="CONFIRM PASSWORD"
+            placeholder="Repeat your password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureText={!showPass}
+            error={fieldErrors.confirmPassword}
+          />
+          <Field
             label="PHONE NUMBER"
             placeholder="+91 98765 43210"
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
+            error={fieldErrors.phone}
           />
         </View>
 

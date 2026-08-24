@@ -1,4 +1,4 @@
-from sqlalchemy import Text, Boolean, Integer, Numeric, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Text, Boolean, Integer, Numeric, DateTime, ForeignKey, Index, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy import text
@@ -21,6 +21,10 @@ class Profile(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        Index("uq_profiles_email_normalized", func.lower(email), unique=True),
     )
 
     # Relationships

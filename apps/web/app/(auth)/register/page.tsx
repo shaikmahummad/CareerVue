@@ -1,10 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TrendingUp, GraduationCap, BookOpen, ChevronLeft, Zap, ArrowRight } from "lucide-react";
-import { createClient } from "../../../lib/supabase/client";
+import {
+  normalizeEmail,
+  normalizeIndianPhone,
+  normalizeName,
+  validateSignup,
+} from "../../../lib/auth-validation";
 
 type Role = "student" | "tutor";
 type Step = "role" | "form";
@@ -53,12 +57,12 @@ function StepIndicator({ current }: { current: number }) {
 }
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [step, setStep] = useState<Step>("role");
   const [role, setRole] = useState<Role>("student");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [studentFields, setStudentFields] = useState<StudentFields>({
     college: "", branch: "", year_of_study: "", city: "", linkedin_url: "", github_url: "",
@@ -68,6 +72,8 @@ export default function RegisterPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [registered, setRegistered] = useState(false);
 
   function updateStudent(key: keyof StudentFields, val: string) {
     setStudentFields((p) => ({ ...p, [key]: val }));
@@ -78,9 +84,21 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError("");
-    const common = { full_name: fullName, email, password, phone: phone || undefined };
+    const errors = validateSignup({ fullName, email, phone, password, confirmPassword });
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
+
+    setLoading(true);
+    const normalizedPhone = normalizeIndianPhone(phone);
+    const common = {
+      full_name: normalizeName(fullName),
+      email: normalizeEmail(email),
+      password,
+      confirm_password: confirmPassword,
+      phone: normalizedPhone ?? undefined,
+      email_redirect_to: `${window.location.origin}/auth/callback`,
+    };
     const body =
       role === "student"
         ? {
@@ -114,10 +132,7 @@ export default function RegisterPage() {
         const detail = json?.detail ?? json?.message ?? "Registration failed";
         throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
       }
-      const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw new Error(signInError.message);
-      router.push(role === "tutor" ? "/tutor/dashboard" : "/dashboard");
+      setRegistered(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -126,6 +141,22 @@ export default function RegisterPage() {
   }
 
   const inputCls = "w-full bg-[#050508] border border-white/[0.07] rounded-xl px-4 py-3 text-sm text-white placeholder-[#7c7a8a] focus:outline-none focus:border-[#6c63ff] transition-colors";
+
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-[#050508] flex items-center justify-center p-8">
+        <div className="glass-card max-w-md rounded-2xl p-8 text-center">
+          <h1 className="text-2xl font-bold text-white mb-3">Check your email</h1>
+          <p className="text-sm text-[#7c7a8a] mb-6">
+            We sent a verification link to {normalizeEmail(email)}. Verify your account before signing in.
+          </p>
+          <Link href="/login" className="btn-primary inline-flex px-6 py-3 rounded-xl text-sm font-semibold">
+            Go to sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#050508] flex">
@@ -261,15 +292,22 @@ export default function RegisterPage() {
                 </p>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-3">
+              <form onSubmit={handleSubmit} noValidate className="space-y-3">
                 <input type="text" placeholder="Full Name *" value={fullName}
-                  onChange={(e) => setFullName(e.target.value)} required className={inputCls} />
+                  onChange={(e) => setFullName(e.target.value)} required maxLength={100} className={inputCls} />
+                {fieldErrors.fullName && <p className="text-xs text-red-400">{fieldErrors.fullName}</p>}
                 <input type="email" placeholder="Email *" value={email}
                   onChange={(e) => setEmail(e.target.value)} required autoComplete="email" className={inputCls} />
+                {fieldErrors.email && <p className="text-xs text-red-400">{fieldErrors.email}</p>}
                 <input type="password" placeholder="Password (min 6 chars) *" value={password}
-                  onChange={(e) => setPassword(e.target.value)} minLength={6} required className={inputCls} />
+                  onChange={(e) => setPassword(e.target.value)} minLength={6} maxLength={72} required autoComplete="new-password" className={inputCls} />
+                {fieldErrors.password && <p className="text-xs text-red-400">{fieldErrors.password}</p>}
+                <input type="password" placeholder="Confirm Password *" value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)} minLength={6} maxLength={72} required autoComplete="new-password" className={inputCls} />
+                {fieldErrors.confirmPassword && <p className="text-xs text-red-400">{fieldErrors.confirmPassword}</p>}
                 <input type="tel" placeholder="Phone (optional)" value={phone}
-                  onChange={(e) => setPhone(e.target.value)} className={inputCls} />
+                  onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={inputCls} />
+                {fieldErrors.phone && <p className="text-xs text-red-400">{fieldErrors.phone}</p>}
 
                 {role === "student" && (
                   <div className="pt-2 space-y-3">

@@ -4,7 +4,7 @@ import { Slot, useRouter, useSegments } from "expo-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
 import type { Session } from "@supabase/supabase-js";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, Linking } from "react-native";
 import { useFonts } from "expo-font";
 import {
   HankenGrotesk_400Regular,
@@ -24,14 +24,15 @@ const queryClient = new QueryClient({
 
 function AuthGuard({ session, ready }: { session: Session | null; ready: boolean }) {
   const segments = useSegments();
+  const currentSegments = segments as readonly string[];
   const router   = useRouter();
 
   useEffect(() => {
     if (!ready) return;
 
-    const inAuth      = segments[0] === "(auth)";
-    const inOnboard   = segments[0] === "onboarding";
-    const inRoot      = segments.length === 0;
+    const inAuth      = currentSegments[0] === "(auth)";
+    const inOnboard   = currentSegments[0] === "onboarding";
+    const inRoot      = currentSegments.length === 0;
     const isPublic    = inAuth || inOnboard || inRoot;
 
     if (!session) {
@@ -44,7 +45,7 @@ function AuthGuard({ session, ready }: { session: Session | null; ready: boolean
         else router.replace("/(student)/" as never);
       }
     }
-  }, [session, segments, ready, router]);
+  }, [session, currentSegments, ready, router]);
 
   return null;
 }
@@ -62,14 +63,37 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    async function finishAuthRedirect(url: string | null) {
+      if (!url || !url.startsWith("careervue://auth/callback")) return;
+      const parsed = new URL(url.replace("#", "?"));
+      const accessToken = parsed.searchParams.get("access_token");
+      const refreshToken = parsed.searchParams.get("refresh_token");
+      const code = parsed.searchParams.get("code");
+      if (accessToken && refreshToken) {
+        await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+      } else if (code) {
+        await supabase.auth.exchangeCodeForSession(code);
+      }
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setReady(true);
     });
+    Linking.getInitialURL().then(finishAuthRedirect);
+    const linkingSubscription = Linking.addEventListener("url", ({ url }) => {
+      void finishAuthRedirect(url);
+    });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
       setSession(s);
     });
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      linkingSubscription.remove();
+    };
   }, []);
 
   if (!ready || !fontsLoaded) {

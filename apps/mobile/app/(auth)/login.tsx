@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Defs, RadialGradient, Stop, Rect } from "react-native-svg";
 import { supabase } from "../../lib/supabase";
+import { isValidEmail, normalizeEmail } from "../../lib/auth-validation";
 import { colors } from "../../constants/theme";
 
 const { width, height } = Dimensions.get("window");
@@ -23,10 +24,17 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = useCallback(async () => {
+    if (!isValidEmail(email) || !pass) {
+      Alert.alert("Check your details", "Enter a valid email address and password.");
+      return;
+    }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: normalizeEmail(email),
+      password: pass,
+    });
     setLoading(false);
-    if (error) Alert.alert("Sign in failed", error.message);
+    if (error) Alert.alert("Sign in failed", "Invalid email or password, or the account is not verified.");
   }, [email, pass]);
 
   return (
