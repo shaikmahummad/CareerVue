@@ -26,8 +26,8 @@ build.
 - Backend regression: 75 tests pass; four PostgreSQL integration cases skip
   locally because no disposable PostgreSQL test database is installed.
 - Backend package integrity: `pip check` and Python bytecode compilation pass.
-- Main-branch PostgreSQL CI for commit `0723cc5` passed on GitHub. This does not
-  cover the uncommitted release-candidate changes.
+- PR #6 CI passes on release-candidate commit `9772a56`: the Node 22.13.1
+  frontend gate and disposable-PostgreSQL integration/regression gate are green.
 - Staging database: connection passes, Alembic is at `d0e1f2a3b4c5`, all 25
   public tables are visible, normalized-email duplicates are zero, and the
   normalized-email unique index is present.
@@ -40,33 +40,30 @@ build.
 
 ## P0 release blockers
 
-1. **The release candidate is not committed, pushed, or green in CI.** Create a
-   PR, require both `Frontend release gates` and `Quiz PostgreSQL integration`,
-   merge only when both are green, and deploy the resulting immutable SHA.
-2. **EAS is not configured.** The Expo login works as account `zorut0`, but
+1. **EAS is not configured.** The Expo login works as account `zorut0`, but
    `eas project:info` reports `EAS project not configured`. Link an existing
    project with `eas init --id <project-id> --non-interactive`, or explicitly
    authorize creation under `zorut0`. Then produce signed Android and iOS builds.
-3. **No named production web deployment was discoverable.** Record the web
+2. **No named production web deployment was discoverable.** Record the web
    hostname/provider, deploy the release SHA, and verify HTTPS, environment
    variables, server logs, and rollback procedure.
-4. **Production migration revision is unknown.** Staging is current, but the
+3. **Production migration revision is unknown.** Staging is current, but the
    production database's `alembic_version` was not accessible. Back up
    production, run the read-only revision/duplicate-email preflight, and only
    then execute `python -m alembic upgrade head`. Verify revision
    `d0e1f2a3b4c5` and the unique index afterward.
-5. **Password recovery is not end-to-end verified.** Add the deployed web
+4. **Password recovery is not end-to-end verified.** Add the deployed web
    callback/reset URL and `careervue://reset-password` to Supabase's allowed
    redirect URLs. Request a real reset email, open it on web and one physical
    Android/iOS device, change the password, and prove old-password rejection plus
    new-password login.
-6. **No signed-build physical-device smoke test exists.** Test student, tutor,
+5. **No signed-build physical-device smoke test exists.** Test student, tutor,
    and admin accounts on the exact signed build: registration/verification,
    login/logout, password reset, course browsing/enrollment/learning/completion,
    quiz start/submit/history, tutor course/module create-update-delete, admin
    approve/reject/deactivate, analytics, notifications, offline/error handling,
    and cold-start/deep-link behavior.
-7. **Production catalog data needs approval.** The public API currently exposes
+6. **Production catalog data needs approval.** The public API currently exposes
    approved courses titled `z` and `X` with placeholder descriptions. An owner
    must archive/reject placeholder records and approve the final catalog before
    launch.
