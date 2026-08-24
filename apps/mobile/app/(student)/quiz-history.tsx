@@ -259,9 +259,9 @@ function DetailView({
                 {OPTIONS.map((opt) => {
                   const isSelected = selected === opt;
                   const isCorrectOpt = correct === opt;
-                  let bg     = colors.surfaceContainer;
-                  let border = "transparent";
-                  let textCol = colors.textVariant;
+                  let bg: string = colors.surfaceContainer;
+                  let border: string = "transparent";
+                  let textCol: string = colors.textVariant;
 
                   if (isCorrectOpt) {
                     bg     = "rgba(0,229,160,0.12)";

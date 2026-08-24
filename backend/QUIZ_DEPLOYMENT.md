@@ -58,7 +58,7 @@ and rebuild before exercising the legacy-data upgrade to `c9d0e1f2a3b4`.
 Set-Location backend
 $env:ALEMBIC_DATABASE_URL = "<staging-postgresql-asyncpg-url>"
 .\venv\Scripts\alembic.exe current
-.\venv\Scripts\alembic.exe upgrade c9d0e1f2a3b4
+.\venv\Scripts\alembic.exe upgrade head
 .\venv\Scripts\alembic.exe current
 .\venv\Scripts\python.exe seed_question_banks.py
 ```
@@ -100,7 +100,7 @@ Only after staging migration and PostgreSQL concurrency validation pass:
 Set-Location backend
 $env:ALEMBIC_DATABASE_URL = "<production-postgresql-asyncpg-url>"
 .\venv\Scripts\alembic.exe current
-.\venv\Scripts\alembic.exe upgrade c9d0e1f2a3b4
+.\venv\Scripts\alembic.exe upgrade head
 .\venv\Scripts\python.exe seed_question_banks.py
 ```
 

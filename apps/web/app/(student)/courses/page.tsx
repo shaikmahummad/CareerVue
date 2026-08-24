@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Search, Star, Users, Clock, BookOpen, Loader2, SlidersHorizontal, ChevronDown } from "lucide-react";
+import { Search, Star, Clock, BookOpen, Loader2, SlidersHorizontal, ChevronDown } from "lucide-react";
 import StudentNavbar from "../../../components/StudentNavbar";
 import { apiGet } from "../../../lib/api";
 

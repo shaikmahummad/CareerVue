@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  BookOpen, Users, Star, DollarSign, TrendingUp,
+  BookOpen, Users, Star, DollarSign,
   Clock, CheckCircle, XCircle, AlertCircle,
   PlusCircle, ArrowRight, Loader2, ChevronRight,
 } from "lucide-react";

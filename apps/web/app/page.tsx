@@ -15,9 +15,7 @@ import {
   Star,
   CheckCircle2,
   Zap,
-  Users,
   TrendingUp,
-  Shield,
   Play,
   ChevronRight,
 } from "lucide-react";

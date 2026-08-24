@@ -16,7 +16,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { colors, radius } from "../../constants/theme";
 
-interface FormInputProps extends TextInputProps {
+interface FormInputProps extends Omit<TextInputProps, "style"> {
   label:         string;
   error?:        string;
   rightIcon?:    React.ReactNode;
@@ -48,16 +48,16 @@ export function FormInput({
     return { borderColor };
   });
 
-  const onFocus = useCallback(() => {
+  const onFocus = useCallback<NonNullable<TextInputProps["onFocus"]>>((event) => {
     setFocused(true);
     focus.value = withTiming(1, { duration: 200 });
-    props.onFocus?.(null as any);
+    props.onFocus?.(event);
   }, [focus, props]);
 
-  const onBlur = useCallback(() => {
+  const onBlur = useCallback<NonNullable<TextInputProps["onBlur"]>>((event) => {
     setFocused(false);
     focus.value = withTiming(0, { duration: 200 });
-    props.onBlur?.(null as any);
+    props.onBlur?.(event);
   }, [focus, props]);
 
   return (

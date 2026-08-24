@@ -14,9 +14,11 @@ export const colors = {
   // Text
   text:             "#e4e1ee",
   textVariant:      "#c7c4d8",
+  muted:            "#918fa1",
 
   // Primary — lavender violet
   primary:            "#c4c0ff",
+  primaryBg:          "rgba(196,192,255,0.12)",
   primaryContainer:   "#8781ff",
   onPrimary:          "#2000a4",
   onPrimaryContainer: "#1b0091",
@@ -24,6 +26,8 @@ export const colors = {
   // Secondary — cyan
   secondary:          "#a2e7ff",
   secondaryContainer: "#00d2fd",
+  accent:             "#00d2fd",
+  accentBg:           "rgba(0,210,253,0.12)",
 
   // Tertiary — amber/orange
   tertiary:           "#ffb785",
@@ -32,8 +36,11 @@ export const colors = {
   // Semantic
   error:          "#ffb4ab",
   errorContainer: "#93000a",
+  errorBg:        "rgba(255,180,171,0.12)",
   success:        "#00e5a0",
+  successBg:      "rgba(0,229,160,0.12)",
   warning:        "#ffb800",
+  warningBg:      "rgba(255,184,0,0.12)",
 
   // Borders
   border:         "rgba(255,255,255,0.08)",
@@ -52,6 +59,7 @@ export const gradients = {
   primary:  ["#c4c0ff", "#8781ff"] as const,
   // Deep indigo → lavender — tutor earnings card
   earnings: ["#4f44e2", "#c4c0ff"] as const,
+  success:  ["#00e5a0", "#00a878"] as const,
 } as const;
 
 export const typography = {
@@ -84,6 +92,13 @@ export const shadows = {
     shadowOpacity: 0.2,
     shadowRadius:  32,
     elevation:     12,
+  },
+  glowSuccess: {
+    shadowColor:   "#00e5a0",
+    shadowOffset:  { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius:  24,
+    elevation:     10,
   },
   button: {
     shadowColor:   "#6c63ff",

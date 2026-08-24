@@ -15,18 +15,19 @@ const ROUTE_ORDER = ["index", "roadmap", "courses", "profile", "settings"];
 
 export default function StudentLayout() {
   const segments = useSegments();
+  const currentSegments = segments as readonly string[];
   const router   = useRouter();
 
   // segments[1] is the tab-level segment; missing/undefined means home (index)
-  const tabSeg      = segments[1];
+  const tabSeg      = currentSegments[1];
   const activeSeg   = !tabSeg || tabSeg === "index" ? "index" : tabSeg;
   const activeIndex = Math.max(0, ROUTE_ORDER.indexOf(activeSeg));
   // Hide tab bar on non-tab routes (e.g. course-learn, quiz) or nested sub-routes (courses/[id])
-  const hideTabBar  = !ROUTE_ORDER.includes(activeSeg) || segments.length > 2;
+  const hideTabBar  = !ROUTE_ORDER.includes(activeSeg) || currentSegments.length > 2;
 
   function navigate(i: number) {
     const name = ROUTE_ORDER[i];
-    if (name === "index") router.replace("/(student)/");
+    if (name === "index") router.replace("/(student)/" as never);
     else router.replace(`/(student)/${name}` as never);
   }
 

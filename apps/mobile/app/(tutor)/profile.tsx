@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { apiGet, apiPut } from "../../lib/api";
 import { supabase } from "../../lib/supabase";
 
@@ -24,6 +25,7 @@ interface TutorProfile {
 
 export default function TutorProfile() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [profile,  setProfile]  = useState<TutorProfile | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);

@@ -16,17 +16,18 @@ const ROUTE_ORDER = ["index", "analytics", "courses", "create", "profile", "sett
 
 export default function TutorLayout() {
   const segments    = useSegments();
+  const currentSegments = segments as readonly string[];
   const router      = useRouter();
 
-  const tabSeg      = segments[1];
+  const tabSeg      = currentSegments[1];
   const activeSeg   = !tabSeg || tabSeg === "index" ? "index" : tabSeg;
   const activeIndex = Math.max(0, ROUTE_ORDER.indexOf(activeSeg));
   // Hide tab bar in non-tab routes (module-editor, course detail) or nested sub-routes
-  const hideTabBar  = !ROUTE_ORDER.includes(activeSeg) || segments.length > 2;
+  const hideTabBar  = !ROUTE_ORDER.includes(activeSeg) || currentSegments.length > 2;
 
   function navigate(i: number) {
     const name = ROUTE_ORDER[i];
-    if (name === "index") router.replace("/(tutor)/");
+    if (name === "index") router.replace("/(tutor)/" as never);
     else router.replace(`/(tutor)/${name}` as never);
   }
 

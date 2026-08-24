@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Users, BookOpen, GraduationCap, DollarSign,
-  TrendingUp, CheckCircle, Clock, Loader2, ArrowRight, AlertCircle,
+  TrendingUp, CheckCircle, Loader2, ArrowRight, AlertCircle,
 } from "lucide-react";
 import AdminNavbar from "../../../../components/AdminNavbar";
 import { apiGet } from "../../../../lib/api";
@@ -50,7 +50,6 @@ function GrowthChart() {
 function CourseDonut({ data }: { data: Analytics["enrollments_by_category"] }) {
   const colors = ["#6c63ff", "#00d4ff", "#e7c365"];
   const total = data.reduce((a, b) => a + b.enrollments, 0) || 1;
-  let cumAngle = 0;
 
   function describeArc(startAngle: number, endAngle: number) {
     const r = 55; const cx = 70; const cy = 70;
@@ -64,9 +63,11 @@ function CourseDonut({ data }: { data: Analytics["enrollments_by_category"] }) {
   }
 
   const segments = data.slice(0, 3).map((d, i) => {
+    const startAngle = data
+      .slice(0, i)
+      .reduce((sum, item) => sum + (item.enrollments / total) * 360, 0);
     const angle = (d.enrollments / total) * 360;
-    const path = describeArc(cumAngle, cumAngle + angle);
-    cumAngle += angle;
+    const path = describeArc(startAngle, startAngle + angle);
     return { path, color: colors[i], label: d.category, value: d.enrollments };
   });
 

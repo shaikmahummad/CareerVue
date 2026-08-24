@@ -96,7 +96,7 @@ function ModuleRow({
   const [deleting, setDeleting] = useState(false);
   const [local, setLocal] = useState<LocalModule>(mod);
 
-  function set(k: keyof CourseModule, v: any) {
+  function set<K extends keyof CourseModule>(k: K, v: CourseModule[K]) {
     setLocal((l) => ({ ...l, [k]: v }));
   }
 
@@ -131,8 +131,8 @@ function ModuleRow({
         onSaved(updated);
       }
       setExpanded(false);
-    } catch (e: any) {
-      setLocal((l) => ({ ...l, _error: e.message ?? "Save failed" }));
+    } catch (error: unknown) {
+      setLocal((l) => ({ ...l, _error: error instanceof Error ? error.message : "Save failed" }));
     } finally {
       setSaving(false);
     }
@@ -144,8 +144,8 @@ function ModuleRow({
     if (!mod._unsaved) {
       try {
         await apiDelete(`/api/v1/courses/${courseId}/modules/${mod.id}`);
-      } catch (e: any) {
-        setLocal((l) => ({ ...l, _error: e.message ?? "Delete failed" }));
+      } catch (error: unknown) {
+        setLocal((l) => ({ ...l, _error: error instanceof Error ? error.message : "Delete failed" }));
         setDeleting(false);
         return;
       }
@@ -304,8 +304,8 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       setCourse((c) => c ? { ...c, ...updated } : c);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 3000);
-    } catch (e: any) {
-      setError(e.message ?? "Save failed");
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Save failed");
       setSaveStatus("error");
     } finally {
       setSaving(false);
@@ -317,8 +317,8 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     try {
       await apiPost(`/api/v1/courses/${courseId}/submit`);
       router.push("/tutor/courses?submitted=1");
-    } catch (e: any) {
-      setError(e.message ?? "Submit failed");
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Submit failed");
       setSubmitting(false);
     }
   }

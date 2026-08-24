@@ -1,7 +1,7 @@
 "use client";
 
 import TutorNavbar from "../../../../components/TutorNavbar";
-import { BarChart3, Users, TrendingUp, DollarSign, Star, BookOpen, Award, Clock } from "lucide-react";
+import { BarChart3, Users, TrendingUp, DollarSign, Star } from "lucide-react";
 
 const STATS = [
   { label: "Total Students",    value: "247",    sub: "+18 this month",   icon: Users,       color: "#6c63ff" },

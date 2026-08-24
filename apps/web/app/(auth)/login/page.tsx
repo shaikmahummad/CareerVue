@@ -24,6 +24,7 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const verified = searchParams.get("verified") === "1";
   const verificationFailed = searchParams.get("verification") === "failed";
+  const passwordUpdated = searchParams.get("password") === "updated";
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -161,6 +162,11 @@ function LoginContent() {
               This verification link is invalid or expired. Register again or request a new link.
             </p>
           )}
+          {passwordUpdated && !error && (
+            <p className="mb-4 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl">
+              Password updated. Sign in with your new password.
+            </p>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <input
@@ -202,9 +208,9 @@ function LoginContent() {
                 />
                 <span className="text-xs text-[#7c7a8a]">Remember me</span>
               </label>
-              <a href="#" className="text-xs text-[#6c63ff] hover:text-[#00d4ff] transition-colors">
+              <Link href="/forgot-password" className="text-xs text-[#6c63ff] hover:text-[#00d4ff] transition-colors">
                 Forgot password?
-              </a>
+              </Link>
             </div>
 
             <button

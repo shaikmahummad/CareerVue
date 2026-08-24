@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ChevronLeft, ChevronRight, Check, BookOpen,
+  ChevronLeft, ChevronRight, Check,
   Video, FileText, Loader2, PlusCircle, Trash2, GripVertical,
 } from "lucide-react";
 import TutorNavbar from "../../../../../components/TutorNavbar";
@@ -241,13 +241,11 @@ function DetailsStep({
 function ModuleRow({
   mod,
   index,
-  courseId,
   onChange,
   onDelete,
 }: {
   mod: Module;
   index: number;
-  courseId: string;
   onChange: (id: string, k: keyof ModuleForm, v: string | boolean) => void;
   onDelete: (id: string) => void;
 }) {
@@ -357,7 +355,6 @@ function ModuleRow({
 }
 
 function ModulesStep({
-  courseId,
   modules,
   onAdd,
   onChange,
@@ -365,7 +362,6 @@ function ModulesStep({
   onSaveAll,
   saving,
 }: {
-  courseId: string;
   modules: Module[];
   onAdd: () => void;
   onChange: (id: string, k: keyof ModuleForm, v: string | boolean) => void;
@@ -406,7 +402,6 @@ function ModulesStep({
               key={mod.id}
               mod={mod}
               index={i}
-              courseId={courseId}
               onChange={onChange}
               onDelete={onDelete}
             />
@@ -431,13 +426,11 @@ function ModulesStep({
 // ─── Step 3: Review & Submit ──────────────────────────────────────────────────
 
 function ReviewStep({
-  courseId,
   form,
   modules,
   onSubmit,
   submitting,
 }: {
-  courseId: string;
   form: CourseForm;
   modules: Module[];
   onSubmit: () => void;
@@ -557,8 +550,8 @@ export default function NewCoursePage() {
             tags,
           });
           setCourseId(data.id);
-        } catch (e: any) {
-          setError(e.message ?? "Failed to create course");
+        } catch (error: unknown) {
+          setError(error instanceof Error ? error.message : "Failed to create course");
           setCreating(false);
           return;
         }
@@ -597,7 +590,7 @@ export default function NewCoursePage() {
     setSavingModules(true);
     const unsaved = modules.filter((m) => !m.saved && m.title.trim());
     const results = await Promise.allSettled(
-      unsaved.map((mod, i) =>
+      unsaved.map((mod) =>
         apiPost(`/api/v1/courses/${courseId}/modules`, {
           title:        mod.title.trim(),
           description:  mod.description.trim() || null,
@@ -633,8 +626,8 @@ export default function NewCoursePage() {
     try {
       await apiPost(`/api/v1/courses/${courseId}/submit`);
       router.push("/tutor/courses?submitted=1");
-    } catch (e: any) {
-      setError(e.message ?? "Failed to submit course");
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Failed to submit course");
       setSubmitting(false);
     }
   }
@@ -669,7 +662,6 @@ export default function NewCoursePage() {
               {step === 0 && <DetailsStep form={form} onChange={setField} />}
               {step === 1 && courseId && (
                 <ModulesStep
-                  courseId={courseId}
                   modules={modules}
                   onAdd={addModule}
                   onChange={changeModule}
@@ -680,7 +672,6 @@ export default function NewCoursePage() {
               )}
               {step === 2 && courseId && (
                 <ReviewStep
-                  courseId={courseId}
                   form={form}
                   modules={modules}
                   onSubmit={handleSubmit}

@@ -515,7 +515,7 @@ const s = StyleSheet.create({
     fontFamily: "HankenGrotesk_400Regular",
     fontSize:   15,
     lineHeight: 23,
-    color:      colors.textSecondary ?? colors.textVariant,
+    color:      colors.textVariant,
   },
   pdfBtn: {
     flexDirection:   "row",
@@ -563,7 +563,7 @@ const s = StyleSheet.create({
 
   // Sidebar overlay
   sidebarOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection:  "row",
     zIndex:         100,
   },

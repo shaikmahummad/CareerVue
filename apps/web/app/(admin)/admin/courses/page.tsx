@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  BookOpen, CheckCircle, XCircle, Clock, AlertCircle,
+  BookOpen, CheckCircle, XCircle,
   Users, Star, Loader2, ChevronDown, ChevronUp, Search,
 } from "lucide-react";
 import AdminNavbar from "../../../../components/AdminNavbar";
@@ -123,8 +123,8 @@ function CourseCard({
     try {
       await apiPut(`/api/v1/admin/courses/${course.id}/approve`);
       onApprove(course.id);
-    } catch (e: any) {
-      alert(e.message ?? "Failed to approve");
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Failed to approve");
     } finally {
       setApproving(false);
     }
@@ -136,8 +136,8 @@ function CourseCard({
     try {
       await apiPut(`/api/v1/admin/courses/${course.id}/reject`, { rejection_note: note || null });
       onReject(course.id, note);
-    } catch (e: any) {
-      alert(e.message ?? "Failed to reject");
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Failed to reject");
     } finally {
       setActing(false);
     }
