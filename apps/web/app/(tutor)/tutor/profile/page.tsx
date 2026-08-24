@@ -84,7 +84,7 @@ export default function TutorProfilePage() {
         });
         setTags(data.expertise_tags ?? []);
       })
-      .catch((_e: unknown) => {})
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -119,8 +119,8 @@ export default function TutorProfilePage() {
       setProfile(updated);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 3000);
-    } catch (e: any) {
-      setSaveError(e.message ?? "Save failed");
+    } catch (error: unknown) {
+      setSaveError(error instanceof Error ? error.message : "Save failed");
       setSaveStatus("error");
     } finally {
       setSaving(false);

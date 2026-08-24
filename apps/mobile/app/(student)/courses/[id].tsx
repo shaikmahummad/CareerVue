@@ -540,7 +540,7 @@ const s = StyleSheet.create({
     bottom:   -24,
   },
   heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.4)",
   },
   playWrap: {},

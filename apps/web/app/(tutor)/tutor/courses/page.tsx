@@ -60,8 +60,8 @@ function CourseCard({
     try {
       await apiDelete(`/api/v1/courses/${course.id}`);
       onDelete(course.id);
-    } catch (e: any) {
-      alert(e.message ?? "Failed to delete course");
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Failed to delete course");
     } finally {
       setDeleting(false);
     }
@@ -72,8 +72,8 @@ function CourseCard({
     try {
       await apiPost(`/api/v1/courses/${course.id}/submit`);
       onSubmit(course.id);
-    } catch (e: any) {
-      alert(e.message ?? "Failed to submit course");
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Failed to submit course");
     } finally {
       setSubmitting(false);
     }

@@ -86,8 +86,8 @@ function RoleDropdown({
     try {
       await apiPut(`/api/v1/admin/users/${userId}/role`, { role });
       onChanged(userId, role);
-    } catch (e: any) {
-      alert(e.message ?? "Failed to change role");
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Failed to change role");
     } finally {
       setLoading(false);
     }
@@ -166,8 +166,8 @@ function UserRow({
     try {
       await apiDelete(`/api/v1/admin/users/${user.id}`);
       onDeactivate(user.id);
-    } catch (e: any) {
-      alert(e.message ?? "Failed to deactivate user");
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Failed to deactivate user");
     } finally {
       setDeactivating(false);
     }
@@ -232,7 +232,10 @@ export default function AdminUsersPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { fetchUsers(filter, search); }, [filter]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => fetchUsers(filter, ""), 0);
+    return () => window.clearTimeout(timer);
+  }, [filter]);
 
   function handleSearchChange(val: string) {
     setSearch(val);

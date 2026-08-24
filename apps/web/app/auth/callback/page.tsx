@@ -16,6 +16,7 @@ export default function AuthCallbackPage() {
       const accessToken = hash.get("access_token");
       const refreshToken = hash.get("refresh_token");
       const code = url.searchParams.get("code");
+      const next = url.searchParams.get("next") === "/reset-password" ? "/reset-password" : null;
 
       let failed = false;
       if (accessToken && refreshToken) {
@@ -30,7 +31,7 @@ export default function AuthCallbackPage() {
       } else {
         failed = true;
       }
-      router.replace(failed ? "/login?verification=failed" : "/login?verified=1");
+      router.replace(failed ? "/login?verification=failed" : (next ?? "/login?verified=1"));
     }
 
     void finishVerification();

@@ -161,7 +161,7 @@ function ModuleListItem({
 
 // ─── Completion overlay ───────────────────────────────────────────────────────
 
-function CompletionOverlay({ courseTitle, onClose }: { courseTitle: string; onClose: () => void }) {
+function CompletionOverlay({ courseTitle }: { courseTitle: string }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -284,22 +284,25 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
     }
   }, [id, router]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadData(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   // ── Mark module complete ────────────────────────────────────────────────────
 
   async function markComplete() {
     if (!course || !enrollment) return;
-    const module = course.modules[currentIdx];
-    if (!module || completedIds.has(module.id)) return;
+    const courseModule = course.modules[currentIdx];
+    if (!courseModule || completedIds.has(courseModule.id)) return;
 
     setMarking(true);
     try {
       await apiPut(`/api/v1/enrollments/${enrollment.id}/progress`, {
-        module_id: module.id,
+        module_id: courseModule.id,
       });
       const next = new Set(completedIds);
-      next.add(module.id);
+      next.add(courseModule.id);
       setCompletedIds(next);
 
       // Auto-advance to next module if available
@@ -371,7 +374,6 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
       {showCelebration && (
         <CompletionOverlay
           courseTitle={course.title}
-          onClose={() => setShowCelebration(false)}
         />
       )}
 

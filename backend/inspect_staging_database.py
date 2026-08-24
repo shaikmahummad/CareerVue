@@ -81,6 +81,25 @@ async def inspect() -> None:
                         text("select version_num from alembic_version")
                     )
                 ).scalar_one_or_none()
+            duplicate_email_groups = (
+                await connection.execute(
+                    text(
+                        "select count(*) from ("
+                        "select lower(trim(email)) from profiles "
+                        "group by lower(trim(email)) having count(*) > 1"
+                        ") duplicates"
+                    )
+                )
+            ).scalar_one()
+            normalized_email_index = (
+                await connection.execute(
+                    text(
+                        "select to_regclass("
+                        "'public.uq_profiles_email_normalized'"
+                        ") is not null"
+                    )
+                )
+            ).scalar_one()
 
         application_tables = {
             "profiles",
@@ -97,6 +116,11 @@ async def inspect() -> None:
         print(f"PUBLIC_TABLE_COUNT={len(tables)}")
         print(f"ALEMBIC_TABLE={'PRESENT' if has_alembic else 'ABSENT'}")
         print(f"ALEMBIC_REVISION={revision or 'NONE'}")
+        print(f"DUPLICATE_NORMALIZED_EMAIL_GROUPS={duplicate_email_groups}")
+        print(
+            "NORMALIZED_EMAIL_INDEX="
+            f"{'PRESENT' if normalized_email_index else 'ABSENT'}"
+        )
         print(
             "APP_TABLES_PRESENT="
             f"{sum(table in application_tables for table in tables)}"

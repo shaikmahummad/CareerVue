@@ -151,7 +151,10 @@ export default function RoadmapPage() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchRoadmap(); }, [fetchRoadmap]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void fetchRoadmap(), 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchRoadmap]);
 
   async function handleRegenerate() {
     setRegenerating(true);

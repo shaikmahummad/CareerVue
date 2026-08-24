@@ -1,6 +1,6 @@
 # Dependency security review
 
-Reviewed on 2026-08-23 with `npm audit --json`, package metadata, and a
+Reviewed again on 2026-08-25 with `npm audit --omit=dev --json`, package metadata, and a
 non-force audit-fix dry run. `npm audit fix --force` was not used.
 
 ## Changes applied
@@ -9,7 +9,9 @@ non-force audit-fix dry run. `npm audit fix --force` was not used.
   This is a non-major framework update that resolves the reported Next.js,
   bundled PostCSS, and bundled Sharp advisories. The repository now requires
   Node.js 20.9 or newer, matching Next.js 16.3.2's engine requirement.
-- Expo: `56.0.9` to `56.0.20`, within SDK 56.
+- Expo: upgraded to supported SDK 57 (`expo` 57.0.16, React Native 0.86.2,
+  React 19.2.3). The repository and frontend CI now require Node.js 22.13 or
+  newer, matching Expo SDK 57's minimum.
 - Reviewed `npm audit fix` without `--force`, updating 14 transitives within
   their declared compatible ranges, including `brace-expansion`, `fast-uri`,
   `hono`, `ip-address`, `js-yaml`, and `shell-quote`.
@@ -17,7 +19,7 @@ non-force audit-fix dry run. `npm audit fix --force` was not used.
 | Severity | Before | Fixed | Remaining |
 | --- | ---: | ---: | ---: |
 | Low | 1 | 1 | 0 |
-| Moderate | 12 | 2 | 10 |
+| Moderate | 12 | 1 | 11 |
 | High | 14 | 10 | 4 |
 | Critical | 0 | 0 | 0 |
 
@@ -30,11 +32,11 @@ of the deployed FastAPI or Next.js server runtime. Expo SDK 56 currently pins
 the affected Metro line; overriding it independently would risk an unsupported
 mobile toolchain combination.
 
-The ten moderate findings are Expo CLI/config tooling plus `uuid` through the
+The eleven moderate findings are Expo CLI/config tooling plus `uuid` through the
 `xcode` project-file build tool. npm's proposed forced remediation installs
 Expo 46, a breaking and incompatible SDK downgrade, so it was rejected.
 
 These findings are not false positives, but their affected paths are mobile
-build-time tooling rather than request-handling code. Recheck them when Expo
-publishes an SDK 56-compatible Metro/config fix or during a tested SDK 57
-migration.
+build-time tooling rather than request-handling code. Expo Doctor 1.20.3 passes
+all 21 checks on SDK 57. Recheck the audit whenever Expo publishes a compatible
+Metro/config update; do not use npm's proposed Expo 46 downgrade.

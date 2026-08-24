@@ -1,7 +1,7 @@
 "use client";
 
 import StudentNavbar from "../../../components/StudentNavbar";
-import { TrendingUp, Brain, Clock, Target, Zap, BookOpen, Award, BarChart3 } from "lucide-react";
+import { TrendingUp, Brain, Clock, Target, Zap, Award, BarChart3 } from "lucide-react";
 
 const QUIZ_HISTORY = [
   { date: "May 15", score: 42, level: "Junior" },

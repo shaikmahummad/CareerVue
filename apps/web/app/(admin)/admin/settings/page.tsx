@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Settings, Shield, Bell, Users, Database, LogOut, ChevronRight, Loader2 } from "lucide-react";
+import { Settings, Shield, Bell, Users, Database, LogOut, Loader2 } from "lucide-react";
 import AdminNavbar from "../../../../components/AdminNavbar";
 import { createClient } from "../../../../lib/supabase/client";
 

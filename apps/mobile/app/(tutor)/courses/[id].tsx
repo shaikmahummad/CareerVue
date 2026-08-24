@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
   Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { apiGet, apiPut, apiPost } from "../../../lib/api";
+import { apiDelete, apiGet, apiPut, apiPost } from "../../../lib/api";
 import { colors } from "../../../constants/theme";
 
 interface Module {
@@ -62,7 +62,7 @@ export default function CourseEditor() {
   const [isFree,   setIsFree]   = useState(true);
   const [price,    setPrice]    = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const data = await apiGet<CourseDetail>(`/api/v1/courses/${id}`);
       setCourse(data);
@@ -78,14 +78,12 @@ export default function CourseEditor() {
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => { load(); }, [id]);
+  }, [id, router]);
 
   // Reload modules when screen is focused (after adding/editing a module)
   useFocusEffect(useCallback(() => {
-    if (!loading) load();
-  }, [id, loading]));
+    void load();
+  }, [load]));
 
   async function handleSave() {
     if (!title.trim()) { Alert.alert("Validation", "Title is required."); return; }
@@ -100,8 +98,8 @@ export default function CourseEditor() {
         price:       isFree ? 0 : parseFloat(price) || 0,
       });
       Alert.alert("Saved", "Course info updated.");
-    } catch (e: any) {
-      Alert.alert("Error", e?.message ?? "Failed to save.");
+    } catch (error: unknown) {
+      Alert.alert("Error", error instanceof Error ? error.message : "Failed to save.");
     } finally {
       setSaving(false);
     }
@@ -121,8 +119,8 @@ export default function CourseEditor() {
               await apiPost(`/api/v1/courses/${id}/submit`, {});
               Alert.alert("Submitted!", "Your course is now under review.");
               load();
-            } catch (e: any) {
-              Alert.alert("Error", e?.message ?? "Failed to submit.");
+            } catch (error: unknown) {
+              Alert.alert("Error", error instanceof Error ? error.message : "Failed to submit.");
             } finally {
               setSubmitting(false);
             }
@@ -139,12 +137,12 @@ export default function CourseEditor() {
         text: "Delete", style: "destructive",
         onPress: async () => {
           try {
-            await apiPut(`/api/v1/courses/${id}/modules/${moduleId}`, { _delete: true });
+            await apiDelete(`/api/v1/courses/${id}/modules/${moduleId}`);
             setCourse((prev) =>
               prev ? { ...prev, modules: prev.modules.filter((m) => m.id !== moduleId) } : prev
             );
-          } catch (e: any) {
-            Alert.alert("Error", e?.message ?? "Failed to delete.");
+          } catch (error: unknown) {
+            Alert.alert("Error", error instanceof Error ? error.message : "Failed to delete.");
           }
         },
       },

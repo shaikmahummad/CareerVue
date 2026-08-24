@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { apiGet, apiPut } from "../../lib/api";
+import { apiDelete, apiGet, apiPut } from "../../lib/api";
 
 interface UserProfile {
   id: string;
@@ -78,10 +78,10 @@ export default function UsersScreen() {
           onPress: async () => {
             setUpdating(user.id);
             try {
-              await apiPut(`/api/v1/admin/users/${user.id}/role`, { role: "deactivated" });
+              await apiDelete(`/api/v1/admin/users/${user.id}`);
               setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, role: "deactivated" } : u));
-            } catch (e: any) {
-              Alert.alert("Error", e.message ?? "Failed to deactivate user");
+            } catch (error: unknown) {
+              Alert.alert("Error", error instanceof Error ? error.message : "Failed to deactivate user");
             } finally {
               setUpdating(null);
             }
@@ -103,8 +103,8 @@ export default function UsersScreen() {
           try {
             await apiPut(`/api/v1/admin/users/${user.id}/role`, { role: r });
             setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, role: r } : u));
-          } catch (e: any) {
-            Alert.alert("Error", e.message ?? "Failed to update role");
+          } catch (error: unknown) {
+            Alert.alert("Error", error instanceof Error ? error.message : "Failed to update role");
           } finally {
             setUpdating(null);
           }

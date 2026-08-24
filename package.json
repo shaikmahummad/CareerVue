@@ -10,21 +10,33 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "lint": "turbo run lint",
+    "lint": "npm run lint --workspace=@careervue/web && npm run lint --workspace=@careervue/mobile && tsc -p packages/api-client/tsconfig.json --noEmit",
     "dev:web": "turbo run dev --filter=web",
     "dev:mobile": "turbo run dev --filter=mobile",
     "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000"
   },
   "devDependencies": {
-    "next": "16.3.2",
+    "@expo/dom-webview": "57.0.1",
+    "@expo/log-box": "57.0.3",
+    "expo-constants": "57.0.14",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "turbo": "^2.0.0",
     "typescript": "^5.4.0"
   },
   "engines": {
-    "node": ">=20.9.0",
+    "node": ">=22.13.0",
     "npm": ">=9.0.0"
   },
-  "dependencies": {
-    "nativewind": "^4.2.3"
+  "overrides": {
+    "@expo/dom-webview": "57.0.1",
+    "@expo/log-box": "57.0.3",
+    "expo-constants": "57.0.14",
+    "expo-router": "57.0.16",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-reanimated": "4.5.1",
+    "react-native-worklets": "0.10.1"
   }
 }

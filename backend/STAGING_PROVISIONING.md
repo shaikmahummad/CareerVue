@@ -5,7 +5,9 @@
 On 2026-08-24, the guarded staging configuration was verified against a distinct
 Supabase project, its initially empty database completed the full migration
 upgrade/downgrade/rebuild cycle, and it was seeded with the reviewed taxonomy and
-question banks. The database is at `c9d0e1f2a3b4` with 25 public tables.
+question banks. A release audit later that day confirmed 25 public tables, zero
+case-insensitive duplicate profile-email groups, and revision `c9d0e1f2a3b4`.
+Staging must be upgraded to the current head `d0e1f2a3b4c5` before release.
 
 Fly authentication is configured for the operator's personal organization, but
 creating `careervue-api-staging` is blocked until Fly billing is configured. No
@@ -82,7 +84,7 @@ flyctl secrets set --app <STAGING_APP_ID> `
 ```
 
 6. Migrate explicitly before starting the staging API. Confirm that
-   `c9d0e1f2a3b4` is the reported head, then seed the reviewed question banks.
+   `d0e1f2a3b4c5` is the reported head, then seed the reviewed question banks.
 
 ```powershell
 Set-Location backend
@@ -145,7 +147,8 @@ where connamespace = 'public'::regnamespace
 order by table_name, conname;
 ```
 
-Expected Alembic head: `c9d0e1f2a3b4`. Verify the question-bank tables, v2
+Expected Alembic head: `d0e1f2a3b4c5`. Verify the normalized profile-email index,
+question-bank tables, v2
 template fields, authoritative attempt question-set fields, lifecycle checks,
 foreign keys, and cleanup indexes against the CI assertions in
 `tests/test_quiz_postgres_integration.py`.
