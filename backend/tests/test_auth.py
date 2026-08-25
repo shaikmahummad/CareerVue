@@ -1,15 +1,19 @@
 import unittest
 import uuid
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.database import get_db
+from app.models.user import EmailVerificationToken
 from app.routers import auth
-from app.schemas.auth import LoginRequest, RegisterStudentRequest
+from app.schemas.auth import LoginRequest, RegisterStudentRequest, ResendVerificationRequest
+from app.services import email_verification_service
+from app.services.email_verification_service import hash_verification_token
 
 
 VALID_SIGNUP = {
@@ -44,6 +48,34 @@ class FakeSession:
         if self.execute_count == 3:
             return ScalarResult(None)
         return ScalarResult(None)
+
+    def add(self, value):
+        self.added.append(value)
+
+    async def commit(self):
+        self.commits += 1
+
+    async def flush(self):
+        pass
+
+    async def rollback(self):
+        self.rollbacks += 1
+
+
+class FlowSession:
+    def __init__(self, *results, profile=None):
+        self.results = list(results)
+        self.profile = profile
+        self.added = []
+        self.commits = 0
+        self.rollbacks = 0
+
+    async def execute(self, _statement):
+        value = self.results.pop(0) if self.results else None
+        return ScalarResult(value)
+
+    async def get(self, _model, _identifier, **_kwargs):
+        return self.profile
 
     def add(self, value):
         self.added.append(value)
@@ -161,7 +193,7 @@ class RegistrationApiTests(unittest.TestCase):
         session = FakeSession()
         with (
             client_for(session) as client,
-            patch.object(auth.supabase_anon.auth, "sign_up") as sign_up,
+            patch.object(auth.supabase_admin.auth.admin, "create_user") as create_user,
         ):
             response = client.post(
                 "/api/v1/auth/register/student",
@@ -169,7 +201,7 @@ class RegistrationApiTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 422)
         self.assertIsInstance(response.json()["detail"], list)
-        sign_up.assert_not_called()
+        create_user.assert_not_called()
         self.assertEqual(session.execute_count, 0)
 
     def test_api_registers_normalized_valid_user_and_requests_verification(self):
@@ -180,7 +212,12 @@ class RegistrationApiTests(unittest.TestCase):
         )
         with (
             client_for(session) as client,
-            patch.object(auth.supabase_anon.auth, "sign_up", return_value=auth_response) as sign_up,
+            patch.object(
+                auth.supabase_admin.auth.admin,
+                "create_user",
+                return_value=auth_response,
+            ) as create_user,
+            patch.object(auth, "send_verification_email", new_callable=AsyncMock) as send_email,
         ):
             response = client.post(
                 "/api/v1/auth/register/student",
@@ -193,20 +230,22 @@ class RegistrationApiTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 201)
         self.assertIn("verify", response.json()["message"].lower())
-        signup_payload = sign_up.call_args.args[0]
+        signup_payload = create_user.call_args.args[0]
         self.assertEqual(signup_payload["email"], "user@gmail.com")
-        self.assertNotIn("email_confirm", signup_payload)
-        self.assertEqual(
-            signup_payload["options"]["email_redirect_to"],
-            "http://localhost:3000/auth/callback",
-        )
+        self.assertFalse(signup_payload["email_confirm"])
+        self.assertEqual(signup_payload["user_metadata"]["role"], "student")
+        send_email.assert_awaited_once()
+        sent_token = send_email.await_args.args[1]
+        token_rows = [row for row in session.added if isinstance(row, EmailVerificationToken)]
+        self.assertEqual(len(token_rows), 1)
+        self.assertEqual(token_rows[0].token_hash, hash_verification_token(sent_token))
         self.assertEqual(session.commits, 1)
 
     def test_duplicate_profile_email_returns_clear_conflict(self):
         session = FakeSession(existing_profile=uuid.uuid4())
         with (
             client_for(session) as client,
-            patch.object(auth.supabase_anon.auth, "sign_up") as sign_up,
+            patch.object(auth.supabase_admin.auth.admin, "create_user") as create_user,
         ):
             response = client.post(
                 "/api/v1/auth/register/student",
@@ -214,16 +253,18 @@ class RegistrationApiTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["detail"], "An account with this email already exists.")
-        sign_up.assert_not_called()
+        create_user.assert_not_called()
 
-    def test_obfuscated_duplicate_auth_response_returns_clear_conflict(self):
+    def test_missing_auth_user_response_returns_clear_conflict(self):
         session = FakeSession()
-        auth_response = SimpleNamespace(
-            user=SimpleNamespace(id=str(uuid.uuid4()), identities=[])
-        )
+        auth_response = SimpleNamespace(user=None)
         with (
             client_for(session) as client,
-            patch.object(auth.supabase_anon.auth, "sign_up", return_value=auth_response),
+            patch.object(
+                auth.supabase_admin.auth.admin,
+                "create_user",
+                return_value=auth_response,
+            ),
         ):
             response = client.post(
                 "/api/v1/auth/register/student", json=VALID_SIGNUP
@@ -244,6 +285,7 @@ class LoginTests(unittest.TestCase):
                 LoginRequest.model_validate(payload)
 
     def test_valid_verified_login_returns_tokens(self):
+        profile = SimpleNamespace(email_verified=True)
         response = SimpleNamespace(
             session=SimpleNamespace(
                 access_token="access",
@@ -257,7 +299,10 @@ class LoginTests(unittest.TestCase):
             ),
         )
         with patch.object(auth.supabase_admin.auth, "sign_in_with_password", return_value=response):
-            result = __import__("asyncio").run(login_result({"email": " USER@Gmail.com ", "password": "secret1"}))
+            result = __import__("asyncio").run(login_result(
+                {"email": " USER@Gmail.com ", "password": "secret1"},
+                FlowSession(profile),
+            ))
         self.assertEqual(result["data"]["access_token"], "access")
 
     def test_wrong_password_unknown_or_unverified_user_gets_safe_401(self):
@@ -267,13 +312,124 @@ class LoginTests(unittest.TestCase):
                 patch.object(auth.supabase_admin.auth, "sign_in_with_password", side_effect=Exception(provider_error)),
                 self.assertRaises(HTTPException) as raised,
             ):
-                __import__("asyncio").run(login_result({"email": "user@gmail.com", "password": "wrongpw"}))
+                __import__("asyncio").run(login_result(
+                    {"email": "user@gmail.com", "password": "wrongpw"},
+                    FlowSession(None),
+                ))
             self.assertEqual(raised.exception.status_code, 401)
             self.assertNotIn(provider_error, raised.exception.detail)
 
+    def test_unverified_user_cannot_login(self):
+        profile = SimpleNamespace(email_verified=False)
+        with (
+            patch.object(auth.supabase_admin.auth, "sign_in_with_password") as sign_in,
+            self.assertRaises(HTTPException) as raised,
+        ):
+            __import__("asyncio").run(login_result(
+                {"email": "user@gmail.com", "password": "secret1"},
+                FlowSession(profile),
+            ))
+        self.assertEqual(raised.exception.status_code, 403)
+        sign_in.assert_not_called()
 
-async def login_result(payload):
-    return await auth.login(LoginRequest.model_validate(payload))
+
+class EmailVerificationTests(unittest.TestCase):
+    def token_row(self, raw_token="raw-verification-token-123456789", **overrides):
+        now = datetime.now(timezone.utc)
+        values = {
+            "id": uuid.uuid4(),
+            "user_id": uuid.uuid4(),
+            "token_hash": hash_verification_token(raw_token),
+            "expires_at": now + timedelta(hours=1),
+            "used_at": None,
+            "created_at": now - timedelta(minutes=5),
+        }
+        values.update(overrides)
+        return SimpleNamespace(**values)
+
+    def test_successful_verification(self):
+        raw_token = "raw-verification-token-123456789"
+        token_row = self.token_row(raw_token)
+        profile = SimpleNamespace(
+            id=token_row.user_id,
+            email="user@gmail.com",
+            email_verified=False,
+        )
+        session = FlowSession(token_row, None, profile=profile)
+        with patch.object(
+            auth.supabase_admin.auth.admin, "update_user_by_id"
+        ) as confirm_user:
+            result = __import__("asyncio").run(
+                auth.verify_email(token=raw_token, db=session)
+            )
+        self.assertTrue(result["success"])
+        self.assertTrue(profile.email_verified)
+        self.assertEqual(session.commits, 1)
+        confirm_user.assert_called_once_with(str(profile.id), {"email_confirm": True})
+
+    def test_invalid_token(self):
+        with self.assertRaises(HTTPException) as raised:
+            __import__("asyncio").run(
+                auth.verify_email(token="invalid-verification-token-123", db=FlowSession(None))
+            )
+        self.assertEqual(raised.exception.status_code, 400)
+
+    def test_expired_token(self):
+        token_row = self.token_row(
+            expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)
+        )
+        with self.assertRaises(HTTPException) as raised:
+            __import__("asyncio").run(
+                auth.verify_email(token="raw-verification-token-123456789", db=FlowSession(token_row))
+            )
+        self.assertEqual(raised.exception.status_code, 400)
+
+    def test_reused_token(self):
+        token_row = self.token_row(used_at=datetime.now(timezone.utc))
+        with self.assertRaises(HTTPException) as raised:
+            __import__("asyncio").run(
+                auth.verify_email(token="raw-verification-token-123456789", db=FlowSession(token_row))
+            )
+        self.assertEqual(raised.exception.status_code, 400)
+
+    def test_resend_invalidates_old_token_and_sends_hashed_new_token(self):
+        profile = SimpleNamespace(
+            id=uuid.uuid4(), email="user@gmail.com", email_verified=False
+        )
+        old_token = self.token_row(
+            user_id=profile.id,
+            created_at=datetime.now(timezone.utc) - timedelta(minutes=2),
+        )
+        session = FlowSession(profile, old_token, None)
+        with patch.object(auth, "send_verification_email", new_callable=AsyncMock) as send:
+            result = __import__("asyncio").run(auth.resend_verification(
+                ResendVerificationRequest(email=profile.email), session
+            ))
+        self.assertTrue(result["success"])
+        self.assertEqual(session.commits, 1)
+        send.assert_awaited_once()
+        raw_token = send.await_args.args[1]
+        new_tokens = [row for row in session.added if isinstance(row, EmailVerificationToken)]
+        self.assertEqual(len(new_tokens), 1)
+        self.assertEqual(new_tokens[0].token_hash, hash_verification_token(raw_token))
+        self.assertNotEqual(new_tokens[0].token_hash, raw_token)
+
+    def test_missing_smtp_configuration_raises_clear_error(self):
+        with patch.object(email_verification_service.settings, "smtp_host", ""), \
+             patch.object(email_verification_service.settings, "smtp_username", ""), \
+             patch.object(email_verification_service.settings, "smtp_password", ""), \
+             patch.object(email_verification_service.settings, "smtp_from_email", ""), \
+             patch.object(email_verification_service.settings, "smtp_from_name", ""), \
+             patch.object(email_verification_service.settings, "frontend_url", ""):
+            with self.assertRaises(RuntimeError) as raised:
+                email_verification_service._send_verification_email_sync(
+                    "user@gmail.com", "raw-token"
+                )
+        self.assertIn("Missing email configuration", str(raised.exception))
+
+
+async def login_result(payload, db):
+    return await auth.login(LoginRequest.model_validate(payload), db)
 
 
 if __name__ == "__main__":

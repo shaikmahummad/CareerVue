@@ -1,7 +1,8 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -9,25 +10,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import CurrentUser
-from app.models.user import Profile, Student, Tutor
+from app.models.user import EmailVerificationToken, Profile, Student, Tutor
 from app.schemas.auth import (
     LoginRequest,
     RefreshRequest,
+    ResendVerificationRequest,
     RegisterStudentRequest,
     RegisterTutorRequest,
 )
-from app.utils.supabase import supabase_admin, supabase_anon
+from app.services.email_verification_service import (
+    RESEND_COOLDOWN,
+    hash_verification_token,
+    invalidate_unused_tokens,
+    issue_verification_token,
+    latest_token_for_user,
+    send_verification_email,
+)
+from app.utils.supabase import supabase_admin
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _registration_options(body, role: str) -> dict:
-    options = {"data": {"full_name": body.full_name, "role": role}}
-    if body.email_redirect_to:
-        options["email_redirect_to"] = body.email_redirect_to
-    return options
 
 
 def _is_duplicate_auth_error(exc: Exception) -> bool:
@@ -48,10 +51,11 @@ async def _email_exists(db: AsyncSession, email: str) -> bool:
 
 def _signup_with_verification(body, role: str) -> uuid.UUID:
     try:
-        response = supabase_anon.auth.sign_up({
+        response = supabase_admin.auth.admin.create_user({
             "email": body.email,
             "password": body.password,
-            "options": _registration_options(body, role),
+            "email_confirm": False,
+            "user_metadata": {"full_name": body.full_name, "role": role},
         })
     except Exception as exc:
         if _is_duplicate_auth_error(exc):
@@ -66,8 +70,7 @@ def _signup_with_verification(body, role: str) -> uuid.UUID:
         ) from None
 
     user = response.user
-    # Supabase may deliberately return an obfuscated user for an existing email.
-    if not user or getattr(user, "identities", None) == []:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
@@ -124,7 +127,6 @@ async def _persist_student(
             linkedin_url=body.linkedin_url,
             github_url=body.github_url,
         ))
-    await db.commit()
 
 
 async def _persist_tutor(
@@ -167,12 +169,16 @@ async def _persist_tutor(
             linkedin_url=body.linkedin_url,
             website_url=body.website_url,
         ))
-    await db.commit()
 
 
-async def _persist_registration(db, body, user_id, persist) -> None:
+async def _persist_registration(db, body, user_id, persist) -> str:
     try:
         await persist(db, body, user_id)
+        raw_token = await issue_verification_token(db, user_id)
+        await db.flush()
+        await send_verification_email(body.email, raw_token)
+        await db.commit()
+        return raw_token
     except IntegrityError:
         await db.rollback()
         _delete_auth_user(user_id)
@@ -227,8 +233,114 @@ async def register_tutor(
     }
 
 
+@router.get("/verify-email")
+async def verify_email(
+    token: str = Query(min_length=20, max_length=200),
+    db: AsyncSession = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    token_row = (
+        await db.execute(
+            select(EmailVerificationToken)
+            .where(
+                EmailVerificationToken.token_hash == hash_verification_token(token)
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if (
+        token_row is None
+        or token_row.used_at is not None
+        or token_row.expires_at <= now
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This verification link is invalid or expired.",
+        )
+
+    profile = await db.get(Profile, token_row.user_id, with_for_update=True)
+    if profile is None or profile.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This verification link is invalid or expired.",
+        )
+
+    try:
+        supabase_admin.auth.admin.update_user_by_id(
+            str(profile.id), {"email_confirm": True}
+        )
+    except Exception:
+        logger.exception("Failed to confirm Supabase auth user")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification is temporarily unavailable.",
+        ) from None
+
+    profile.email_verified = True
+    await invalidate_unused_tokens(db, profile.id, now=now)
+    await db.commit()
+    return {
+        "success": True,
+        "message": "Email verified successfully.",
+        "data": None,
+    }
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    body: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    profile = (
+        await db.execute(
+            select(Profile)
+            .where(func.lower(Profile.email) == body.email)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    generic_response = {
+        "success": True,
+        "message": "If the account is awaiting verification, a new email is on its way.",
+        "data": None,
+    }
+    if profile is None or profile.email_verified:
+        return generic_response
+
+    now = datetime.now(timezone.utc)
+    latest = await latest_token_for_user(db, profile.id)
+    if latest and latest.created_at + RESEND_COOLDOWN > now:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait before requesting another verification email.",
+        )
+
+    await invalidate_unused_tokens(db, profile.id, now=now)
+    raw_token = await issue_verification_token(db, profile.id, now=now)
+    try:
+        await send_verification_email(profile.email, raw_token)
+    except Exception:
+        logger.exception("Failed to resend verification email")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email could not be sent. Please try again.",
+        ) from None
+    await db.commit()
+    return generic_response
+
+
 @router.post("/login")
-async def login(body: LoginRequest):
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    profile = (
+        await db.execute(
+            select(Profile).where(func.lower(Profile.email) == body.email)
+        )
+    ).scalar_one_or_none()
+    if profile is not None and not profile.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verify your email before signing in.",
+        )
     try:
         response = supabase_admin.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
