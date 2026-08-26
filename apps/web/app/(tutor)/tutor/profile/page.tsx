@@ -35,7 +35,7 @@ function AvatarInitial({ name }: { name: string }) {
     .join("");
 
   return (
-    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-2xl font-bold shadow-md flex-shrink-0">
+    <div className="w-20 h-20 rounded-2xl gradient-primary flex items-center justify-center text-white text-2xl font-bold shadow-[0_0_24px_rgba(108,99,255,0.2)] flex-shrink-0">
       {initials || "T"}
     </div>
   );
@@ -46,13 +46,13 @@ function AvatarInitial({ name }: { name: string }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
+      <label className="block text-sm font-medium text-[#cbc4d2] mb-1.5">{label}</label>
       {children}
     </div>
   );
 }
 
-const inputCls = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-all";
+const inputCls = "w-full bg-[#050508] px-3.5 py-2.5 border border-white/[0.1] rounded-xl text-sm text-white placeholder-[#7c7a8a] focus:outline-none focus:ring-2 focus:ring-[#6c63ff]/40 focus:border-[#6c63ff] transition-all";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -129,31 +129,31 @@ export default function TutorProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[#050508]">
         <TutorNavbar />
         <div className="flex items-center justify-center py-32">
-          <Loader2 size={28} className="animate-spin text-blue-400" />
+          <Loader2 size={28} className="animate-spin text-[#6c63ff]" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#050508]">
       <TutorNavbar />
 
       <main className="max-w-2xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">My Profile</h1>
+        <h1 className="text-2xl font-bold text-white mb-6">My Profile</h1>
 
         {/* Identity card */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-5">
+        <div className="glass-card rounded-2xl p-6 mb-5">
           <div className="flex items-center gap-4 mb-6">
             <AvatarInitial name={profile?.full_name ?? ""} />
             <div>
-              <p className="text-lg font-bold text-gray-900">{profile?.full_name}</p>
-              <p className="text-sm text-gray-500">{profile?.email}</p>
+              <p className="text-lg font-bold text-white">{profile?.full_name}</p>
+              <p className="text-sm text-[#7c7a8a]">{profile?.email}</p>
               {profile?.is_verified && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full mt-1">
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-[#00d4ff] bg-[#00d4ff]/10 px-2 py-0.5 rounded-full mt-1">
                   <Check size={11} /> Verified Tutor
                 </span>
               )}
@@ -161,20 +161,20 @@ export default function TutorProfilePage() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-gray-400 text-xs mb-0.5">Total Earnings</p>
-              <p className="font-bold text-gray-900">₹{(profile?.total_earnings ?? 0).toLocaleString()}</p>
+            <div className="bg-[#050508] rounded-xl p-4">
+              <p className="text-[#7c7a8a] text-xs mb-0.5">Total Earnings</p>
+              <p className="font-bold text-white">₹{(profile?.total_earnings ?? 0).toLocaleString()}</p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-gray-400 text-xs mb-0.5">Account Status</p>
-              <p className="font-medium text-gray-900">{profile?.is_verified ? "Verified" : "Pending verification"}</p>
+            <div className="bg-[#050508] rounded-xl p-4">
+              <p className="text-[#7c7a8a] text-xs mb-0.5">Account Status</p>
+              <p className="font-medium text-white">{profile?.is_verified ? "Verified" : "Pending verification"}</p>
             </div>
           </div>
         </div>
 
         {/* Editable fields */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-5">
-          <p className="text-sm font-semibold text-gray-700 mb-4">Professional Details</p>
+        <div className="glass-card rounded-2xl p-6 mb-5">
+          <p className="text-sm font-semibold text-[#cbc4d2] mb-4">Professional Details</p>
           <div className="space-y-4">
             <Field label="Phone">
               <input className={inputCls} value={form.phone} onChange={(e) => set("phone")(e.target.value)} placeholder="+91 9876543210" />
@@ -200,9 +200,9 @@ export default function TutorProfilePage() {
             <Field label="Expertise Tags">
               <div className="flex flex-wrap gap-2 mb-2">
                 {tags.map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-1 text-xs font-medium bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
+                  <span key={tag} className="inline-flex items-center gap-1 text-xs font-medium bg-[#6c63ff]/10 text-[#c4c0ff] px-2.5 py-1 rounded-full">
                     {tag}
-                    <button onClick={() => removeTag(tag)} className="hover:text-blue-900 transition-colors">
+                    <button onClick={() => removeTag(tag)} className="hover:text-[#00d4ff] transition-colors">
                       <X size={11} />
                     </button>
                   </span>
@@ -218,9 +218,9 @@ export default function TutorProfilePage() {
                 />
                 <button
                   onClick={addTag}
-                  className="px-3 py-2 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors flex-shrink-0"
+                  className="px-3 py-2 bg-white/[0.06] rounded-xl hover:bg-white/[0.1] transition-colors flex-shrink-0"
                 >
-                  <Plus size={16} className="text-gray-600" />
+                  <Plus size={16} className="text-[#cbc4d2]" />
                 </button>
               </div>
             </Field>
@@ -235,11 +235,11 @@ export default function TutorProfilePage() {
           </div>
 
           {/* Save */}
-          <div className="flex items-center gap-3 mt-5 pt-4 border-t border-gray-100">
+          <div className="flex items-center gap-3 mt-5 pt-4 border-t border-white/[0.07]">
             <button
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60"
+              className="inline-flex items-center gap-2 bg-[#6c63ff] text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-[#5b54e6] transition-colors disabled:opacity-60"
             >
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
               Save Profile
@@ -250,7 +250,7 @@ export default function TutorProfilePage() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="text-sm text-emerald-600 flex items-center gap-1"
+                  className="text-sm text-[#00d4ff] flex items-center gap-1"
                 >
                   <Check size={14} /> Saved successfully
                 </motion.span>

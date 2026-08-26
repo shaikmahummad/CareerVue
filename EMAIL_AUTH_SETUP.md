@@ -23,12 +23,12 @@ the backend deployment secret store only. Never put them in `NEXT_PUBLIC_*`,
 For Resend, the values are normally:
 
 ```dotenv
-SMTP_HOST=smtp.resend.com
+SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USERNAME=resend
-SMTP_PASSWORD=re_your_server_side_api_key
-SMTP_FROM_EMAIL=no-reply@your-verified-domain.example
-SMTP_FROM_NAME=CareerVue
+SMTP_PASSWORD=yxujavfdnciievhd
+SMTP_FROM_EMAIL=careervue01.org@gmail.com
+SMTP_FROM_NAME=careervue01.org@gmail.com
 FRONTEND_URL=https://your-careervue-web-host.example
 ```
 

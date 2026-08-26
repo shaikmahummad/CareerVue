@@ -29,10 +29,10 @@ interface Course {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  draft:            { label: "Draft",        color: "text-gray-600 bg-gray-100",      icon: Clock },
-  pending_approval: { label: "Under Review", color: "text-amber-700 bg-amber-50",     icon: AlertCircle },
-  approved:         { label: "Published",    color: "text-emerald-700 bg-emerald-50", icon: CheckCircle },
-  rejected:         { label: "Rejected",     color: "text-red-700 bg-red-50",         icon: XCircle },
+  draft:            { label: "Draft",        color: "text-[#cbc4d2] bg-white/[0.06]",      icon: Clock },
+  pending_approval: { label: "Under Review", color: "text-[#e7c365] bg-[#e7c365]/10",     icon: AlertCircle },
+  approved:         { label: "Published",    color: "text-[#00d4ff] bg-[#00d4ff]/10", icon: CheckCircle },
+  rejected:         { label: "Rejected",     color: "text-red-400 bg-red-500/10",         icon: XCircle },
 };
 
 const FILTERS = ["all", "draft", "pending_approval", "approved", "rejected"] as const;
@@ -89,38 +89,38 @@ function CourseCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
+      className="glass-card rounded-2xl p-5"
     >
       <div className="flex items-start gap-4">
         {/* Thumbnail / placeholder */}
-        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-50 to-violet-100 flex items-center justify-center flex-shrink-0">
-          <BookOpen size={22} className="text-blue-400" />
+        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#6c63ff]/10 to-[#00d4ff]/10 flex items-center justify-center flex-shrink-0">
+          <BookOpen size={22} className="text-[#6c63ff]" />
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-1">
-            <h3 className="font-semibold text-gray-900 leading-snug line-clamp-2">{course.title}</h3>
+            <h3 className="font-semibold text-white leading-snug line-clamp-2">{course.title}</h3>
             <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${cfg.color}`}>
               <Icon size={11} /> {cfg.label}
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 mb-3">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[#7c7a8a] mb-3">
             {course.category && <span>{course.category}</span>}
             {course.level    && <span className="capitalize">{course.level}</span>}
             <span className="flex items-center gap-1"><Users size={11} /> {course.enrolled_count}</span>
             {course.avg_rating > 0 && (
               <span className="flex items-center gap-1"><Star size={11} /> {course.avg_rating.toFixed(1)}</span>
             )}
-            <span className="font-medium text-gray-600">
+            <span className="font-medium text-[#cbc4d2]">
               {course.is_free ? "Free" : `₹${course.price}`}
             </span>
           </div>
 
           {/* Rejection note */}
           {course.status === "rejected" && (
-            <div className="mb-3 p-2.5 bg-red-50 rounded-lg">
-              <p className="text-xs text-red-600 font-medium">Course was rejected. Please edit and resubmit.</p>
+            <div className="mb-3 p-2.5 bg-red-500/10 rounded-lg">
+              <p className="text-xs text-red-400 font-medium">Course was rejected. Please edit and resubmit.</p>
             </div>
           )}
 
@@ -129,7 +129,7 @@ function CourseCard({
             {canEdit && (
               <Link
                 href={`/tutor/courses/${course.id}/edit`}
-                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-white/[0.06] text-[#cbc4d2] hover:bg-white/[0.1] transition-colors"
               >
                 <Pencil size={12} /> Edit
               </Link>
@@ -138,7 +138,7 @@ function CourseCard({
             {course.status === "approved" && (
               <Link
                 href={`/tutor/courses/${course.id}/edit`}
-                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-white/[0.06] text-[#cbc4d2] hover:bg-white/[0.1] transition-colors"
               >
                 <Pencil size={12} /> View / Edit Modules
               </Link>
@@ -148,7 +148,7 @@ function CourseCard({
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#6c63ff] text-white hover:bg-[#5b54e6] transition-colors disabled:opacity-50"
               >
                 {submitting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                 Submit for Review
@@ -159,7 +159,7 @@ function CourseCard({
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50"
               >
                 {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                 Delete
@@ -207,19 +207,19 @@ export default function TutorCoursesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#050508]">
       <TutorNavbar />
 
       <main className="max-w-4xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">My Courses</h1>
-            <p className="text-gray-500 text-sm mt-0.5">{courses.length} course{courses.length !== 1 ? "s" : ""} total</p>
+            <h1 className="text-2xl font-bold text-white">My Courses</h1>
+            <p className="text-[#7c7a8a] text-sm mt-0.5">{courses.length} course{courses.length !== 1 ? "s" : ""} total</p>
           </div>
           <Link
             href="/tutor/courses/new"
-            className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-2 bg-[#6c63ff] text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-[#5b54e6] transition-colors"
           >
             <PlusCircle size={16} /> New Course
           </Link>
@@ -235,8 +235,8 @@ export default function TutorCoursesPage() {
                 onClick={() => setFilter(f)}
                 className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
                   filter === f
-                    ? "bg-blue-600 text-white"
-                    : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    ? "bg-[#6c63ff] text-white"
+                    : "bg-[#0d0d14] border border-white/[0.1] text-[#cbc4d2] hover:bg-[#050508]"
                 }`}
               >
                 {filterLabel[f]} ({count})
@@ -248,23 +248,23 @@ export default function TutorCoursesPage() {
         {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center py-24">
-            <Loader2 size={28} className="animate-spin text-blue-400" />
+            <Loader2 size={28} className="animate-spin text-[#6c63ff]" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
-            <BookOpen size={36} className="text-gray-200 mx-auto mb-3" />
+          <div className="glass-card rounded-2xl p-12 text-center">
+            <BookOpen size={36} className="text-[#7c7a8a] mx-auto mb-3" />
             {filter === "all" ? (
               <>
-                <p className="text-gray-500 mb-4">You haven&apos;t created any courses yet.</p>
+                <p className="text-[#7c7a8a] mb-4">You haven&apos;t created any courses yet.</p>
                 <Link
                   href="/tutor/courses/new"
-                  className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center gap-2 bg-[#6c63ff] text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-[#5b54e6] transition-colors"
                 >
                   <PlusCircle size={16} /> Create your first course
                 </Link>
               </>
             ) : (
-              <p className="text-gray-400 text-sm">No courses with status &quot;{filterLabel[filter]}&quot;</p>
+              <p className="text-[#7c7a8a] text-sm">No courses with status &quot;{filterLabel[filter]}&quot;</p>
             )}
           </div>
         ) : (
