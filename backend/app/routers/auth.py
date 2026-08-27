@@ -15,6 +15,7 @@ from app.schemas.auth import (
     RefreshRequest,
     RegisterStudentRequest,
     RegisterTutorRequest,
+    VerifyOtpRequest,
 )
 from app.utils.supabase import supabase_admin, supabase_anon
 
@@ -173,6 +174,14 @@ async def _persist_tutor(
 async def _persist_registration(db, body, user_id, persist) -> None:
     try:
         await persist(db, body, user_id)
+<<<<<<< Updated upstream
+=======
+        raw_token = await issue_verification_token(db, user_id)
+        await db.flush()
+        await send_verification_email(body.email, raw_token, body.full_name)
+        await db.commit()
+        return raw_token
+>>>>>>> Stashed changes
     except IntegrityError:
         await db.rollback()
         _delete_auth_user(user_id)
@@ -227,6 +236,159 @@ async def register_tutor(
     }
 
 
+<<<<<<< Updated upstream
+=======
+@router.get("/verify-email")
+async def verify_email(
+    token: str = Query(min_length=20, max_length=200),
+    db: AsyncSession = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    token_row = (
+        await db.execute(
+            select(EmailVerificationToken)
+            .where(
+                EmailVerificationToken.token_hash == hash_verification_token(token)
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if (
+        token_row is None
+        or token_row.used_at is not None
+        or token_row.expires_at <= now
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This verification link is invalid or expired.",
+        )
+
+    profile = await db.get(Profile, token_row.user_id, with_for_update=True)
+    if profile is None or profile.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This verification link is invalid or expired.",
+        )
+
+    try:
+        supabase_admin.auth.admin.update_user_by_id(
+            str(profile.id), {"email_confirm": True}
+        )
+    except Exception:
+        logger.exception("Failed to confirm Supabase auth user")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification is temporarily unavailable.",
+        ) from None
+
+    profile.email_verified = True
+    await invalidate_unused_tokens(db, profile.id, now=now)
+    await db.commit()
+    return {
+        "success": True,
+        "message": "Email verified successfully.",
+        "data": None,
+    }
+
+
+@router.post("/verify-otp")
+async def verify_otp(
+    body: VerifyOtpRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    profile = (
+        await db.execute(
+            select(Profile)
+            .where(func.lower(Profile.email) == body.email)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    token_row = None
+    if profile is not None:
+        token_row = (
+            await db.execute(
+                select(EmailVerificationToken)
+                .where(
+                    EmailVerificationToken.user_id == profile.id,
+                    EmailVerificationToken.token_hash == hash_verification_token(body.otp),
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+    if (
+        profile is None
+        or profile.email_verified
+        or token_row is None
+        or token_row.used_at is not None
+        or token_row.expires_at <= now
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This OTP is invalid or expired.",
+        )
+
+    try:
+        supabase_admin.auth.admin.update_user_by_id(
+            str(profile.id), {"email_confirm": True}
+        )
+    except Exception:
+        logger.exception("Failed to confirm Supabase auth user")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification is temporarily unavailable.",
+        ) from None
+
+    profile.email_verified = True
+    await invalidate_unused_tokens(db, profile.id, now=now)
+    await db.commit()
+    return {"success": True, "message": "Email verified successfully.", "data": None}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    body: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    profile = (
+        await db.execute(
+            select(Profile)
+            .where(func.lower(Profile.email) == body.email)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    generic_response = {
+        "success": True,
+        "message": "If the account is awaiting verification, a new email is on its way.",
+        "data": None,
+    }
+    if profile is None or profile.email_verified:
+        return generic_response
+
+    now = datetime.now(timezone.utc)
+    latest = await latest_token_for_user(db, profile.id)
+    if latest and latest.created_at + RESEND_COOLDOWN > now:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait before requesting another verification email.",
+        )
+
+    await invalidate_unused_tokens(db, profile.id, now=now)
+    raw_token = await issue_verification_token(db, profile.id, now=now)
+    try:
+        await send_verification_email(profile.email, raw_token, profile.full_name)
+    except Exception:
+        logger.exception("Failed to resend verification email")
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification email could not be sent. Please try again.",
+        ) from None
+    await db.commit()
+    return generic_response
+
+
+>>>>>>> Stashed changes
 @router.post("/login")
 async def login(body: LoginRequest):
     try:

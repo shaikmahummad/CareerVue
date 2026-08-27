@@ -122,5 +122,17 @@ class LoginRequest(BaseModel):
     password: Annotated[str, StringConstraints(min_length=1, max_length=MAX_PASSWORD_LENGTH)]
 
 
+<<<<<<< Updated upstream
+=======
+class ResendVerificationRequest(BaseModel):
+    email: NormalizedEmail
+
+
+class VerifyOtpRequest(BaseModel):
+    email: NormalizedEmail
+    otp: Annotated[str, StringConstraints(pattern=r"^[0-9]{6}$")]
+
+
+>>>>>>> Stashed changes
 class RefreshRequest(BaseModel):
     refresh_token: Annotated[str, StringConstraints(min_length=1)]

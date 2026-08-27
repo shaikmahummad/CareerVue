@@ -158,7 +158,7 @@ function LoginContent() {
           )}
           {verificationFailed && !error && (
             <p className="mb-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
-              This verification link is invalid or expired. Register again or request a new link.
+              This verification OTP is invalid or expired. Register again or request a new OTP.
             </p>
           )}
 

@@ -74,6 +74,13 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [registered, setRegistered] = useState(false);
+<<<<<<< Updated upstream
+=======
+  const [otp, setOtp] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
+>>>>>>> Stashed changes
 
   function updateStudent(key: keyof StudentFields, val: string) {
     setStudentFields((p) => ({ ...p, [key]: val }));
@@ -140,6 +147,54 @@ export default function RegisterPage() {
     }
   }
 
+<<<<<<< Updated upstream
+=======
+  async function resendVerification() {
+    setResending(true);
+    setResendMessage("");
+    try {
+      const response = await fetch(`${API}/api/v1/auth/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizeEmail(email) }),
+      });
+      setResendMessage(
+        response.ok
+          ? "A new verification OTP is on its way."
+          : response.status === 429
+            ? "Please wait a minute before requesting another OTP."
+            : "We could not resend the OTP. Please try again."
+      );
+    } catch {
+      setResendMessage("We could not resend the OTP. Please try again.");
+    } finally {
+      setResending(false);
+    }
+  }
+
+  async function verifyOtp() {
+    setVerifying(true);
+    setResendMessage("");
+    try {
+      const response = await fetch(`${API}/api/v1/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizeEmail(email), otp }),
+      });
+      const body = await response.json().catch(() => null);
+      setResendMessage(
+        response.ok
+          ? "Email verified successfully. You can now sign in."
+          : body?.detail ?? "That OTP is invalid or expired."
+      );
+    } catch {
+      setResendMessage("We could not verify the OTP. Please try again.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+>>>>>>> Stashed changes
   const inputCls = "w-full bg-[#050508] border border-white/[0.07] rounded-xl px-4 py-3 text-sm text-white placeholder-[#7c7a8a] focus:outline-none focus:border-[#6c63ff] transition-colors";
 
   if (registered) {
@@ -148,8 +203,37 @@ export default function RegisterPage() {
         <div className="glass-card max-w-md rounded-2xl p-8 text-center">
           <h1 className="text-2xl font-bold text-white mb-3">Check your email</h1>
           <p className="text-sm text-[#7c7a8a] mb-6">
-            We sent a verification link to {normalizeEmail(email)}. Verify your account before signing in.
+            We sent a verification OTP to {normalizeEmail(email)}. Enter it within 10 minutes.
           </p>
+<<<<<<< Updated upstream
+=======
+          <input
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="Enter 6-digit OTP"
+            className={`${inputCls} text-center tracking-[0.4em] mb-3`}
+            aria-label="Email verification OTP"
+          />
+          <button
+            type="button"
+            onClick={verifyOtp}
+            disabled={verifying || otp.length !== 6}
+            className="btn-primary w-full mb-3 px-6 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
+          >
+            {verifying ? "Verifying…" : "Verify email"}
+          </button>
+          {resendMessage && <p className="text-xs text-[#c4c0ff] mb-4">{resendMessage}</p>}
+          <button
+            type="button"
+            onClick={resendVerification}
+            disabled={resending}
+            className="btn-secondary w-full mb-3 px-6 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
+          >
+            {resending ? "Resending…" : "Resend verification email"}
+          </button>
+>>>>>>> Stashed changes
           <Link href="/login" className="btn-primary inline-flex px-6 py-3 rounded-xl text-sm font-semibold">
             Go to sign in
           </Link>
