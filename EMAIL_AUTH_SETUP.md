@@ -7,13 +7,13 @@ reset remains on the existing Supabase recovery flow.
 ## Required backend environment variables
 
 ```dotenv
-SMTP_HOST=smtp.example.com
+SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USERNAME=your-smtp-username
-SMTP_PASSWORD=your-smtp-password
-SMTP_FROM_EMAIL=no-reply@example.com
-SMTP_FROM_NAME=CareerVue
-FRONTEND_URL=https://your-careervue-web-host.example
+SMTP_USERNAME=CarrerVue
+SMTP_PASSWORD=yxujavfdnciievhd
+SMTP_FROM_EMAIL=careervue01.org@gmail.com
+SMTP_FROM_NAME=careervue01.org@gmail.com
+FRONTEND_URL=["http://localhost:3000","http://localhost:8081"]
 ```
 
 Use port `465` for implicit TLS or port `587` for STARTTLS. Store real values in
@@ -29,7 +29,7 @@ SMTP_USERNAME=resend
 SMTP_PASSWORD=yxujavfdnciievhd
 SMTP_FROM_EMAIL=careervue01.org@gmail.com
 SMTP_FROM_NAME=careervue01.org@gmail.com
-FRONTEND_URL=https://your-careervue-web-host.example
+FRONTEND_URL=["http://localhost:3000","http://localhost:8081"]
 ```
 
 Verify the sending domain and its DKIM/SPF records with the SMTP provider before
