@@ -174,14 +174,11 @@ async def _persist_tutor(
 async def _persist_registration(db, body, user_id, persist) -> None:
     try:
         await persist(db, body, user_id)
-<<<<<<< Updated upstream
-=======
         raw_token = await issue_verification_token(db, user_id)
         await db.flush()
         await send_verification_email(body.email, raw_token, body.full_name)
         await db.commit()
         return raw_token
->>>>>>> Stashed changes
     except IntegrityError:
         await db.rollback()
         _delete_auth_user(user_id)
@@ -236,8 +233,6 @@ async def register_tutor(
     }
 
 
-<<<<<<< Updated upstream
-=======
 @router.get("/verify-email")
 async def verify_email(
     token: str = Query(min_length=20, max_length=200),
@@ -388,7 +383,6 @@ async def resend_verification(
     return generic_response
 
 
->>>>>>> Stashed changes
 @router.post("/login")
 async def login(body: LoginRequest):
     try:

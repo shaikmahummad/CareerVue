@@ -42,11 +42,14 @@ export default function AppSidebar({
 
   // Read persisted state on mount and set CSS variable
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const isCollapsed = stored === "true";
-    setCollapsed(isCollapsed);
-    document.documentElement.style.setProperty("--sidebar-w", isCollapsed ? SIDEBAR_CLOSE_W : SIDEBAR_OPEN_W);
-    setMounted(true);
+    const frame = window.requestAnimationFrame(() => {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const isCollapsed = stored === "true";
+      setCollapsed(isCollapsed);
+      document.documentElement.style.setProperty("--sidebar-w", isCollapsed ? SIDEBAR_CLOSE_W : SIDEBAR_OPEN_W);
+      setMounted(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   function toggle() {

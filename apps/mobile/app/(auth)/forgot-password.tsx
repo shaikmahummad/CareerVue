@@ -140,7 +140,7 @@ export default function ForgotPassword() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
 
-  glowWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center" },
+  glowWrap: { ...StyleSheet.absoluteFill, alignItems: "center" },
   glowBlob: {
     width:           320,
     height:          320,

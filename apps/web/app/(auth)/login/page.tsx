@@ -7,6 +7,8 @@ import { Eye, EyeOff, TrendingUp, CheckCircle2, Zap, BookOpen } from "lucide-rea
 import { createClient } from "../../../lib/supabase/client";
 import { isValidEmail, normalizeEmail } from "../../../lib/auth-validation";
 
+const API = process.env.NEXT_PUBLIC_API_URL || "https://careervue-api.welcos.in";
+
 const ACHIEVEMENTS = [
   { icon: CheckCircle2, label: "Quiz complete", sub: "Skill profile analysed 100%", color: "text-emerald-400" },
   { icon: Zap,          label: "Roadmap generated", sub: "Focused Python Mastery", color: "text-[#6c63ff]" },
@@ -22,8 +24,11 @@ function LoginContent() {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
   const verified = searchParams.get("verified") === "1";
   const verificationFailed = searchParams.get("verification") === "failed";
+  const passwordUpdated = searchParams.get("password") === "updated";
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -36,22 +41,67 @@ function LoginContent() {
       return;
     }
 
-    const supabase = createClient();
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email: normalizeEmail(email),
-      password,
-    });
-
-    if (signInError) {
-      setError("Invalid email or password, or the account is not verified.");
+    let response: Response;
+    try {
+      response = await fetch(`${API}/api/v1/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizeEmail(email), password }),
+      });
+    } catch {
+      setError("Sign in could not be completed. Please try again.");
+      setLoading(false);
+      return;
+    }
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      setError(body?.detail ?? "Invalid email or password, or the account is not verified.");
       setLoading(false);
       return;
     }
 
-    const role = data.user?.user_metadata?.role ?? "student";
+    const authData = body.data;
+    const { error: sessionError } = await createClient().auth.setSession({
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+    });
+    if (sessionError) {
+      setError("Sign in could not be completed. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    const role = authData.user?.role ?? "student";
     if (role === "tutor") router.push("/tutor/dashboard");
     else if (role === "admin") router.push("/admin/dashboard");
     else router.push("/dashboard");
+  }
+
+  async function resendVerification() {
+    if (!isValidEmail(email)) {
+      setResendMessage("Enter your account email first.");
+      return;
+    }
+    setResending(true);
+    setResendMessage("");
+    try {
+      const response = await fetch(`${API}/api/v1/auth/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizeEmail(email) }),
+      });
+      setResendMessage(
+        response.ok
+          ? "If this account is awaiting verification, a new link is on its way."
+          : response.status === 429
+            ? "Please wait a minute before requesting another link."
+            : "Unable to resend right now. Please try again."
+      );
+    } catch {
+      setResendMessage("Unable to resend right now. Please try again.");
+    } finally {
+      setResending(false);
+    }
   }
 
   return (
@@ -147,9 +197,18 @@ function LoginContent() {
           </div>
 
           {error && (
-            <p className="mb-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
-              {error}
-            </p>
+            <div className="mb-4 text-xs bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
+              <p className="text-red-400">{error}</p>
+              <button
+                type="button"
+                onClick={resendVerification}
+                disabled={resending}
+                className="mt-2 text-[#c4c0ff] hover:text-white disabled:opacity-50"
+              >
+                {resending ? "Resending…" : "Resend verification email"}
+              </button>
+              {resendMessage && <p className="mt-2 text-[#7c7a8a]">{resendMessage}</p>}
+            </div>
           )}
           {verified && !error && (
             <p className="mb-4 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl">
@@ -159,6 +218,11 @@ function LoginContent() {
           {verificationFailed && !error && (
             <p className="mb-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
               This verification OTP is invalid or expired. Register again or request a new OTP.
+            </p>
+          )}
+          {passwordUpdated && !error && (
+            <p className="mb-4 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl">
+              Password updated. Sign in with your new password.
             </p>
           )}
 
@@ -202,9 +266,9 @@ function LoginContent() {
                 />
                 <span className="text-xs text-[#7c7a8a]">Remember me</span>
               </label>
-              <a href="#" className="text-xs text-[#6c63ff] hover:text-[#00d4ff] transition-colors">
+              <Link href="/forgot-password" className="text-xs text-[#6c63ff] hover:text-[#00d4ff] transition-colors">
                 Forgot password?
-              </a>
+              </Link>
             </div>
 
             <button

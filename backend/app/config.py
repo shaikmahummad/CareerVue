@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
 
+    # SMTP-backed application email verification
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, gt=0, le=65535)
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = ""
+    frontend_url: str = ""
+
     # Razorpay is optional until the payment feature is configured.
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""

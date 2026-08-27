@@ -71,3 +71,12 @@ export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
   _clearCache();
   return data;
 }
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const data = await handleResponse<T>(await fetchWithRetry(`${API_URL}${path}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  }));
+  _clearCache();
+  return data;
+}

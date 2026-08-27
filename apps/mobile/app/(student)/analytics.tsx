@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions,
 } from "react-native";
@@ -13,43 +13,57 @@ const CHART_W   = width - 32 - 32; // screen pad - card pad
 
 interface QuizAttempt {
   id:           string;
-  score_pct:    number;
-  total_q:      number;
-  career_goal:  string | null;
-  created_at:   string;
-  skill_scores?: Record<string, number>;
+  score:        number | null;
+  total_questions: number;
+  goal:         string | null;
+  completed_at: string | null;
 }
 
 interface StudentStats {
-  xp:        number;
-  streak:    number;
-  enrolled:  number;
-  completed: number;
-  [key: string]: any;
+  xp_points:       number;
+  streak_days:     number;
+  enrolled_count:  number;
+  completed_count: number;
+}
+
+interface SkillProfile {
+  id: string;
+  topic: string;
+  level: string;
+  score_pct: number;
 }
 
 export default function StudentAnalytics() {
   const insets = useSafeAreaInsets();
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
   const [profile,  setProfile]  = useState<StudentStats | null>(null);
+  const [skills, setSkills] = useState<SkillProfile[]>([]);
   const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
     Promise.all([
-      apiGet<QuizAttempt[]>("/api/v1/quiz/history").catch(() => []),
-      apiGet<StudentStats>("/api/v1/students/profile").catch(() => null),
-    ]).then(([att, prof]) => {
+      apiGet<QuizAttempt[]>("/api/v1/quiz/my-attempts").catch(() => []),
+      apiGet<StudentStats>("/api/v1/students/stats").catch(() => null),
+      apiGet<SkillProfile[]>("/api/v1/students/skill-profile").catch(() => []),
+    ]).then(([att, prof, skillData]) => {
       setAttempts(att ?? []);
       setProfile(prof);
+      setSkills(skillData ?? []);
     }).finally(() => setLoading(false));
   }, []);
 
-  const bestScore   = attempts.length ? Math.max(...attempts.map((a) => a.score_pct)) : 0;
+  const bestScore   = attempts.length ? Math.max(...attempts.map((a) => a.score ?? 0)) : 0;
   const avgScore    = attempts.length
-    ? Math.round(attempts.reduce((s, a) => s + a.score_pct, 0) / attempts.length)
+    ? Math.round(attempts.reduce((s, a) => s + (a.score ?? 0), 0) / attempts.length)
     : 0;
-  const topicScores = aggregateTopics(attempts);
-  const recent12    = attempts.slice(-12).reverse();
+  const topicScores = skills
+    .map((skill) => ({
+      topic: skill.topic,
+      score: skill.score_pct,
+      level: skill.level.charAt(0).toUpperCase() + skill.level.slice(1),
+    }))
+    .sort((a, b) => b.score - a.score);
+  const recent12    = attempts.slice(0, 12).reverse();
 
   if (loading) {
     return (
@@ -75,7 +89,7 @@ export default function StudentAnalytics() {
           <StatCard icon="document-text-outline" color={colors.primary} label="Quizzes" value={String(attempts.length)} />
           <StatCard icon="trophy-outline"        color={colors.tertiary}  label="Best Score" value={`${bestScore}%`} />
           <StatCard icon="analytics-outline"     color={colors.secondary} label="Avg Score"  value={`${avgScore}%`} />
-          <StatCard icon="library-outline"       color={colors.success}   label="Enrolled"   value={String(profile?.enrolled ?? "—")} />
+          <StatCard icon="library-outline"       color={colors.success}   label="Enrolled"   value={String(profile?.enrolled_count ?? "—")} />
         </View>
 
         {/* ── Score Progression ─────────────────────────────────────── */}
@@ -115,9 +129,9 @@ export default function StudentAnalytics() {
         {/* ── XP & Streaks ──────────────────────────────────────────── */}
         <Text style={s.sectionTitle}>Learning Stats</Text>
         <View style={s.statsCard}>
-          <Row icon="flash-outline"     color={colors.primary}  label="XP Points"     value={String(profile?.xp ?? "—")} />
-          <Row icon="flame-outline"     color={colors.tertiary}  label="Day Streak"    value={`${profile?.streak ?? "—"} days`} borderTop />
-          <Row icon="checkmark-circle-outline" color={colors.success}  label="Completed"  value={String(profile?.completed ?? "—")} borderTop />
+          <Row icon="flash-outline"     color={colors.primary}  label="XP Points"     value={String(profile?.xp_points ?? "—")} />
+          <Row icon="flame-outline"     color={colors.tertiary}  label="Day Streak"    value={`${profile?.streak_days ?? "—"} days`} borderTop />
+          <Row icon="checkmark-circle-outline" color={colors.success}  label="Completed"  value={String(profile?.completed_count ?? "—")} borderTop />
         </View>
 
         {/* ── Score-based recommendation ───────────────────────────── */}
@@ -152,29 +166,6 @@ export default function StudentAnalytics() {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function aggregateTopics(attempts: QuizAttempt[]) {
-  const map: Record<string, number[]> = {};
-  attempts.forEach((a) => {
-    if (!a.skill_scores) return;
-    Object.entries(a.skill_scores).forEach(([k, v]) => {
-      if (!map[k]) map[k] = [];
-      map[k].push(v);
-    });
-  });
-  return Object.entries(map)
-    .map(([topic, scores]) => {
-      const score = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-      return { topic, score, level: scoreLevel(score) };
-    })
-    .sort((a, b) => b.score - a.score);
-}
-
-function scoreLevel(pct: number) {
-  if (pct >= 75) return "Strong";
-  if (pct >= 45) return "Intermediate";
-  return "Weak";
-}
-
 function levelColor(level: string) {
   if (level === "Strong") return colors.success;
   if (level === "Intermediate") return colors.warning;
@@ -183,7 +174,9 @@ function levelColor(level: string) {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function StatCard({ icon, color, label, value }: { icon: any; color: string; label: string; value: string }) {
+type IoniconName = ComponentProps<typeof Ionicons>["name"];
+
+function StatCard({ icon, color, label, value }: { icon: IoniconName; color: string; label: string; value: string }) {
   return (
     <View style={sc.statCard}>
       <View style={[sc.statIcon, { backgroundColor: `${color}18` }]}>
@@ -196,7 +189,7 @@ function StatCard({ icon, color, label, value }: { icon: any; color: string; lab
 }
 
 function Row({ icon, color, label, value, borderTop }: {
-  icon: any; color: string; label: string; value: string; borderTop?: boolean;
+  icon: IoniconName; color: string; label: string; value: string; borderTop?: boolean;
 }) {
   return (
     <View style={[sc.row, borderTop && sc.rowBorder]}>
@@ -218,12 +211,13 @@ function ScoreChart({ attempts, chartW }: { attempts: QuizAttempt[]; chartW: num
     <Svg width={chartW} height={H}>
       <G>
         {attempts.map((a, i) => {
-          const barH = Math.max(4, Math.round((a.score_pct / maxScore) * (H - 16)));
+          const score = a.score ?? 0;
+          const barH = Math.max(4, Math.round((score / maxScore) * (H - 16)));
           const x    = i * (barW + 4);
           const y    = H - 16 - barH;
-          const fill = a.score_pct >= 75
+          const fill = score >= 75
             ? colors.success
-            : a.score_pct >= 45
+            : score >= 45
             ? colors.warning
             : colors.error;
           return (
@@ -237,7 +231,7 @@ function ScoreChart({ attempts, chartW }: { attempts: QuizAttempt[]; chartW: num
                 fill={colors.textVariant}
                 opacity={0.5}
               >
-                {`${a.score_pct}%`}
+                {`${score}%`}
               </SvgText>
             </G>
           );

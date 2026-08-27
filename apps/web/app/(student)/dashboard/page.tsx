@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Zap, Flame, BookOpen, Trophy, ChevronRight,
-  ArrowRight, Loader2, Map, Brain, Star,
+  Loader2, Map, Brain, Star,
 } from "lucide-react";
 import StudentNavbar from "../../../components/StudentNavbar";
 import { apiGet } from "../../../lib/api";

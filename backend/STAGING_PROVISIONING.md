@@ -5,7 +5,9 @@
 On 2026-08-24, the guarded staging configuration was verified against a distinct
 Supabase project, its initially empty database completed the full migration
 upgrade/downgrade/rebuild cycle, and it was seeded with the reviewed taxonomy and
-question banks. The database is at `c9d0e1f2a3b4` with 25 public tables.
+question banks. A release audit later that day confirmed 25 public tables, zero
+case-insensitive duplicate profile-email groups, and revision `c9d0e1f2a3b4`.
+Staging must be upgraded to the current head `e1f2a3b4c5d6` before release.
 
 Fly authentication is configured for the operator's personal organization, but
 creating `careervue-api-staging` is blocked until Fly billing is configured. No
@@ -78,11 +80,18 @@ flyctl secrets set --app <STAGING_APP_ID> `
   SUPABASE_SERVICE_ROLE_KEY="<STAGING_SERVICE_ROLE_KEY>" `
   JWT_SECRET="<NEW_STAGING_JWT_SECRET>" `
   JWT_ALGORITHM="HS256" `
+  SMTP_HOST="<STAGING_SMTP_HOST>" `
+  SMTP_PORT="<STAGING_SMTP_PORT>" `
+  SMTP_USERNAME="<STAGING_SMTP_USERNAME>" `
+  SMTP_PASSWORD="<STAGING_SMTP_PASSWORD>" `
+  SMTP_FROM_EMAIL="<STAGING_SMTP_FROM_EMAIL>" `
+  SMTP_FROM_NAME="CareerVue" `
+  FRONTEND_URL="https://<STAGING_WEB_HOST>" `
   APP_CORS_ORIGINS='["https://<STAGING_WEB_HOST>"]'
 ```
 
 6. Migrate explicitly before starting the staging API. Confirm that
-   `c9d0e1f2a3b4` is the reported head, then seed the reviewed question banks.
+   `e1f2a3b4c5d6` is the reported head, then seed the reviewed question banks.
 
 ```powershell
 Set-Location backend
@@ -108,9 +117,9 @@ flyctl deploy backend --config backend/fly.staging.toml `
    Supabase project. Public anon keys are client-visible by design; service-role,
    JWT, database, and payment secrets are backend-only.
 
-No SMTP or Redis setting exists in the current application configuration. Add
-separate staging credentials only if those services are introduced; do not invent
-or reuse production credentials.
+Authentication email is delivered by the backend through SMTP. Follow
+`../EMAIL_AUTH_SETUP.md` and use a staging-only sender/API key. Redis remains
+absent from the application configuration.
 
 ## Schema verification
 
@@ -145,7 +154,8 @@ where connamespace = 'public'::regnamespace
 order by table_name, conname;
 ```
 
-Expected Alembic head: `c9d0e1f2a3b4`. Verify the question-bank tables, v2
+Expected Alembic head: `e1f2a3b4c5d6`. Verify the normalized profile-email index,
+question-bank tables, v2
 template fields, authoritative attempt question-set fields, lifecycle checks,
 foreign keys, and cleanup indexes against the CI assertions in
 `tests/test_quiz_postgres_integration.py`.

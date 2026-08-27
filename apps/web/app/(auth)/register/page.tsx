@@ -74,13 +74,10 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [registered, setRegistered] = useState(false);
-<<<<<<< Updated upstream
-=======
   const [otp, setOtp] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
->>>>>>> Stashed changes
 
   function updateStudent(key: keyof StudentFields, val: string) {
     setStudentFields((p) => ({ ...p, [key]: val }));
@@ -147,8 +144,6 @@ export default function RegisterPage() {
     }
   }
 
-<<<<<<< Updated upstream
-=======
   async function resendVerification() {
     setResending(true);
     setResendMessage("");
@@ -194,7 +189,6 @@ export default function RegisterPage() {
     }
   }
 
->>>>>>> Stashed changes
   const inputCls = "w-full bg-[#050508] border border-white/[0.07] rounded-xl px-4 py-3 text-sm text-white placeholder-[#7c7a8a] focus:outline-none focus:border-[#6c63ff] transition-colors";
 
   if (registered) {
@@ -205,8 +199,6 @@ export default function RegisterPage() {
           <p className="text-sm text-[#7c7a8a] mb-6">
             We sent a verification OTP to {normalizeEmail(email)}. Enter it within 10 minutes.
           </p>
-<<<<<<< Updated upstream
-=======
           <input
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -233,7 +225,6 @@ export default function RegisterPage() {
           >
             {resending ? "Resending…" : "Resend verification email"}
           </button>
->>>>>>> Stashed changes
           <Link href="/login" className="btn-primary inline-flex px-6 py-3 rounded-xl text-sm font-semibold">
             Go to sign in
           </Link>

@@ -62,8 +62,8 @@ export default function CourseReviewPage() {
     try {
       await apiPut(`/api/v1/admin/courses/${id}/approve`);
       router.push("/admin/approvals");
-    } catch (e: any) {
-      alert(e.message ?? "Failed to approve");
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Failed to approve");
     } finally {
       setActing(null);
     }
@@ -75,8 +75,8 @@ export default function CourseReviewPage() {
     try {
       await apiPut(`/api/v1/admin/courses/${id}/reject`, { rejection_note: rejectNote.trim() });
       router.push("/admin/approvals");
-    } catch (e: any) {
-      alert(e.message ?? "Failed to reject");
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "Failed to reject");
     } finally {
       setActing(null);
       setShowReject(false);

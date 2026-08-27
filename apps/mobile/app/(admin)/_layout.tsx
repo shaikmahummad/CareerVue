@@ -15,16 +15,17 @@ const ROUTE_ORDER = ["index", "approvals", "users", "analytics", "settings"];
 
 export default function AdminLayout() {
   const segments    = useSegments();
+  const currentSegments = segments as readonly string[];
   const router      = useRouter();
 
-  const tabSeg      = segments[1];
+  const tabSeg      = currentSegments[1];
   const activeSeg   = !tabSeg || tabSeg === "index" ? "index" : tabSeg;
   const activeIndex = Math.max(0, ROUTE_ORDER.indexOf(activeSeg));
-  const hideTabBar  = !ROUTE_ORDER.includes(activeSeg) || segments.length > 2;
+  const hideTabBar  = !ROUTE_ORDER.includes(activeSeg) || currentSegments.length > 2;
 
   function navigate(i: number) {
     const name = ROUTE_ORDER[i];
-    if (name === "index") router.replace("/(admin)/");
+    if (name === "index") router.replace("/(admin)/" as never);
     else router.replace(`/(admin)/${name}` as never);
   }
 

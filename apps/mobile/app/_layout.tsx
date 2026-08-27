@@ -31,6 +31,7 @@ function AuthGuard({ session, ready }: { session: Session | null; ready: boolean
     if (!ready) return;
 
     const inAuth      = currentSegments[0] === "(auth)";
+    const inPasswordReset = inAuth && currentSegments[1] === "reset-password";
     const inOnboard   = currentSegments[0] === "onboarding";
     const inRoot      = currentSegments.length === 0;
     const isPublic    = inAuth || inOnboard || inRoot;
@@ -38,7 +39,7 @@ function AuthGuard({ session, ready }: { session: Session | null; ready: boolean
     if (!session) {
       if (!isPublic) router.replace("/(auth)/login" as never);
     } else {
-      if (isPublic) {
+      if (isPublic && !inPasswordReset) {
         const role = (session.user.user_metadata?.role as string) ?? "student";
         if (role === "tutor") router.replace("/(tutor)/" as never);
         else if (role === "admin") router.replace("/(admin)/" as never);
@@ -51,6 +52,7 @@ function AuthGuard({ session, ready }: { session: Session | null; ready: boolean
 }
 
 export default function RootLayout() {
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [ready,   setReady]   = useState(false);
   const [fontsLoaded] = useFonts({
@@ -64,7 +66,12 @@ export default function RootLayout() {
 
   useEffect(() => {
     async function finishAuthRedirect(url: string | null) {
-      if (!url || !url.startsWith("careervue://auth/callback")) return;
+      if (
+        !url ||
+        (!url.startsWith("careervue://auth/callback") &&
+          !url.startsWith("careervue://reset-password"))
+      ) return;
+      const isPasswordReset = url.startsWith("careervue://reset-password");
       const parsed = new URL(url.replace("#", "?"));
       const accessToken = parsed.searchParams.get("access_token");
       const refreshToken = parsed.searchParams.get("refresh_token");
@@ -76,6 +83,9 @@ export default function RootLayout() {
         });
       } else if (code) {
         await supabase.auth.exchangeCodeForSession(code);
+      }
+      if (isPasswordReset) {
+        router.replace("/(auth)/reset-password" as never);
       }
     }
 
@@ -94,7 +104,7 @@ export default function RootLayout() {
       subscription.unsubscribe();
       linkingSubscription.remove();
     };
-  }, []);
+  }, [router]);
 
   if (!ready || !fontsLoaded) {
     return (
