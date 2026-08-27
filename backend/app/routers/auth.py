@@ -1,7 +1,8 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import CurrentUser
-from app.models.user import Profile, Student, Tutor
+from app.models.user import EmailVerificationToken, Profile, Student, Tutor
 from app.schemas.auth import (
     LoginRequest,
     RefreshRequest,
@@ -18,6 +19,14 @@ from app.schemas.auth import (
     VerifyOtpRequest,
 )
 from app.utils.supabase import supabase_admin, supabase_anon
+from app.services.email_verification_service import (
+    RESEND_COOLDOWN,
+    hash_verification_token,
+    invalidate_unused_tokens,
+    issue_verification_token,
+    latest_token_for_user,
+    send_verification_email,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -125,7 +134,6 @@ async def _persist_student(
             linkedin_url=body.linkedin_url,
             github_url=body.github_url,
         ))
-    await db.commit()
 
 
 async def _persist_tutor(
@@ -168,7 +176,6 @@ async def _persist_tutor(
             linkedin_url=body.linkedin_url,
             website_url=body.website_url,
         ))
-    await db.commit()
 
 
 async def _persist_registration(db, body, user_id, persist) -> None:
