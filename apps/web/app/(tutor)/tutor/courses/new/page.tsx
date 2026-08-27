@@ -53,7 +53,7 @@ function Field({
 }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+      <label className="block text-sm font-medium text-[#cbc4d2] mb-1.5">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       {children}
@@ -61,8 +61,8 @@ function Field({
   );
 }
 
-const inputCls = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-all";
-const selectCls = inputCls + " bg-white";
+const inputCls = "w-full bg-[#050508] px-3.5 py-2.5 border border-white/[0.1] rounded-xl text-sm text-white placeholder-[#7c7a8a] focus:outline-none focus:ring-2 focus:ring-[#6c63ff]/40 focus:border-[#6c63ff] transition-all";
+const selectCls = inputCls + " bg-[#0d0d14]";
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
@@ -77,18 +77,18 @@ function StepBar({ step }: { step: number }) {
           <div key={i} className="flex items-center flex-1 last:flex-none">
             <div className="flex items-center gap-2">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                done    ? "bg-blue-600 text-white" :
-                current ? "bg-blue-600 text-white ring-4 ring-blue-100" :
-                          "bg-gray-100 text-gray-400"
+                done    ? "bg-[#6c63ff] text-white" :
+                current ? "bg-[#6c63ff] text-white ring-4 ring-[#6c63ff]/20" :
+                          "bg-white/[0.06] text-[#7c7a8a]"
               }`}>
                 {done ? <Check size={14} /> : i + 1}
               </div>
-              <span className={`text-xs font-medium whitespace-nowrap ${current ? "text-gray-900" : "text-gray-400"}`}>
+              <span className={`text-xs font-medium whitespace-nowrap ${current ? "text-white" : "text-[#7c7a8a]"}`}>
                 {label}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div className={`flex-1 h-px mx-3 ${done ? "bg-blue-300" : "bg-gray-200"}`} />
+              <div className={`flex-1 h-px mx-3 ${done ? "bg-[#6c63ff]/50" : "bg-white/[0.1]"}`} />
             )}
           </div>
         );
@@ -182,8 +182,8 @@ function DetailsStep({
             onClick={() => onChange("is_free", true)}
             className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all ${
               form.is_free
-                ? "border-blue-500 bg-blue-50 text-blue-700"
-                : "border-gray-200 text-gray-500 hover:border-gray-300"
+                ? "border-[#6c63ff] bg-[#6c63ff]/10 text-[#c4c0ff]"
+                : "border-white/[0.1] text-[#7c7a8a] hover:border-white/[0.2]"
             }`}
           >
             Free
@@ -193,8 +193,8 @@ function DetailsStep({
             onClick={() => onChange("is_free", false)}
             className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all ${
               !form.is_free
-                ? "border-blue-500 bg-blue-50 text-blue-700"
-                : "border-gray-200 text-gray-500 hover:border-gray-300"
+                ? "border-[#6c63ff] bg-[#6c63ff]/10 text-[#c4c0ff]"
+                : "border-white/[0.1] text-[#7c7a8a] hover:border-white/[0.2]"
             }`}
           >
             Paid
@@ -202,7 +202,7 @@ function DetailsStep({
         </div>
         {!form.is_free && (
           <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7c7a8a] text-sm">₹</span>
             <input
               type="number"
               min="0"
@@ -252,42 +252,42 @@ function ModuleRow({
   const [expanded, setExpanded] = useState(!mod.saved);
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div className="border border-white/[0.1] rounded-xl overflow-hidden">
       {/* Header row */}
       <div
-        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-[#050508] transition-colors"
         onClick={() => setExpanded((e) => !e)}
       >
-        <GripVertical size={14} className="text-gray-300 flex-shrink-0" />
+        <GripVertical size={14} className="text-[#7c7a8a] flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-gray-800 truncate">
+          <p className="text-sm font-medium text-[#e6e0e9] truncate">
             {mod.title || `Module ${index + 1}`}
           </p>
           <div className="flex items-center gap-2 mt-0.5">
-            {mod.video_url && <span className="text-xs text-gray-400 flex items-center gap-1"><Video size={10} /> Video</span>}
-            {mod.pdf_url   && <span className="text-xs text-gray-400 flex items-center gap-1"><FileText size={10} /> PDF</span>}
-            {mod.is_preview && <span className="text-xs text-blue-600 bg-blue-50 px-1.5 rounded">Preview</span>}
+            {mod.video_url && <span className="text-xs text-[#7c7a8a] flex items-center gap-1"><Video size={10} /> Video</span>}
+            {mod.pdf_url   && <span className="text-xs text-[#7c7a8a] flex items-center gap-1"><FileText size={10} /> PDF</span>}
+            {mod.is_preview && <span className="text-xs text-[#6c63ff] bg-[#6c63ff]/10 px-1.5 rounded">Preview</span>}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {mod.saved && <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Saved</span>}
+          {mod.saved && <span className="text-xs text-[#00d4ff] bg-[#00d4ff]/10 px-2 py-0.5 rounded-full">Saved</span>}
           {mod.error && <span className="text-xs text-red-500">{mod.error}</span>}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(mod.id); }}
-            className="p-1 text-gray-300 hover:text-red-400 transition-colors"
+            className="p-1 text-[#7c7a8a] hover:text-red-400 transition-colors"
           >
             <Trash2 size={14} />
           </button>
           <ChevronRight
             size={14}
-            className={`text-gray-300 transition-transform ${expanded ? "rotate-90" : ""}`}
+            className={`text-[#7c7a8a] transition-transform ${expanded ? "rotate-90" : ""}`}
           />
         </div>
       </div>
 
       {/* Expanded form */}
       {expanded && (
-        <div className="border-t border-gray-100 p-4 space-y-4 bg-gray-50/50">
+        <div className="border-t border-white/[0.07] p-4 space-y-4 bg-[#050508]/50">
           <Field label="Title" required>
             <input
               className={inputCls}
@@ -342,9 +342,9 @@ function ModuleRow({
                   type="checkbox"
                   checked={mod.is_preview}
                   onChange={(e) => onChange(mod.id, "is_preview", e.target.checked)}
-                  className="w-4 h-4 rounded accent-blue-600"
+                  className="w-4 h-4 rounded accent-[#6c63ff]"
                 />
-                <span className="text-sm text-gray-700">Free preview</span>
+                <span className="text-sm text-[#cbc4d2]">Free preview</span>
               </label>
             </div>
           </div>
@@ -373,24 +373,24 @@ function ModulesStep({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-500">{modules.length} module{modules.length !== 1 ? "s" : ""} added</p>
-          <p className="text-xs text-gray-400 mt-0.5">You need at least 1 module to submit for review.</p>
+          <p className="text-sm text-[#7c7a8a]">{modules.length} module{modules.length !== 1 ? "s" : ""} added</p>
+          <p className="text-xs text-[#7c7a8a] mt-0.5">You need at least 1 module to submit for review.</p>
         </div>
         <button
           onClick={onAdd}
-          className="inline-flex items-center gap-1.5 text-sm font-medium bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm font-medium bg-white/[0.06] text-[#cbc4d2] px-3 py-1.5 rounded-lg hover:bg-white/[0.1] transition-colors"
         >
           <PlusCircle size={14} /> Add Module
         </button>
       </div>
 
       {modules.length === 0 ? (
-        <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
-          <Video size={28} className="text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-400 mb-3">No modules yet</p>
+        <div className="border-2 border-dashed border-white/[0.1] rounded-xl p-8 text-center">
+          <Video size={28} className="text-[#7c7a8a] mx-auto mb-2" />
+          <p className="text-sm text-[#7c7a8a] mb-3">No modules yet</p>
           <button
             onClick={onAdd}
-            className="inline-flex items-center gap-1.5 text-sm font-medium bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm font-medium bg-[#6c63ff] text-white px-4 py-2 rounded-lg hover:bg-[#5b54e6] transition-colors"
           >
             <PlusCircle size={14} /> Add your first module
           </button>
@@ -413,7 +413,7 @@ function ModulesStep({
         <button
           onClick={onSaveAll}
           disabled={saving}
-          className="w-full py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+          className="w-full py-2.5 bg-[#6c63ff] text-white text-sm font-semibold rounded-xl hover:bg-[#5b54e6] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
         >
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
           Save All Modules
@@ -438,38 +438,38 @@ function ReviewStep({
 }) {
   return (
     <div className="space-y-5">
-      <div className="bg-gray-50 rounded-xl p-5 space-y-3">
-        <p className="text-sm font-semibold text-gray-700">Course Details</p>
+      <div className="bg-[#050508] rounded-xl p-5 space-y-3">
+        <p className="text-sm font-semibold text-[#cbc4d2]">Course Details</p>
         <div className="grid grid-cols-2 gap-y-2 text-sm">
-          <span className="text-gray-500">Title</span>
-          <span className="text-gray-900 font-medium">{form.title || "—"}</span>
-          <span className="text-gray-500">Category</span>
-          <span className="text-gray-900">{form.category || "—"}</span>
-          <span className="text-gray-500">Level</span>
-          <span className="text-gray-900 capitalize">{form.level || "—"}</span>
-          <span className="text-gray-500">Language</span>
-          <span className="text-gray-900">{form.language || "—"}</span>
-          <span className="text-gray-500">Price</span>
-          <span className="text-gray-900">{form.is_free ? "Free" : `₹${form.price}`}</span>
-          <span className="text-gray-500">Duration</span>
-          <span className="text-gray-900">{form.duration_hours ? `${form.duration_hours} hrs` : "—"}</span>
+          <span className="text-[#7c7a8a]">Title</span>
+          <span className="text-white font-medium">{form.title || "—"}</span>
+          <span className="text-[#7c7a8a]">Category</span>
+          <span className="text-white">{form.category || "—"}</span>
+          <span className="text-[#7c7a8a]">Level</span>
+          <span className="text-white capitalize">{form.level || "—"}</span>
+          <span className="text-[#7c7a8a]">Language</span>
+          <span className="text-white">{form.language || "—"}</span>
+          <span className="text-[#7c7a8a]">Price</span>
+          <span className="text-white">{form.is_free ? "Free" : `₹${form.price}`}</span>
+          <span className="text-[#7c7a8a]">Duration</span>
+          <span className="text-white">{form.duration_hours ? `${form.duration_hours} hrs` : "—"}</span>
         </div>
       </div>
 
-      <div className="bg-gray-50 rounded-xl p-5">
-        <p className="text-sm font-semibold text-gray-700 mb-3">{modules.length} Module{modules.length !== 1 ? "s" : ""}</p>
+      <div className="bg-[#050508] rounded-xl p-5">
+        <p className="text-sm font-semibold text-[#cbc4d2] mb-3">{modules.length} Module{modules.length !== 1 ? "s" : ""}</p>
         {modules.length === 0 ? (
           <p className="text-sm text-red-500">⚠ No modules added. Go back and add at least 1 module.</p>
         ) : (
           <div className="space-y-2">
             {modules.map((mod, i) => (
               <div key={mod.id} className="flex items-center gap-2 text-sm">
-                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-medium flex-shrink-0">
+                <span className="w-5 h-5 rounded-full bg-[#6c63ff]/10 text-[#6c63ff] text-xs flex items-center justify-center font-medium flex-shrink-0">
                   {i + 1}
                 </span>
-                <span className="text-gray-800">{mod.title || "Untitled module"}</span>
+                <span className="text-[#e6e0e9]">{mod.title || "Untitled module"}</span>
                 {mod.saved ? (
-                  <Check size={12} className="text-emerald-500 flex-shrink-0" />
+                  <Check size={12} className="text-[#00d4ff] flex-shrink-0" />
                 ) : (
                   <span className="text-xs text-amber-500 flex-shrink-0">not saved</span>
                 )}
@@ -479,7 +479,7 @@ function ReviewStep({
         )}
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <div className="bg-[#e7c365]/10 border border-[#e7c365]/20 rounded-xl p-4">
         <p className="text-sm text-amber-800 font-medium mb-1">Before you submit</p>
         <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
           <li>Once submitted, the course will be reviewed by an admin.</li>
@@ -491,7 +491,7 @@ function ReviewStep({
       <button
         onClick={onSubmit}
         disabled={submitting || modules.length === 0}
-        className="w-full py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+        className="w-full py-3 bg-[#6c63ff] text-white text-sm font-semibold rounded-xl hover:bg-[#5b54e6] transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
       >
         {submitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
         Submit for Review
@@ -633,24 +633,24 @@ export default function NewCoursePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#050508]">
       <TutorNavbar />
 
       <main className="max-w-2xl mx-auto px-6 py-8">
         {/* Back link */}
         <Link
           href="/tutor/courses"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-6 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-[#7c7a8a] hover:text-[#e6e0e9] mb-6 transition-colors"
         >
           <ChevronLeft size={16} /> Back to courses
         </Link>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Create New Course</h1>
+        <h1 className="text-2xl font-bold text-white mb-6">Create New Course</h1>
 
         <StepBar step={step} />
 
         {/* Step content */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div className="glass-card rounded-2xl p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={step}
@@ -682,16 +682,16 @@ export default function NewCoursePage() {
           </AnimatePresence>
 
           {error && (
-            <p className="mt-4 text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <p className="mt-4 text-sm text-red-500 bg-red-500/10 rounded-lg px-3 py-2">{error}</p>
           )}
 
           {/* Navigation */}
           {step < 2 && (
-            <div className="flex items-center justify-between mt-6 pt-5 border-t border-gray-100">
+            <div className="flex items-center justify-between mt-6 pt-5 border-t border-white/[0.07]">
               {step > 0 ? (
                 <button
                   onClick={() => setStep((s) => s - 1)}
-                  className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                  className="inline-flex items-center gap-1.5 text-sm text-[#cbc4d2] hover:text-white transition-colors"
                 >
                   <ChevronLeft size={16} /> Back
                 </button>
@@ -701,7 +701,7 @@ export default function NewCoursePage() {
               <button
                 onClick={handleNext}
                 disabled={creating || savingModules}
-                className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-60"
+                className="inline-flex items-center gap-2 bg-[#6c63ff] text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-[#5b54e6] transition-colors disabled:opacity-60"
               >
                 {creating || savingModules ? (
                   <Loader2 size={16} className="animate-spin" />

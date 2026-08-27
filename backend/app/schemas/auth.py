@@ -122,5 +122,9 @@ class LoginRequest(BaseModel):
     password: Annotated[str, StringConstraints(min_length=1, max_length=MAX_PASSWORD_LENGTH)]
 
 
+class ResendVerificationRequest(BaseModel):
+    email: NormalizedEmail
+
+
 class RefreshRequest(BaseModel):
     refresh_token: Annotated[str, StringConstraints(min_length=1)]

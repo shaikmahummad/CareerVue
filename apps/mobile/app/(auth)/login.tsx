@@ -9,11 +9,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Defs, RadialGradient, Stop, Rect } from "react-native-svg";
 import { supabase } from "../../lib/supabase";
+import { apiPost } from "../../lib/api";
 import { isValidEmail, normalizeEmail } from "../../lib/auth-validation";
 import { colors } from "../../constants/theme";
 
 const { width, height } = Dimensions.get("window");
 const BTN_W = width - 32;
+
+type LoginResponse = {
+  access_token: string;
+  refresh_token: string;
+};
 
 export default function LoginScreen() {
   const router              = useRouter();
@@ -23,19 +29,56 @@ export default function LoginScreen() {
   const [show,  setShow]    = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const resendVerification = useCallback(async () => {
+    if (!isValidEmail(email)) {
+      Alert.alert("Enter your email", "Enter a valid account email first.");
+      return;
+    }
+    try {
+      await apiPost("/api/v1/auth/resend-verification", {
+        email: normalizeEmail(email),
+      });
+      Alert.alert(
+        "Check your email",
+        "If this account is awaiting verification, a new link is on its way."
+      );
+    } catch (error) {
+      Alert.alert(
+        "Unable to resend",
+        error instanceof Error ? error.message : "Please try again."
+      );
+    }
+  }, [email]);
+
   const handleLogin = useCallback(async () => {
     if (!isValidEmail(email) || !pass) {
       Alert.alert("Check your details", "Enter a valid email address and password.");
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: normalizeEmail(email),
-      password: pass,
-    });
-    setLoading(false);
-    if (error) Alert.alert("Sign in failed", "Invalid email or password, or the account is not verified.");
-  }, [email, pass]);
+    try {
+      const result = await apiPost<LoginResponse>("/api/v1/auth/login", {
+        email: normalizeEmail(email),
+        password: pass,
+      });
+      const { error } = await supabase.auth.setSession({
+        access_token: result.access_token,
+        refresh_token: result.refresh_token,
+      });
+      if (error) throw error;
+    } catch {
+      Alert.alert(
+        "Sign in failed",
+        "Invalid email or password, or the account is not verified.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Resend verification", onPress: () => void resendVerification() },
+        ]
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [email, pass, resendVerification]);
 
   return (
     <View style={s.root}>
