@@ -4,7 +4,7 @@ import hashlib
 import json
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -239,7 +239,12 @@ async def get_or_create_quiz_template(
         bank_key = generation_key(career_slug, skill_level)
         existing = (
             await db.execute(
-                select(QuizTemplate).where(QuizTemplate.generation_key == bank_key)
+                select(QuizTemplate).where(
+                    or_(
+                        QuizTemplate.generation_key == bank_key,
+                        QuizTemplate.goal == career_title,
+                    )
+                )
             )
         ).scalar_one_or_none()
         if existing:
@@ -263,9 +268,16 @@ async def get_or_create_quiz_template(
             await db.rollback()
             concurrent = (
                 await db.execute(
-                    select(QuizTemplate).where(QuizTemplate.generation_key == bank_key)
+                    select(QuizTemplate).where(
+                        or_(
+                            QuizTemplate.generation_key == bank_key,
+                            QuizTemplate.goal == career_title,
+                        )
+                    )
                 )
-            ).scalar_one()
+            ).scalar_one_or_none()
+            if concurrent is None:
+                raise
             if not _template_is_active_v2(concurrent):
                 raise QuizUnavailableError("The requested v2 quiz template is inactive.")
             return concurrent
