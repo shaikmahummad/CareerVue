@@ -14,6 +14,7 @@ from app.models.user import EmailVerificationToken, Profile, Student, Tutor
 from app.schemas.auth import (
     LoginRequest,
     RefreshRequest,
+    ResendVerificationRequest,
     RegisterStudentRequest,
     RegisterTutorRequest,
     VerifyOtpRequest,
