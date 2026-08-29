@@ -30,17 +30,6 @@ interface Enrollment {
 interface RoadmapItem { id: string; topic: string; status: string; priority: string }
 interface Roadmap { id: string; goal: string; items: RoadmapItem[] }
 
-const FALLBACK_NODES = [
-  { label: "HTML/CSS",   status: "completed" },
-  { label: "JAVASCRIPT", status: "in_progress" },
-  { label: "ADV. REACT", status: "locked" },
-];
-
-const COURSE_CARDS = [
-  { title: "Node.js Masterclass",  desc: "Build scalable backend services.", lessons: 24, level: "BEGINNER", levelColor: colors.primary },
-  { title: "Cybersecurity Pro",    desc: "Master network defense systems.",  lessons: 18, level: "ADVANCED",  levelColor: colors.secondary },
-];
-
 export default function StudentDashboard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -81,7 +70,7 @@ export default function StudentDashboard() {
         label:  i.topic.toUpperCase().slice(0, 12),
         status: i.status,
       }))
-    : FALLBACK_NODES;
+    : [];
 
   return (
     <View style={s.root}>
@@ -112,8 +101,8 @@ export default function StudentDashboard() {
         >
           <View style={s.streakRow}>
             <View>
-              <Text style={s.streakTitle}>7 Day Streak!</Text>
-              <Text style={s.streakSub}>You're on fire this week.</Text>
+              <Text style={s.streakTitle}>{streak} Day Streak!</Text>
+              <Text style={s.streakSub}>{streak > 0 ? "Keep the momentum going." : "Start a streak by finishing a lesson."}</Text>
             </View>
             <View style={s.xpBadge}>
               <Text style={s.xpText}>{xp.toLocaleString()} XP</Text>
@@ -214,41 +203,11 @@ export default function StudentDashboard() {
               <Text style={s.seeAll}>SEE ALL</Text>
             </Pressable>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.hScroll}
-          >
-            {COURSE_CARDS.map((c) => (
-              <Pressable key={c.title} style={s.courseCard}>
-                <View style={s.courseThumbnail}>
-                  <LinearGradient
-                    colors={["rgba(108,99,255,0.35)", "rgba(13,13,20,0.6)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <Ionicons
-                    name="code-slash-outline"
-                    size={36}
-                    color="rgba(196,192,255,0.3)"
-                    style={s.thumbnailIcon}
-                  />
-                  <View style={s.levelBadge}>
-                    <Text style={[s.levelText, { color: c.levelColor }]}>{c.level}</Text>
-                  </View>
-                </View>
-                <View style={s.courseBody}>
-                  <Text style={s.courseTitle}>{c.title}</Text>
-                  <Text style={s.courseDesc}>{c.desc}</Text>
-                  <View style={s.courseFooter}>
-                    <Text style={s.courseLessons}>{c.lessons} Lessons</Text>
-                    <Ionicons name="chevron-forward" size={18} color={colors.outline} />
-                  </View>
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
+          <View style={s.emptyCard}>
+            <Ionicons name="book-outline" size={24} color={colors.textVariant} style={{ opacity: 0.6 }} />
+            <Text style={s.emptyTitle}>No recommendations yet</Text>
+            <Text style={s.emptyText}>Recommendations will appear after you have live course suggestions.</Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -498,6 +457,32 @@ const s = StyleSheet.create({
     color:         colors.text,
     textAlign:     "center",
     textTransform: "uppercase",
+  },
+
+  emptyCard: {
+    borderWidth:     1,
+    borderColor:     "rgba(255,255,255,0.08)",
+    borderRadius:    20,
+    borderStyle:     "dashed",
+    backgroundColor: "rgba(13,13,20,0.6)",
+    padding:         18,
+    alignItems:      "center",
+    justifyContent:  "center",
+    gap:             8,
+  },
+  emptyTitle: {
+    fontFamily:    "HankenGrotesk_600SemiBold",
+    fontSize:      16,
+    lineHeight:    22,
+    letterSpacing: -0.2,
+    color:         colors.text,
+  },
+  emptyText: {
+    fontFamily: "HankenGrotesk_400Regular",
+    fontSize:   13,
+    lineHeight: 18,
+    color:      colors.textVariant,
+    textAlign:   "center",
   },
 
   // Course cards

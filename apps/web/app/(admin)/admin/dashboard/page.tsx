@@ -24,28 +24,6 @@ interface PendingCourse {
   is_free: boolean; price: number; tutor: { full_name: string; email: string } | null; created_at: string | null;
 }
 
-/* ─── User Growth Bars ───────────────────────────────────────────────────── */
-function GrowthChart() {
-  const weeks = ["WEEK 1", "WEEK 2", "WEEK 3", "WEEK 4"];
-  const vals = [42, 65, 88, 120];
-  const max = Math.max(...vals);
-  return (
-    <div className="flex items-end gap-3 h-28">
-      {weeks.map((w, i) => (
-        <div key={w} className="flex-1 flex flex-col items-center gap-1.5">
-          <motion.div
-            initial={{ height: 0 }} animate={{ height: `${(vals[i] / max) * 100}%` }}
-            transition={{ duration: 0.6, delay: i * 0.1 }}
-            className="w-full rounded-t-lg relative overflow-hidden"
-            style={{ background: `linear-gradient(180deg, #6c63ff 0%, #00d4ff 100%)`, opacity: 0.7 + i * 0.08 }}
-          />
-          <span className="text-[9px] text-[#7c7a8a]">{w}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ─── Donut Chart ────────────────────────────────────────────────────────── */
 function CourseDonut({ data }: { data: Analytics["enrollments_by_category"] }) {
   const colors = ["#6c63ff", "#00d4ff", "#e7c365"];
@@ -180,24 +158,9 @@ export default function AdminDashboardPage() {
               ))}
             </div>
 
-            {/* Charts row */}
+            {/* Distribution */}
             <div className="grid lg:grid-cols-3 gap-5">
-              {/* Growth chart */}
-              <div className="lg:col-span-2 glass-card rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-xs font-semibold text-[#7c7a8a] uppercase tracking-wider">User Growth Signups</p>
-                    <p className="text-xs text-[#7c7a8a] mt-0.5">Past 30 days growth performance</p>
-                  </div>
-                  <span className="text-[10px] font-semibold text-[#6c63ff] bg-[#6c63ff]/10 px-2.5 py-1 rounded-full border border-[#6c63ff]/20">
-                    Last 30 Days
-                  </span>
-                </div>
-                <GrowthChart />
-              </div>
-
-              {/* Donut */}
-              <div className="glass-card rounded-2xl p-6">
+              <div className="lg:col-span-3 glass-card rounded-2xl p-6">
                 <p className="text-xs font-semibold text-[#7c7a8a] uppercase tracking-wider mb-1">Course Distribution</p>
                 <p className="text-xs text-[#7c7a8a] mb-4">Active categories share</p>
                 {analytics?.enrollments_by_category && analytics.enrollments_by_category.length > 0 ? (

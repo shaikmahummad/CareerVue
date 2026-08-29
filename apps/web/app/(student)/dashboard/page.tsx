@@ -16,6 +16,7 @@ interface EnrollmentCourse { id: string; title: string; thumbnail_url: string | 
 interface Enrollment { id: string; course_id: string; enrolled_at: string; completed_at: string | null; progress_pct: number; course?: EnrollmentCourse; }
 interface RoadmapItem { id: string; topic: string; priority: string; status: string; order_index: number; }
 interface Roadmap { id: string; goal: string; items: RoadmapItem[]; }
+interface SkillProfile { id: string; topic: string; level: string; score_pct: number; }
 
 /* ─── Skill Radar (simple SVG pentagon) ──────────────────────────────────── */
 
@@ -196,29 +197,20 @@ function CurrentLearning({ enrollments }: { enrollments: Enrollment[] }) {
   );
 }
 
-function RecommendedSection() {
-  const recs = [
-    { title: "Docker for Devs", sub: "Based on your profile" },
-    { title: "AWS Essentials", sub: "Popular in your roadmap" },
-    { title: "VueJS for Devs", sub: "Hot this week" },
-  ];
+function RecommendedSection({ hasData }: { hasData: boolean }) {
   return (
     <div className="glass-card rounded-2xl p-5">
       <p className="text-xs font-semibold text-white mb-4">Recommended for You</p>
-      <div className="space-y-3">
-        {recs.map((r) => (
-          <div key={r.title} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.03] transition-colors cursor-pointer group">
-            <div className="w-8 h-8 rounded-lg bg-[#6c63ff]/10 border border-[#6c63ff]/20 flex items-center justify-center flex-shrink-0">
-              <BookOpen size={13} className="text-[#6c63ff]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-white truncate group-hover:text-[#6c63ff] transition-colors">{r.title}</p>
-              <p className="text-[10px] text-[#7c7a8a]">{r.sub}</p>
-            </div>
-            <ChevronRight size={12} className="text-[#7c7a8a] flex-shrink-0" />
-          </div>
-        ))}
-      </div>
+      {hasData ? (
+        <div className="space-y-3 text-sm text-[#7c7a8a]">
+          <p>Recommendations will appear here once your profile has live course suggestions.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
+          <BookOpen size={18} className="text-[#7c7a8a] mx-auto mb-2" />
+          <p className="text-sm text-[#7c7a8a]">No recommendations available yet</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -230,6 +222,7 @@ export default function StudentDashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
+  const [skillProfile, setSkillProfile] = useState<SkillProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -239,14 +232,16 @@ export default function StudentDashboardPage() {
       const fullName = session?.user?.user_metadata?.full_name as string | undefined;
       setName(fullName?.split(" ")[0] ?? "there");
 
-      const [statsR, enrollR, roadmapR] = await Promise.allSettled([
+      const [statsR, enrollR, roadmapR, skillsR] = await Promise.allSettled([
         apiGet<Stats>("/api/v1/students/stats"),
         apiGet<Enrollment[]>("/api/v1/enrollments/mine"),
         apiGet<Roadmap>("/api/v1/roadmap/mine"),
+        apiGet<SkillProfile[]>("/api/v1/students/skill-profile"),
       ]);
       if (statsR.status === "fulfilled") setStats(statsR.value);
       if (enrollR.status === "fulfilled") setEnrollments(enrollR.value);
       if (roadmapR.status === "fulfilled") setRoadmap(roadmapR.value);
+      if (skillsR.status === "fulfilled") setSkillProfile(skillsR.value);
       setLoading(false);
     }
     loadAll();
@@ -260,14 +255,11 @@ export default function StudentDashboardPage() {
   })();
 
   const today = new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-
-  const SKILL_DATA = [
-    { label: "React", value: 82 },
-    { label: "Node", value: 65 },
-    { label: "Python", value: 54 },
-    { label: "SQL", value: 70 },
-    { label: "DSA", value: 42 },
-  ];
+  const skillData = skillProfile.length
+    ? skillProfile
+        .map((s) => ({ label: s.topic, value: Math.max(0, Math.min(100, s.score_pct)) }))
+        .sort((a, b) => b.value - a.value)
+    : [];
 
   return (
     <div className="min-h-screen bg-[#050508] flex">
@@ -298,8 +290,8 @@ export default function StudentDashboardPage() {
             {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { icon: Zap,      value: stats?.xp_points ?? 0,          label: "Total XP",        sub: "+12% this week", accent: "#e7c365" },
-                { icon: Flame,    value: `${stats?.streak_days ?? 0} Days`, label: "Daily Streak",  sub: "Keep it up!", accent: "#ff6b35" },
+                { icon: Zap,      value: stats?.xp_points ?? 0,          label: "Total XP",        sub: undefined, accent: "#e7c365" },
+                { icon: Flame,    value: `${stats?.streak_days ?? 0} Days`, label: "Daily Streak",  sub: undefined, accent: "#ff6b35" },
                 { icon: BookOpen, value: stats?.enrolled_count ?? 0,      label: "Active Courses",  sub: undefined, accent: "#6c63ff" },
                 { icon: Trophy,   value: stats?.completed_count ?? 0,     label: "Certificates",   sub: undefined, accent: "#00d4ff" },
               ].map((s, i) => (
@@ -322,25 +314,32 @@ export default function StudentDashboardPage() {
                 <div className="glass-card rounded-2xl p-5">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-xs font-semibold text-white">Skill Profile</p>
-                    <span className="accent-chip text-[9px] font-semibold px-2 py-0.5 rounded-full">SCORE ANALYSED</span>
+                    <span className="accent-chip text-[9px] font-semibold px-2 py-0.5 rounded-full">LIVE DATA</span>
                   </div>
-                  <div className="flex justify-center py-3">
-                    <SkillRadar skills={SKILL_DATA} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    {[
-                      { label: "Top Skill", value: "Frontend (React)" },
-                      { label: "Improve Area", value: "SQL Optimisation" },
-                    ].map((item) => (
-                      <div key={item.label} className="bg-white/[0.03] rounded-xl p-2.5">
-                        <p className="text-[10px] text-[#7c7a8a]">{item.label}</p>
-                        <p className="text-xs font-medium text-white mt-0.5">{item.value}</p>
+                  {skillData.length > 0 ? (
+                    <>
+                      <div className="flex justify-center py-3">
+                        <SkillRadar skills={skillData} />
                       </div>
-                    ))}
-                  </div>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div className="bg-white/[0.03] rounded-xl p-2.5">
+                          <p className="text-[10px] text-[#7c7a8a]">Top Skill</p>
+                          <p className="text-xs font-medium text-white mt-0.5">{skillData[0].label}</p>
+                        </div>
+                        <div className="bg-white/[0.03] rounded-xl p-2.5">
+                          <p className="text-[10px] text-[#7c7a8a]">Best Score</p>
+                          <p className="text-xs font-medium text-white mt-0.5">{skillData[0].value}%</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center min-h-[180px] text-sm text-[#7c7a8a]">
+                      No skill profile data yet
+                    </div>
+                  )}
                 </div>
 
-                <RecommendedSection />
+                <RecommendedSection hasData={false} />
               </div>
             </div>
           </div>
