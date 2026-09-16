@@ -111,5 +111,3 @@ Store publication by the next day cannot be guaranteed: Apple/Google signing,
 account agreements, and store review are external lead-time dependencies. A
 signed internal-distribution build and a deployed web release are achievable
 once the P0 configuration and verification items above are completed.
-
-i don't know what i have built, but it is made good i hope
