@@ -48,7 +48,6 @@ def _send_verification_email_sync(
         "SMTP_PASSWORD": settings.smtp_password,
         "SMTP_FROM_EMAIL": settings.smtp_from_email,
         "SMTP_FROM_NAME": settings.smtp_from_name,
-        "FRONTEND_URL": settings.frontend_url,
     }
     missing = [
         name for name, value in required.items() if not str(value or "").strip()
@@ -140,7 +139,10 @@ async def latest_token_for_user(db: AsyncSession, user_id):
     return (
         await db.execute(
             select(EmailVerificationToken)
-            .where(EmailVerificationToken.user_id == user_id)
+            .where(
+                EmailVerificationToken.user_id == user_id,
+                EmailVerificationToken.used_at.is_(None),
+            )
             .order_by(EmailVerificationToken.created_at.desc())
             .limit(1)
         )

@@ -40,14 +40,15 @@ rewriting can interfere with one-time tokens.
 
 ## Deploy
 
-1. Add all seven variables to the backend's secret store.
+1. Add the SMTP variables to the backend's secret store.
 2. Run `alembic upgrade head` from `backend`; the new head is
-   `e1f2a3b4c5d6`.
+   `f7a8b9c0d1e2`.
 3. Deploy the backend and web client.
 4. In Supabase Authentication settings, keep email/password sign-in enabled.
-   CareerVue creates identities as unconfirmed and confirms them through the
-   backend verification endpoint, so Supabase's own confirmation template is not
-   used for new CareerVue registrations.
+   CareerVue creates provider identities as unconfirmed, stores registration data
+   in `pending_registrations`, and activates the application profile only after
+   the backend OTP verification succeeds. Supabase's confirmation template is
+   not used for new CareerVue registrations.
 
 ## Smoke test
 
@@ -55,7 +56,7 @@ rewriting can interfere with one-time tokens.
 2. Confirm the email contains a six-digit OTP and no verification link.
 3. Enter the OTP in the registration screen and confirm verification succeeds.
 4. Confirm login is rejected before verification and succeeds afterward.
-5. Confirm resend works after the 60-second cooldown and the previous link no
+5. Confirm resend works after the 60-second cooldown and the previous OTP no
    longer works.
 6. Confirm the existing forgot-password link still opens `/reset-password` and
    updates the password.

@@ -77,10 +77,28 @@ export default function LoginScreen() {
         refresh_token: result.refresh_token,
       });
       if (error) throw error;
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.includes("Email verification is required")) {
+        Alert.alert(
+          "Check your email",
+          "A 6-digit OTP was sent to your email. Enter it to continue.",
+          [
+            {
+              text: "Enter OTP",
+              onPress: () =>
+                router.push({
+                  pathname: "/(auth)/verify-email",
+                  params: { email: normalizeEmail(email) },
+                } as never),
+            },
+          ]
+        );
+        return;
+      }
       Alert.alert(
         "Sign in failed",
-        "Invalid email or password, or the account is not verified.",
+        message || "Invalid email or password. Please try again.",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Resend verification", onPress: () => void resendVerification() },

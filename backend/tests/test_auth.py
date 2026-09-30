@@ -9,9 +9,14 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.database import get_db
-from app.models.user import EmailVerificationToken
+from app.models.user import EmailVerificationToken, Profile, Student
 from app.routers import auth
-from app.schemas.auth import LoginRequest, RegisterStudentRequest, ResendVerificationRequest
+from app.schemas.auth import (
+    LoginRequest,
+    RegisterStudentRequest,
+    ResendVerificationRequest,
+    VerifyOtpRequest,
+)
 from app.services import email_verification_service
 from app.services.email_verification_service import hash_verification_token
 
@@ -31,6 +36,12 @@ class ScalarResult:
 
     def scalar_one_or_none(self):
         return self.value
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return []
 
 
 class FakeSession:
@@ -69,6 +80,7 @@ class FlowSession:
         self.added = []
         self.commits = 0
         self.rollbacks = 0
+        self.deleted = []
 
     async def execute(self, _statement):
         value = self.results.pop(0) if self.results else None
@@ -85,6 +97,9 @@ class FlowSession:
 
     async def rollback(self):
         self.rollbacks += 1
+
+    async def delete(self, value):
+        self.deleted.append(value)
 
 
 def client_for(session: FakeSession) -> TestClient:
@@ -225,7 +240,6 @@ class RegistrationApiTests(unittest.TestCase):
                     **VALID_SIGNUP,
                     "email": " USER@Gmail.com ",
                     "full_name": "  Shaik   Mahummad ",
-                    "email_redirect_to": "http://localhost:3000/auth/callback",
                 },
             )
         self.assertEqual(response.status_code, 201)
@@ -238,6 +252,7 @@ class RegistrationApiTests(unittest.TestCase):
         sent_token = send_email.await_args.args[1]
         token_rows = [row for row in session.added if isinstance(row, EmailVerificationToken)]
         self.assertEqual(len(token_rows), 1)
+        self.assertFalse(any(isinstance(row, Profile) for row in session.added))
         self.assertEqual(token_rows[0].token_hash, hash_verification_token(sent_token))
         self.assertEqual(session.commits, 1)
 
@@ -332,6 +347,27 @@ class LoginTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 403)
         sign_in.assert_not_called()
 
+    def test_unverified_user_login_sends_otp_and_blocks_login(self):
+        profile = SimpleNamespace(
+            id=uuid.uuid4(),
+            email="user@gmail.com",
+            full_name="User",
+            email_verified=False,
+        )
+        with (
+            patch.object(auth, "send_verification_email", new_callable=AsyncMock) as send,
+            patch.object(auth.supabase_admin.auth, "sign_in_with_password") as sign_in,
+            self.assertRaises(HTTPException) as raised,
+        ):
+            __import__("asyncio").run(login_result(
+                {"email": profile.email, "password": "secret1"},
+                FlowSession(profile, None, None),
+            ))
+        self.assertEqual(raised.exception.status_code, 403)
+        sign_in.assert_not_called()
+        send.assert_awaited_once()
+        self.assertEqual(len(send.await_args.args[1]), 6)
+
 
 class EmailVerificationTests(unittest.TestCase):
     def token_row(self, raw_token="raw-verification-token-123456789", **overrides):
@@ -347,54 +383,104 @@ class EmailVerificationTests(unittest.TestCase):
         values.update(overrides)
         return SimpleNamespace(**values)
 
-    def test_successful_verification(self):
-        raw_token = "raw-verification-token-123456789"
+    def test_successful_otp_verification(self):
+        raw_token = "123456"
         token_row = self.token_row(raw_token)
         profile = SimpleNamespace(
             id=token_row.user_id,
             email="user@gmail.com",
             email_verified=False,
         )
-        session = FlowSession(token_row, None, profile=profile)
+        session = FlowSession(profile, token_row)
         with patch.object(
             auth.supabase_admin.auth.admin, "update_user_by_id"
         ) as confirm_user:
             result = __import__("asyncio").run(
-                auth.verify_email(token=raw_token, db=session)
+                auth.verify_otp(
+                    body=VerifyOtpRequest(email=profile.email, otp=raw_token),
+                    db=session,
+                )
             )
         self.assertTrue(result["success"])
         self.assertTrue(profile.email_verified)
         self.assertEqual(session.commits, 1)
         confirm_user.assert_called_once_with(str(profile.id), {"email_confirm": True})
 
-    def test_invalid_token(self):
+    def test_successful_otp_verification_activates_pending_registration(self):
+        raw_token = "123456"
+        user_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+        pending = SimpleNamespace(
+            user_id=user_id,
+            email="pending@gmail.com",
+            role="student",
+            registration_data={
+                "full_name": "Pending User",
+                "phone": "+919876543210",
+                "college": "College",
+                "branch": "CS",
+                "year_of_study": 2,
+            },
+            expires_at=now + timedelta(minutes=20),
+        )
+        token_row = self.token_row(raw_token, user_id=user_id)
+        session = FlowSession(None, pending, token_row, None)
+        with patch.object(
+            auth.supabase_admin.auth.admin, "update_user_by_id"
+        ) as confirm_user:
+            result = __import__("asyncio").run(
+                auth.verify_otp(
+                    body=VerifyOtpRequest(email=pending.email, otp=raw_token),
+                    db=session,
+                )
+            )
+        self.assertTrue(result["success"])
+        self.assertTrue(any(isinstance(row, Profile) for row in session.added))
+        self.assertTrue(any(isinstance(row, Student) for row in session.added))
+        self.assertEqual(session.deleted, [pending])
+        confirm_user.assert_called_once_with(str(user_id), {"email_confirm": True})
+
+    def test_invalid_otp(self):
         with self.assertRaises(HTTPException) as raised:
             __import__("asyncio").run(
-                auth.verify_email(token="invalid-verification-token-123", db=FlowSession(None))
+                auth.verify_otp(
+                    body=VerifyOtpRequest(email="user@gmail.com", otp="123456"),
+                    db=FlowSession(None, None),
+                )
             )
         self.assertEqual(raised.exception.status_code, 400)
 
-    def test_expired_token(self):
+    def test_expired_otp(self):
         token_row = self.token_row(
+            raw_token="123456",
             expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)
         )
         with self.assertRaises(HTTPException) as raised:
             __import__("asyncio").run(
-                auth.verify_email(token="raw-verification-token-123456789", db=FlowSession(token_row))
+                auth.verify_otp(
+                    body=VerifyOtpRequest(email="user@gmail.com", otp="123456"),
+                    db=FlowSession(None, None, token_row),
+                )
             )
         self.assertEqual(raised.exception.status_code, 400)
 
-    def test_reused_token(self):
-        token_row = self.token_row(used_at=datetime.now(timezone.utc))
+    def test_reused_otp(self):
+        token_row = self.token_row(
+            raw_token="123456",
+            used_at=datetime.now(timezone.utc),
+        )
         with self.assertRaises(HTTPException) as raised:
             __import__("asyncio").run(
-                auth.verify_email(token="raw-verification-token-123456789", db=FlowSession(token_row))
+                auth.verify_otp(
+                    body=VerifyOtpRequest(email="user@gmail.com", otp="123456"),
+                    db=FlowSession(None, None, token_row),
+                )
             )
         self.assertEqual(raised.exception.status_code, 400)
 
     def test_resend_invalidates_old_token_and_sends_hashed_new_token(self):
         profile = SimpleNamespace(
-            id=uuid.uuid4(), email="user@gmail.com", email_verified=False
+            id=uuid.uuid4(), email="user@gmail.com", full_name="User", email_verified=False
         )
         old_token = self.token_row(
             user_id=profile.id,

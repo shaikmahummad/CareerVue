@@ -1,16 +1,22 @@
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import CurrentUser
-from app.models.user import EmailVerificationToken, Profile, Student, Tutor
+from app.models.user import (
+    EmailVerificationToken,
+    PendingRegistration,
+    Profile,
+    Student,
+    Tutor,
+)
 from app.schemas.auth import (
     LoginRequest,
     RefreshRequest,
@@ -32,6 +38,8 @@ from app.services.email_verification_service import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
+PENDING_REGISTRATION_TTL = timedelta(minutes=30)
+MAX_OTP_ATTEMPTS = 5
 
 
 def _registration_options(body, role: str) -> dict:
@@ -52,6 +60,43 @@ async def _email_exists(db: AsyncSession, email: str) -> bool:
         select(Profile.id).where(func.lower(Profile.email) == email)
     )
     return result.scalar_one_or_none() is not None
+
+
+async def _pending_registration_for_email(db: AsyncSession, email: str):
+    return (
+        await db.execute(
+            select(PendingRegistration)
+            .where(func.lower(PendingRegistration.email) == email)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+
+
+async def _cleanup_expired_pending_registrations(db: AsyncSession) -> None:
+    now = datetime.now(timezone.utc)
+    expired = (
+        await db.execute(
+            select(PendingRegistration).where(
+                PendingRegistration.expires_at <= now
+            )
+        )
+    ).scalars().all()
+    if not expired:
+        return
+    expired_ids = [registration.user_id for registration in expired]
+    await db.execute(
+        delete(EmailVerificationToken).where(
+            EmailVerificationToken.user_id.in_(expired_ids)
+        )
+    )
+    await db.execute(
+        delete(PendingRegistration).where(
+            PendingRegistration.user_id.in_(expired_ids)
+        )
+    )
+    await db.commit()
+    for user_id in expired_ids:
+        _delete_auth_user(user_id)
 
 
 def _signup_with_verification(body, role: str) -> uuid.UUID:
@@ -180,13 +225,23 @@ async def _persist_tutor(
 
 
 async def _persist_registration(db, body, user_id, persist) -> None:
+    pending = PendingRegistration(
+        user_id=user_id,
+        email=body.email,
+        role=persist.__name__.removeprefix("_persist_"),
+        registration_data=body.model_dump(
+            exclude={"password", "confirm_password"}
+        ),
+        expires_at=datetime.now(timezone.utc) + PENDING_REGISTRATION_TTL,
+    )
+    committed = False
     try:
-        await persist(db, body, user_id)
+        db.add(pending)
         raw_token = await issue_verification_token(db, user_id)
         await db.flush()
-        await send_verification_email(body.email, raw_token, body.full_name)
         await db.commit()
-        return raw_token
+        committed = True
+        await send_verification_email(body.email, raw_token, body.full_name)
     except IntegrityError:
         await db.rollback()
         _delete_auth_user(user_id)
@@ -196,10 +251,11 @@ async def _persist_registration(db, body, user_id, persist) -> None:
         ) from None
     except Exception:
         await db.rollback()
-        _delete_auth_user(user_id)
+        if not committed:
+            _delete_auth_user(user_id)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Registration could not be completed. Please try again.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification OTP could not be sent. Please try again.",
         ) from None
 
 
@@ -213,6 +269,22 @@ async def register_student(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
         )
+    await _cleanup_expired_pending_registrations(db)
+    pending = await _pending_registration_for_email(db, body.email)
+    if pending:
+        if pending.expires_at <= datetime.now(timezone.utc):
+            await db.execute(
+                delete(PendingRegistration).where(
+                    PendingRegistration.user_id == pending.user_id
+                )
+            )
+            await db.commit()
+            _delete_auth_user(pending.user_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email verification is already pending for this account.",
+            )
     user_id = _signup_with_verification(body, "student")
     await _persist_registration(db, body, user_id, _persist_student)
     return {
@@ -232,65 +304,28 @@ async def register_tutor(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
         )
+    await _cleanup_expired_pending_registrations(db)
+    pending = await _pending_registration_for_email(db, body.email)
+    if pending:
+        if pending.expires_at <= datetime.now(timezone.utc):
+            await db.execute(
+                delete(PendingRegistration).where(
+                    PendingRegistration.user_id == pending.user_id
+                )
+            )
+            await db.commit()
+            _delete_auth_user(pending.user_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email verification is already pending for this account.",
+            )
     user_id = _signup_with_verification(body, "tutor")
     await _persist_registration(db, body, user_id, _persist_tutor)
     return {
         "success": True,
         "message": "Registration successful. Check your email to verify your account.",
         "data": {"user_id": str(user_id)},
-    }
-
-
-@router.get("/verify-email")
-async def verify_email(
-    token: str = Query(min_length=20, max_length=200),
-    db: AsyncSession = Depends(get_db),
-):
-    now = datetime.now(timezone.utc)
-    token_row = (
-        await db.execute(
-            select(EmailVerificationToken)
-            .where(
-                EmailVerificationToken.token_hash == hash_verification_token(token)
-            )
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
-    if (
-        token_row is None
-        or token_row.used_at is not None
-        or token_row.expires_at <= now
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This verification link is invalid or expired.",
-        )
-
-    profile = await db.get(Profile, token_row.user_id, with_for_update=True)
-    if profile is None or profile.email_verified:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This verification link is invalid or expired.",
-        )
-
-    try:
-        supabase_admin.auth.admin.update_user_by_id(
-            str(profile.id), {"email_confirm": True}
-        )
-    except Exception:
-        logger.exception("Failed to confirm Supabase auth user")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Email verification is temporarily unavailable.",
-        ) from None
-
-    profile.email_verified = True
-    await invalidate_unused_tokens(db, profile.id, now=now)
-    await db.commit()
-    return {
-        "success": True,
-        "message": "Email verified successfully.",
-        "data": None,
     }
 
 
@@ -307,25 +342,37 @@ async def verify_otp(
             .with_for_update()
         )
     ).scalar_one_or_none()
+    pending = None if profile else await _pending_registration_for_email(db, body.email)
+    user_id = profile.id if profile else pending.user_id if pending else None
     token_row = None
-    if profile is not None:
+    if user_id:
         token_row = (
             await db.execute(
                 select(EmailVerificationToken)
                 .where(
-                    EmailVerificationToken.user_id == profile.id,
+                    EmailVerificationToken.user_id == user_id,
                     EmailVerificationToken.token_hash == hash_verification_token(body.otp),
                 )
                 .with_for_update()
             )
         ).scalar_one_or_none()
+    if token_row is not None and getattr(token_row, "attempt_count", 0) >= MAX_OTP_ATTEMPTS:
+        token_row.used_at = now
+        await db.commit()
     if (
-        profile is None
-        or profile.email_verified
+        user_id is None
+        or (profile is not None and getattr(profile, "email_verified", False))
         or token_row is None
         or token_row.used_at is not None
         or token_row.expires_at <= now
     ):
+        if user_id and token_row is None:
+            latest = await latest_token_for_user(db, user_id)
+            if latest:
+                latest.attempt_count = getattr(latest, "attempt_count", 0) + 1
+                if latest.attempt_count >= MAX_OTP_ATTEMPTS:
+                    latest.used_at = now
+                await db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This OTP is invalid or expired.",
@@ -333,7 +380,7 @@ async def verify_otp(
 
     try:
         supabase_admin.auth.admin.update_user_by_id(
-            str(profile.id), {"email_confirm": True}
+            str(user_id), {"email_confirm": True}
         )
     except Exception:
         logger.exception("Failed to confirm Supabase auth user")
@@ -342,8 +389,42 @@ async def verify_otp(
             detail="Email verification is temporarily unavailable.",
         ) from None
 
-    profile.email_verified = True
-    await invalidate_unused_tokens(db, profile.id, now=now)
+    if pending:
+        data = pending.registration_data
+        profile = Profile(
+            id=pending.user_id,
+            role=pending.role,
+            full_name=data["full_name"],
+            email=pending.email,
+            phone=data.get("phone"),
+            email_verified=True,
+        )
+        db.add(profile)
+        if pending.role == "student":
+            db.add(Student(
+                profile_id=pending.user_id,
+                college_name=data.get("college"),
+                branch=data.get("branch"),
+                year_of_study=data.get("year_of_study"),
+                graduation_year=data.get("graduation_year"),
+                city=data.get("city"),
+                linkedin_url=data.get("linkedin_url"),
+                github_url=data.get("github_url"),
+            ))
+        else:
+            db.add(Tutor(
+                profile_id=pending.user_id,
+                bio=data.get("bio"),
+                expertise_tags=data.get("expertise_tags") or [],
+                qualification=data.get("qualification"),
+                experience_years=data.get("years_experience"),
+                linkedin_url=data.get("linkedin_url"),
+                website_url=data.get("website_url"),
+            ))
+        await db.delete(pending)
+    else:
+        profile.email_verified = True
+    await invalidate_unused_tokens(db, user_id, now=now)
     await db.commit()
     return {"success": True, "message": "Email verified successfully.", "data": None}
 
@@ -360,39 +441,91 @@ async def resend_verification(
             .with_for_update()
         )
     ).scalar_one_or_none()
+    pending = None if profile else await _pending_registration_for_email(db, body.email)
     generic_response = {
         "success": True,
-        "message": "If the account is awaiting verification, a new email is on its way.",
+        "message": "If the account is awaiting verification, a new OTP is on its way.",
         "data": None,
     }
-    if profile is None or profile.email_verified:
+    if (profile is None and pending is None) or (
+        profile and getattr(profile, "email_verified", False)
+    ):
         return generic_response
 
     now = datetime.now(timezone.utc)
-    latest = await latest_token_for_user(db, profile.id)
+    user_id = getattr(profile, "id", None) if profile else pending.user_id
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification is required. Enter the OTP sent to your email.",
+        )
+    latest = await latest_token_for_user(db, user_id)
     if latest and latest.created_at + RESEND_COOLDOWN > now:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Please wait before requesting another verification email.",
+            detail="Please wait before requesting another OTP.",
         )
 
-    await invalidate_unused_tokens(db, profile.id, now=now)
-    raw_token = await issue_verification_token(db, profile.id, now=now)
+    await invalidate_unused_tokens(db, user_id, now=now)
+    raw_token = await issue_verification_token(db, user_id, now=now)
+    recipient_name = (
+        getattr(profile, "full_name", "")
+        if profile
+        else pending.registration_data["full_name"]
+    )
     try:
-        await send_verification_email(profile.email, raw_token, profile.full_name)
+        await send_verification_email(body.email, raw_token, recipient_name)
     except Exception:
-        logger.exception("Failed to resend verification email")
+        logger.exception("Failed to resend verification OTP")
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Verification email could not be sent. Please try again.",
+            detail="Verification OTP could not be sent. Please try again.",
         ) from None
     await db.commit()
     return generic_response
 
 
 @router.post("/login")
-async def login(body: LoginRequest):
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    profile = (
+        await db.execute(
+            select(Profile)
+            .where(func.lower(Profile.email) == body.email)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    pending = None if profile else await _pending_registration_for_email(db, body.email)
+    if pending or (profile is not None and not getattr(profile, "email_verified", False)):
+        now = datetime.now(timezone.utc)
+        user_id = getattr(profile, "id", None) if profile else pending.user_id
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email verification is required. Enter the OTP sent to your email.",
+            )
+        latest = await latest_token_for_user(db, user_id)
+        if not latest or latest.expires_at <= now:
+            await invalidate_unused_tokens(db, user_id, now=now)
+            raw_token = await issue_verification_token(db, user_id, now=now)
+            await db.commit()
+            try:
+                name = (
+                    getattr(profile, "full_name", "")
+                    if profile
+                    else pending.registration_data["full_name"]
+                )
+                await send_verification_email(body.email, raw_token, name)
+            except Exception:
+                logger.exception("Failed to send login verification OTP")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Verification OTP could not be sent. Please try again.",
+                ) from None
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification is required. Enter the OTP sent to your email.",
+        )
     try:
         response = supabase_admin.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}

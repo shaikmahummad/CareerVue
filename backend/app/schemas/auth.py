@@ -79,7 +79,6 @@ class RegistrationRequest(BaseModel):
     confirm_password: Annotated[str, StringConstraints(max_length=MAX_PASSWORD_LENGTH)]
     full_name: Annotated[str, Field(max_length=MAX_NAME_LENGTH)]
     phone: Optional[str] = None
-    email_redirect_to: Optional[Annotated[str, StringConstraints(max_length=500)]] = None
 
     _normalize_name = field_validator("full_name", mode="before")(normalize_name)
     _normalize_phone = field_validator("phone", mode="before")(normalize_indian_phone)

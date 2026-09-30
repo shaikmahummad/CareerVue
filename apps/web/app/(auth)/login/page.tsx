@@ -26,6 +26,7 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendMessage, setResendMessage] = useState("");
+  const [verificationRequired, setVerificationRequired] = useState(false);
   const verified = searchParams.get("verified") === "1";
   const verificationFailed = searchParams.get("verification") === "failed";
   const passwordUpdated = searchParams.get("password") === "updated";
@@ -34,6 +35,7 @@ function LoginContent() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setVerificationRequired(false);
 
     if (!isValidEmail(email) || !password) {
       setError("Enter a valid email address and password.");
@@ -56,6 +58,7 @@ function LoginContent() {
     const body = await response.json().catch(() => null);
     if (!response.ok) {
       setError(body?.detail ?? "Invalid email or password, or the account is not verified.");
+      setVerificationRequired(response.status === 403);
       setLoading(false);
       return;
     }
@@ -199,14 +202,23 @@ function LoginContent() {
           {error && (
             <div className="mb-4 text-xs bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
               <p className="text-red-400">{error}</p>
-              <button
-                type="button"
-                onClick={resendVerification}
-                disabled={resending}
-                className="mt-2 text-[#c4c0ff] hover:text-white disabled:opacity-50"
-              >
-                {resending ? "Resending…" : "Resend verification email"}
-              </button>
+              {verificationRequired ? (
+                <Link
+                  href={`/verify-email?email=${encodeURIComponent(normalizeEmail(email))}`}
+                  className="mt-2 inline-block text-[#c4c0ff] hover:text-white"
+                >
+                  Enter verification OTP
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={resendVerification}
+                  disabled={resending}
+                  className="mt-2 text-[#c4c0ff] hover:text-white disabled:opacity-50"
+                >
+                  {resending ? "Resending…" : "Resend OTP"}
+                </button>
+              )}
               {resendMessage && <p className="mt-2 text-[#7c7a8a]">{resendMessage}</p>}
             </div>
           )}

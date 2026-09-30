@@ -101,7 +101,6 @@ export default function RegisterPage() {
       password,
       confirm_password: confirmPassword,
       phone: normalizedPhone ?? undefined,
-      email_redirect_to: `${window.location.origin}/auth/callback`,
     };
     const body =
       role === "student"
@@ -223,7 +222,7 @@ export default function RegisterPage() {
             disabled={resending}
             className="btn-secondary w-full mb-3 px-6 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
           >
-            {resending ? "Resending…" : "Resend verification email"}
+            {resending ? "Resending…" : "Resend OTP"}
           </button>
           <Link href="/login" className="btn-primary inline-flex px-6 py-3 rounded-xl text-sm font-semibold">
             Go to sign in
