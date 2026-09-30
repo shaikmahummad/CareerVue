@@ -114,16 +114,16 @@ export default function RegisterStep2Screen() {
         password,
         confirm_password: confirmPassword,
         phone: normalizeIndianPhone(phone) ?? undefined,
-        email_redirect_to: "careervue://auth/callback",
         ...(accountRole === "student" ? {
           college: college.trim() || undefined,
           branch: branch.trim() || undefined,
           year_of_study: yearIdx + 1,
         } : {}),
       });
-      Alert.alert("Check your email", "Verify your account using the link we sent before signing in.", [
-        { text: "Go to sign in", onPress: () => router.replace("/(auth)/login") },
-      ]);
+      router.replace({
+        pathname: "/(auth)/verify-email",
+        params: { email: normalizeEmail(email) },
+      } as never);
     } catch (error) {
       Alert.alert("Registration failed", error instanceof Error ? error.message : "Please try again.");
     } finally {

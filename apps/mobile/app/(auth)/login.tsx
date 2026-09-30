@@ -40,7 +40,18 @@ export default function LoginScreen() {
       });
       Alert.alert(
         "Check your email",
-        "If this account is awaiting verification, a new link is on its way."
+        "If this account is awaiting verification, a new OTP is on its way.",
+        [
+          {
+            text: "Enter OTP",
+            onPress: () =>
+              router.push({
+                pathname: "/(auth)/verify-email",
+                params: { email: normalizeEmail(email) },
+              } as never),
+          },
+          { text: "Close", style: "cancel" },
+        ]
       );
     } catch (error) {
       Alert.alert(

@@ -1,8 +1,10 @@
 # CareerVue SMTP email verification
 
-CareerVue's backend owns signup verification tokens and sends verification mail
-directly through SMTP. Supabase continues to own passwords and sessions. Password
-reset remains on the existing Supabase recovery flow.
+CareerVue's backend owns signup verification tokens and sends a six-digit OTP
+directly through SMTP. Registration uses Supabase's admin user-creation API so
+Supabase does not send its built-in confirmation link. Supabase continues to own
+passwords and sessions. Password reset remains on the existing Supabase recovery
+flow.
 
 ## Required backend environment variables
 
@@ -50,9 +52,8 @@ rewriting can interfere with one-time tokens.
 ## Smoke test
 
 1. Register a new account and confirm one verification email arrives.
-2. Confirm the email link opens
-   `FRONTEND_URL/verify-email?token=...` and finishes successfully.
-3. Confirm the same link fails when opened again.
+2. Confirm the email contains a six-digit OTP and no verification link.
+3. Enter the OTP in the registration screen and confirm verification succeeds.
 4. Confirm login is rejected before verification and succeeds afterward.
 5. Confirm resend works after the 60-second cooldown and the previous link no
    longer works.

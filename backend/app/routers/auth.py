@@ -19,7 +19,7 @@ from app.schemas.auth import (
     RegisterTutorRequest,
     VerifyOtpRequest,
 )
-from app.utils.supabase import supabase_admin, supabase_anon
+from app.utils.supabase import supabase_admin
 from app.services.email_verification_service import (
     RESEND_COOLDOWN,
     hash_verification_token,
@@ -35,10 +35,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _registration_options(body, role: str) -> dict:
-    options = {"data": {"full_name": body.full_name, "role": role}}
-    if body.email_redirect_to:
-        options["email_redirect_to"] = body.email_redirect_to
-    return options
+    return {"full_name": body.full_name, "role": role}
 
 
 def _is_duplicate_auth_error(exc: Exception) -> bool:
@@ -59,10 +56,13 @@ async def _email_exists(db: AsyncSession, email: str) -> bool:
 
 def _signup_with_verification(body, role: str) -> uuid.UUID:
     try:
-        response = supabase_anon.auth.sign_up({
+        # Admin creation does not trigger Supabase's built-in confirmation
+        # email. Verification is owned by the application OTP flow below.
+        response = supabase_admin.auth.admin.create_user({
             "email": body.email,
             "password": body.password,
-            "options": _registration_options(body, role),
+            "email_confirm": False,
+            "user_metadata": _registration_options(body, role),
         })
     except Exception as exc:
         if _is_duplicate_auth_error(exc):

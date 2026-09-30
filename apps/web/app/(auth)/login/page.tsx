@@ -92,10 +92,10 @@ function LoginContent() {
       });
       setResendMessage(
         response.ok
-          ? "If this account is awaiting verification, a new link is on its way."
+          ? "If this account is awaiting verification, a new OTP is on its way."
           : response.status === 429
-            ? "Please wait a minute before requesting another link."
-            : "Unable to resend right now. Please try again."
+            ? "Please wait a minute before requesting another OTP."
+            : "Unable to resend the OTP right now. Please try again."
       );
     } catch {
       setResendMessage("Unable to resend right now. Please try again.");
