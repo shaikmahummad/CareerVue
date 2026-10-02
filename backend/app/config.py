@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_email: str = ""
     smtp_from_name: str = ""
+    smtp_timeout_seconds: int = Field(default=20, gt=0, le=120)
     frontend_url: str = ""
 
     # Razorpay is optional until the payment feature is configured.
@@ -48,6 +49,7 @@ class Settings(BaseSettings):
     quiz_cleanup_interval_secs: int = Field(default=900, gt=0)
     quiz_cleanup_batch_size: int = Field(default=500, gt=0, le=5000)
     quiz_cleanup_enabled: bool = True
+    pending_registration_cleanup_interval_secs: int = Field(default=900, gt=0)
 
     @property
     def cors_origins(self) -> List[str]:

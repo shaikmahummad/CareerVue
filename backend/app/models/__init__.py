@@ -1,4 +1,11 @@
-from app.models.user import EmailVerificationToken, Profile, Student, Tutor, SkillProfile
+from app.models.user import (
+    EmailVerificationToken,
+    PendingRegistration,
+    Profile,
+    Student,
+    Tutor,
+    SkillProfile,
+)
 from app.models.course import Course, CourseModule, CourseApproval
 from app.models.quiz import QuizTemplate, QuizAttempt
 from app.models.roadmap import Roadmap, RoadmapCourse
@@ -17,6 +24,7 @@ from app.models.knowledge import (
 __all__ = [
     "Profile",
     "EmailVerificationToken",
+    "PendingRegistration",
     "Student",
     "Tutor",
     "SkillProfile",

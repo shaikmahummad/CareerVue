@@ -42,6 +42,10 @@ class PendingRegistration(Base):
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     registration_data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'PENDING'")
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

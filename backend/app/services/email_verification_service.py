@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import secrets
 import smtplib
 import ssl
@@ -15,6 +16,21 @@ from app.models.user import EmailVerificationToken
 
 TOKEN_TTL = timedelta(minutes=10)
 RESEND_COOLDOWN = timedelta(seconds=60)
+
+
+def log_auth_event(event: str, registration_id=None, **fields) -> None:
+    """Emit traceable auth events without including secrets or message content."""
+    safe_fields = " ".join(
+        f"{key}={value}" for key, value in fields.items()
+        if key not in {"otp", "password", "access_token", "refresh_token"}
+    )
+    logger = logging.getLogger(__name__)
+    logger.info(
+        "auth_event registration_id=%s event=%s%s",
+        registration_id or "unknown",
+        event,
+        f" {safe_fields}" if safe_fields else "",
+    )
 
 
 def hash_verification_token(token: str) -> str:
@@ -40,7 +56,7 @@ def create_verification_token(
 
 
 def _send_verification_email_sync(
-    recipient: str, raw_token: str, recipient_name: str = ""
+    recipient: str, raw_token: str, recipient_name: str = "", registration_id=None
 ) -> None:
     required = {
         "SMTP_HOST": settings.smtp_host,
@@ -83,29 +99,59 @@ def _send_verification_email_sync(
         subtype="html",
     )
 
+    log_auth_event("SMTP_CONNECTION_STARTED", registration_id)
     if settings.smtp_port == 465:
         with smtplib.SMTP_SSL(
             settings.smtp_host,
             settings.smtp_port,
             context=ssl.create_default_context(),
+            timeout=settings.smtp_timeout_seconds,
         ) as smtp:
+            log_auth_event("SMTP_CONNECTED", registration_id)
+            log_auth_event("SMTP_AUTHENTICATION_STARTED", registration_id)
             smtp.login(settings.smtp_username, settings.smtp_password)
-            smtp.send_message(message)
+            log_auth_event("SMTP_AUTHENTICATED", registration_id)
+            refused = smtp.send_message(message)
     else:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
+        with smtplib.SMTP(
+            settings.smtp_host,
+            settings.smtp_port,
+            timeout=settings.smtp_timeout_seconds,
+        ) as smtp:
+            log_auth_event("SMTP_CONNECTED", registration_id)
             smtp.ehlo()
             smtp.starttls(context=ssl.create_default_context())
             smtp.ehlo()
+            log_auth_event("SMTP_AUTHENTICATION_STARTED", registration_id)
             smtp.login(settings.smtp_username, settings.smtp_password)
-            smtp.send_message(message)
+            log_auth_event("SMTP_AUTHENTICATED", registration_id)
+            refused = smtp.send_message(message)
+    if refused:
+        raise smtplib.SMTPRecipientsRefused(refused)
+    log_auth_event("SMTP_MESSAGE_SUBMITTED", registration_id)
 
 
 async def send_verification_email(
-    recipient: str, raw_token: str, recipient_name: str = ""
+    recipient: str, raw_token: str, recipient_name: str = "", registration_id=None
 ) -> None:
-    await asyncio.to_thread(
-        _send_verification_email_sync, recipient, raw_token, recipient_name
-    )
+    log_auth_event("EMAIL_SEND_STARTED", registration_id)
+    try:
+        await asyncio.to_thread(
+            _send_verification_email_sync,
+            recipient,
+            raw_token,
+            recipient_name,
+            registration_id,
+        )
+    except Exception as exc:
+        log_auth_event(
+            "EMAIL_SEND_FAILED",
+            registration_id,
+            error_type=type(exc).__name__,
+            error=str(exc)[:200],
+        )
+        raise
+    log_auth_event("EMAIL_ACCEPTED_BY_SMTP", registration_id)
 
 
 async def issue_verification_token(

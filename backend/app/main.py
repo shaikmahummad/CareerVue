@@ -21,6 +21,7 @@ from app.routers import (
     admin,
     notifications,
 )
+from app.routers.auth import cleanup_expired_pending_registrations
 
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,17 @@ async def _quiz_cleanup_loop() -> None:
         await asyncio.sleep(settings.quiz_cleanup_interval_secs)
 
 
+async def _pending_registration_cleanup_loop() -> None:
+    while True:
+        try:
+            await cleanup_expired_pending_registrations()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("pending_registration_cleanup_failed")
+        await asyncio.sleep(settings.pending_registration_cleanup_interval_secs)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -58,11 +70,15 @@ async def lifespan(app: FastAPI):
         if settings.quiz_cleanup_enabled
         else None
     )
+    pending_cleanup_task = asyncio.create_task(_pending_registration_cleanup_loop())
     yield
     if cleanup_task:
         cleanup_task.cancel()
         with suppress(asyncio.CancelledError):
             await cleanup_task
+    pending_cleanup_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await pending_cleanup_task
     await engine.dispose()
 
 

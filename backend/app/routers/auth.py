@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
 from app.dependencies import CurrentUser
 from app.models.user import (
     EmailVerificationToken,
@@ -32,6 +32,7 @@ from app.services.email_verification_service import (
     invalidate_unused_tokens,
     issue_verification_token,
     latest_token_for_user,
+    log_auth_event,
     send_verification_email,
 )
 
@@ -40,6 +41,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 PENDING_REGISTRATION_TTL = timedelta(minutes=30)
 MAX_OTP_ATTEMPTS = 5
+PENDING = "PENDING"
+OTP_SENT = "OTP_SENT"
+OTP_SEND_FAILED = "OTP_SEND_FAILED"
+
+
+def _safe_error(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {str(exc)[:200]}"
 
 
 def _registration_options(body, role: str) -> dict:
@@ -96,7 +104,13 @@ async def _cleanup_expired_pending_registrations(db: AsyncSession) -> None:
     )
     await db.commit()
     for user_id in expired_ids:
+        log_auth_event("REGISTRATION_EXPIRED", user_id)
         _delete_auth_user(user_id)
+
+
+async def cleanup_expired_pending_registrations() -> None:
+    async with AsyncSessionLocal() as db:
+        await _cleanup_expired_pending_registrations(db)
 
 
 def _signup_with_verification(body, role: str) -> uuid.UUID:
@@ -232,6 +246,7 @@ async def _persist_registration(db, body, user_id, persist) -> None:
         registration_data=body.model_dump(
             exclude={"password", "confirm_password"}
         ),
+        status=PENDING,
         expires_at=datetime.now(timezone.utc) + PENDING_REGISTRATION_TTL,
     )
     committed = False
@@ -241,7 +256,21 @@ async def _persist_registration(db, body, user_id, persist) -> None:
         await db.flush()
         await db.commit()
         committed = True
-        await send_verification_email(body.email, raw_token, body.full_name)
+        log_auth_event("OTP_GENERATED", user_id)
+        try:
+            await send_verification_email(
+                body.email, raw_token, body.full_name, registration_id=user_id
+            )
+        except Exception as exc:
+            pending.status = OTP_SEND_FAILED
+            pending.last_error = _safe_error(exc)
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Verification OTP could not be sent. Please try again.",
+            ) from None
+        pending.status = OTP_SENT
+        pending.last_error = None
     except IntegrityError:
         await db.rollback()
         _delete_auth_user(user_id)
@@ -249,6 +278,8 @@ async def _persist_registration(db, body, user_id, persist) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
         ) from None
+    except HTTPException:
+        raise
     except Exception:
         await db.rollback()
         if not committed:
@@ -366,6 +397,11 @@ async def verify_otp(
         or token_row.used_at is not None
         or token_row.expires_at <= now
     ):
+        log_auth_event(
+            "OTP_EXPIRED" if token_row is not None and token_row.expires_at <= now
+            else "OTP_VERIFICATION_FAILED",
+            user_id,
+        )
         if user_id and token_row is None:
             latest = await latest_token_for_user(db, user_id)
             if latest:
@@ -426,6 +462,7 @@ async def verify_otp(
         profile.email_verified = True
     await invalidate_unused_tokens(db, user_id, now=now)
     await db.commit()
+    log_auth_event("REGISTRATION_COMPLETED", user_id)
     return {"success": True, "message": "Email verified successfully.", "data": None}
 
 
@@ -468,21 +505,33 @@ async def resend_verification(
 
     await invalidate_unused_tokens(db, user_id, now=now)
     raw_token = await issue_verification_token(db, user_id, now=now)
+    if pending:
+        pending.status = PENDING
+        pending.last_error = None
+    await db.commit()
+    log_auth_event("OTP_GENERATED", user_id)
     recipient_name = (
         getattr(profile, "full_name", "")
         if profile
         else pending.registration_data["full_name"]
     )
     try:
-        await send_verification_email(body.email, raw_token, recipient_name)
-    except Exception:
+        await send_verification_email(
+            body.email, raw_token, recipient_name, registration_id=user_id
+        )
+    except Exception as exc:
         logger.exception("Failed to resend verification OTP")
-        await db.rollback()
+        if pending:
+            pending.status = OTP_SEND_FAILED
+            pending.last_error = _safe_error(exc)
+            await db.commit()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Verification OTP could not be sent. Please try again.",
         ) from None
-    await db.commit()
+    if pending:
+        pending.status = OTP_SENT
+        pending.last_error = None
     return generic_response
 
 
@@ -515,7 +564,9 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
                     if profile
                     else pending.registration_data["full_name"]
                 )
-                await send_verification_email(body.email, raw_token, name)
+                await send_verification_email(
+                    body.email, raw_token, name, registration_id=user_id
+                )
             except Exception:
                 logger.exception("Failed to send login verification OTP")
                 raise HTTPException(
