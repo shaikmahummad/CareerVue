@@ -39,7 +39,9 @@ export default function AdminDashboard() {
   useEffect(() => {
     apiGet<DashboardStats>("/api/v1/admin/dashboard")
       .then(setStats)
-      .catch(() => {});
+      .catch((error) => {
+        console.warn("Failed to load admin dashboard", error instanceof Error ? error.message : "Unknown error");
+      });
   }, []);
 
   const totalUsers    = stats?.total_users       ?? 0;

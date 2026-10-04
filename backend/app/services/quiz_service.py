@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 
 from app.models.quiz import QuizAttempt, QuizTemplate
 from app.models.user import SkillProfile, Student
@@ -21,6 +22,15 @@ from app.services.question_bank_service import (
 SECONDS_PER_QUESTION = 90
 ACTIVE_TEMPLATE_VERSION = QUESTION_BANK_VERSION
 VALID_OPTIONS = frozenset({"A", "B", "C", "D"})
+logger = logging.getLogger(__name__)
+
+
+class StudentProfileError(ValueError):
+    """The authenticated profile cannot be resolved to exactly one student."""
+
+    def __init__(self, message: str, *, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class QuizUnavailableError(ValueError):
@@ -196,16 +206,32 @@ def assess_skills(questions: list[dict], answers: list[dict]) -> list[dict]:
 
 
 async def get_student_pk(db: AsyncSession, profile_id: UUID) -> UUID:
-    """Resolve profiles.id to students.id, creating the student row if needed."""
-    row = (
-        await db.execute(select(Student).where(Student.profile_id == profile_id))
-    ).scalar_one_or_none()
-    if not row:
-        row = Student(profile_id=profile_id)
-        db.add(row)
-        await db.commit()
-        await db.refresh(row)
-    return row.id
+    """Resolve profiles.id to one existing student without mutating the database."""
+    result = await db.execute(
+        select(Student).where(Student.profile_id == profile_id)
+    )
+    scalar_result = result.scalars() if hasattr(result, "scalars") else result
+    if hasattr(scalar_result, "all"):
+        rows = scalar_result.all()
+    else:
+        row = result.scalar_one_or_none()
+        rows = [row] if row is not None else []
+    if not rows:
+        raise StudentProfileError(
+            "Student profile not found. Please complete your student profile.",
+            status_code=404,
+        )
+    if len(rows) > 1:
+        logger.error(
+            "quiz_data_integrity_error event=multiple_students profile_id=%s count=%s",
+            profile_id,
+            len(rows),
+        )
+        raise StudentProfileError(
+            "Multiple student profiles exist for this account. Contact support.",
+            status_code=409,
+        )
+    return rows[0].id
 
 
 def _compute_skill_level(avg_score: float) -> str:
@@ -296,6 +322,7 @@ async def issue_quiz_attempt(
     *,
     profile_id: UUID,
     template: QuizTemplate,
+    student_id: UUID | None = None,
     start_limit: int | None = None,
     window_secs: int | None = None,
     max_active_attempts: int | None = None,
@@ -304,7 +331,7 @@ async def issue_quiz_attempt(
     if not _template_is_active_v2(template):
         raise QuizUnavailableError("Only active v2 quiz templates can be issued.")
     questions = _template_questions(template)
-    student_id = await get_student_pk(db, profile_id)
+    student_id = student_id or await get_student_pk(db, profile_id)
     now = datetime.now(timezone.utc)
     limit = start_limit or settings.quiz_attempt_start_limit
     window = window_secs or settings.quiz_attempt_start_window_secs
@@ -314,9 +341,17 @@ async def issue_quiz_attempt(
     # makes the count-and-create operation safe across processes and hosts.
     student = (
         await db.execute(
-            select(Student).where(Student.id == student_id).with_for_update()
+            select(Student).where(
+                Student.id == student_id,
+                Student.profile_id == profile_id,
+            ).with_for_update()
         )
-    ).scalar_one()
+    ).scalar_one_or_none()
+    if student is None:
+        raise StudentProfileError(
+            "Student profile not found. Please complete your student profile.",
+            status_code=404,
+        )
     recent_attempts = (
         await db.execute(
             select(func.count(QuizAttempt.id)).where(

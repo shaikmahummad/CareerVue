@@ -57,8 +57,9 @@ function LoginContent() {
     }
     const body = await response.json().catch(() => null);
     if (!response.ok) {
-      setError(body?.detail ?? "Invalid email or password, or the account is not verified.");
-      setVerificationRequired(response.status === 403);
+      const detail = body?.detail;
+      setError(detail?.message ?? detail ?? "Invalid email or password.");
+      setVerificationRequired(detail?.code === "ACCOUNT_NOT_VERIFIED");
       setLoading(false);
       return;
     }

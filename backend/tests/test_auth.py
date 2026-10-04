@@ -300,7 +300,12 @@ class LoginTests(unittest.TestCase):
                 LoginRequest.model_validate(payload)
 
     def test_valid_verified_login_returns_tokens(self):
-        profile = SimpleNamespace(email_verified=True)
+        profile = SimpleNamespace(
+            id=uuid.uuid4(),
+            email_verified=True,
+            role="student",
+            full_name="Student",
+        )
         response = SimpleNamespace(
             session=SimpleNamespace(
                 access_token="access",
@@ -310,6 +315,7 @@ class LoginTests(unittest.TestCase):
             user=SimpleNamespace(
                 id=str(uuid.uuid4()),
                 email="user@gmail.com",
+                email_confirmed_at=datetime.now(timezone.utc),
                 user_metadata={"role": "student", "full_name": "Student"},
             ),
         )
@@ -332,20 +338,31 @@ class LoginTests(unittest.TestCase):
                     FlowSession(None),
                 ))
             self.assertEqual(raised.exception.status_code, 401)
-            self.assertNotIn(provider_error, raised.exception.detail)
+            self.assertEqual(raised.exception.detail["code"], "INVALID_CREDENTIALS")
 
     def test_unverified_user_cannot_login(self):
-        profile = SimpleNamespace(email_verified=False)
+        profile = SimpleNamespace(
+            id=uuid.uuid4(),
+            email="user@gmail.com",
+            full_name="User",
+            email_verified=False,
+        )
         with (
-            patch.object(auth.supabase_admin.auth, "sign_in_with_password") as sign_in,
+            patch.object(
+                auth.supabase_admin.auth,
+                "sign_in_with_password",
+                side_effect=Exception("Email not confirmed"),
+            ) as sign_in,
+            patch.object(auth, "send_verification_email", new_callable=AsyncMock),
             self.assertRaises(HTTPException) as raised,
         ):
             __import__("asyncio").run(login_result(
                 {"email": "user@gmail.com", "password": "secret1"},
-                FlowSession(profile),
+                FlowSession(profile, None, None),
             ))
         self.assertEqual(raised.exception.status_code, 403)
-        sign_in.assert_not_called()
+        self.assertEqual(raised.exception.detail["code"], "ACCOUNT_NOT_VERIFIED")
+        sign_in.assert_called_once()
 
     def test_unverified_user_login_sends_otp_and_blocks_login(self):
         profile = SimpleNamespace(
@@ -356,7 +373,11 @@ class LoginTests(unittest.TestCase):
         )
         with (
             patch.object(auth, "send_verification_email", new_callable=AsyncMock) as send,
-            patch.object(auth.supabase_admin.auth, "sign_in_with_password") as sign_in,
+            patch.object(
+                auth.supabase_admin.auth,
+                "sign_in_with_password",
+                side_effect=Exception("Email not confirmed"),
+            ) as sign_in,
             self.assertRaises(HTTPException) as raised,
         ):
             __import__("asyncio").run(login_result(
@@ -364,9 +385,43 @@ class LoginTests(unittest.TestCase):
                 FlowSession(profile, None, None),
             ))
         self.assertEqual(raised.exception.status_code, 403)
-        sign_in.assert_not_called()
+        self.assertEqual(raised.exception.detail["code"], "ACCOUNT_NOT_VERIFIED")
+        sign_in.assert_called_once()
         send.assert_awaited_once()
         self.assertEqual(len(send.await_args.args[1]), 6)
+
+    def test_provider_confirmation_repairs_stale_profile_verification(self):
+        profile = SimpleNamespace(
+            id=uuid.uuid4(),
+            email_verified=False,
+            role="student",
+            full_name="Existing User",
+        )
+        response = SimpleNamespace(
+            session=SimpleNamespace(
+                access_token="access",
+                refresh_token="refresh",
+                expires_in=3600,
+            ),
+            user=SimpleNamespace(
+                id=str(profile.id),
+                email="user@gmail.com",
+                email_confirmed_at=datetime.now(timezone.utc),
+            ),
+        )
+        session = FlowSession(profile)
+        with patch.object(
+            auth.supabase_admin.auth,
+            "sign_in_with_password",
+            return_value=response,
+        ):
+            result = __import__("asyncio").run(login_result(
+                {"email": "user@gmail.com", "password": "secret1"},
+                session,
+            ))
+        self.assertEqual(result["data"]["access_token"], "access")
+        self.assertTrue(profile.email_verified)
+        self.assertEqual(session.commits, 1)
 
 
 class EmailVerificationTests(unittest.TestCase):

@@ -51,7 +51,9 @@ export default function TutorProfile() {
         setWebsite(p.website_url ?? "");
         setPhone(p.phone ?? "");
       })
-      .catch(() => {})
+      .catch((error) => {
+        console.warn("Failed to load tutor profile", error instanceof Error ? error.message : "Unknown error");
+      })
       .finally(() => setLoading(false));
   }, []);
 

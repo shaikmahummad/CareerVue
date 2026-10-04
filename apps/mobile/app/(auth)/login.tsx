@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Defs, RadialGradient, Stop, Rect } from "react-native-svg";
 import { supabase } from "../../lib/supabase";
-import { apiPost } from "../../lib/api";
+import { ApiError, apiPost } from "../../lib/api";
 import { isValidEmail, normalizeEmail } from "../../lib/auth-validation";
 import { colors } from "../../constants/theme";
 
@@ -79,7 +79,7 @@ export default function LoginScreen() {
       if (error) throw error;
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
-      if (message.includes("Email verification is required")) {
+      if (error instanceof ApiError && error.code === "ACCOUNT_NOT_VERIFIED") {
         Alert.alert(
           "Check your email",
           "A 6-digit OTP was sent to your email. Enter it to continue.",
@@ -99,10 +99,12 @@ export default function LoginScreen() {
       Alert.alert(
         "Sign in failed",
         message || "Invalid email or password. Please try again.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Resend verification", onPress: () => void resendVerification() },
-        ]
+        error instanceof ApiError && error.code === "INVALID_CREDENTIALS"
+          ? [{ text: "OK" }]
+          : [
+              { text: "Cancel", style: "cancel" },
+              { text: "Resend verification", onPress: () => void resendVerification() },
+            ]
       );
     } finally {
       setLoading(false);

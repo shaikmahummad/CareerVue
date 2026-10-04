@@ -33,11 +33,16 @@ async def get_current_user(
         raise
     except Exception as exc:
         logger.warning("Token validation failed: %s", exc)
+        provider_code = str(getattr(exc, "code", "")).lower()
+        is_expired = "expired" in provider_code or "expired" in str(exc).lower()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail={
+                "code": "TOKEN_EXPIRED" if is_expired else "UNAUTHORIZED",
+                "message": "Your session has expired." if is_expired else "Invalid session.",
+            },
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
 
     # Get profile from DB
     result = await db.execute(
@@ -46,8 +51,11 @@ async def get_current_user(
     profile = result.scalar_one_or_none()
     if not profile:
         raise HTTPException(
-            status_code=404,
-            detail="Profile not found. Please complete registration.",
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ACCOUNT_SETUP_INCOMPLETE",
+                "message": "Profile not found. Please complete registration.",
+            },
         )
 
     return profile
@@ -60,10 +68,10 @@ def require_role(*roles: str):
         if current_user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    f"Access denied. Required role(s): {roles}. "
-                    f"Your role: {current_user.role}"
-                ),
+                detail={
+                    "code": "FORBIDDEN",
+                    "message": "You do not have permission to perform this action.",
+                },
             )
         return current_user
 

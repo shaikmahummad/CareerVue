@@ -1,4 +1,5 @@
 import uuid
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from app.services.quiz_service import (
     QuizSubmissionError,
     QuizRateLimitError,
     QuizUnavailableError,
+    StudentProfileError,
     get_or_create_quiz_template,
     get_student_pk,
     issue_quiz_attempt,
@@ -21,6 +23,7 @@ from app.services.quiz_service import (
 )
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
+logger = logging.getLogger(__name__)
 
 
 # ── Request / Response bodies ─────────────────────────────────────────────────
@@ -38,22 +41,34 @@ async def start_quiz_attempt(
 
     Correct answers are stripped from the response so clients cannot cheat.
     """
+    logger.info("quiz_attempt_start event=quiz_attempt_start user_id=%s goal=%s", current_user.id, goal)
     try:
         student_pk = await get_student_pk(db, current_user.id)
+        logger.info("quiz_attempt_start event=student_lookup result=found user_id=%s student_id=%s", current_user.id, student_pk)
         template = await get_or_create_quiz_template(
             db, goal, student_id=student_pk
         )
+        logger.info("quiz_attempt_start event=quiz_lookup result=found user_id=%s quiz_id=%s", current_user.id, template.id)
+        logger.info("quiz_attempt_start event=attempt_creation result=started user_id=%s", current_user.id)
         attempt = await issue_quiz_attempt(
-            db, profile_id=current_user.id, template=template
+            db, profile_id=current_user.id, student_id=student_pk, template=template
         )
+        logger.info("quiz_attempt_start event=attempt_creation result=success user_id=%s attempt_id=%s", current_user.id, attempt.id)
+        logger.info("quiz_attempt_start event=transaction result=committed user_id=%s attempt_id=%s", current_user.id, attempt.id)
+    except StudentProfileError as exc:
+        logger.warning("quiz_attempt_start event=student_lookup result=failed user_id=%s error=%s", current_user.id, exc)
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except QuizUnavailableError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except QuizRateLimitError as exc:
         raise HTTPException(
             status_code=429,
             detail=str(exc),
             headers={"Retry-After": str(exc.retry_after_secs)},
         ) from exc
+    except Exception:
+        logger.exception("quiz_attempt_start event=failed user_id=%s goal=%s", current_user.id, goal)
+        raise
 
     # Omit correct answer + explanation from client payload
     safe_questions = [

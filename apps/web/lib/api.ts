@@ -15,8 +15,9 @@ async function authHeaders(): Promise<HeadersInit> {
 async function handleResponse<T>(res: Response): Promise<T> {
   const json = await res.json().catch(() => null);
   if (!res.ok) {
-    const detail = json?.detail ?? json?.message ?? res.statusText;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    const detail = json?.detail;
+    const message = detail?.message ?? detail ?? json?.message ?? res.statusText;
+    throw new Error(typeof message === "string" ? message : JSON.stringify(message));
   }
   return (json?.data ?? json) as T;
 }

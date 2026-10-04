@@ -35,7 +35,9 @@ export default function TutorCoursesScreen() {
   useEffect(() => {
     apiGet<Course[]>("/api/v1/tutors/courses")
       .then(setCourses)
-      .catch(() => {})
+      .catch((error) => {
+        console.warn("Failed to load tutor courses", error instanceof Error ? error.message : "Unknown error");
+      })
       .finally(() => setLoading(false));
   }, []);
 

@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
+import { ApiError, apiGet } from "../lib/api";
 import type { Session } from "@supabase/supabase-js";
-import { View, ActivityIndicator, Linking } from "react-native";
+import { View, ActivityIndicator, AppState, Linking } from "react-native";
 import { useFonts } from "expo-font";
 import {
   HankenGrotesk_400Regular,
@@ -22,7 +23,17 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 60_000, retry: 1 } },
 });
 
-function AuthGuard({ session, ready }: { session: Session | null; ready: boolean }) {
+type AccountRole = "student" | "tutor" | "admin";
+
+function AuthGuard({
+  session,
+  role,
+  ready,
+}: {
+  session: Session | null;
+  role: AccountRole | null;
+  ready: boolean;
+}) {
   const segments = useSegments();
   const currentSegments = segments as readonly string[];
   const router   = useRouter();
@@ -38,15 +49,13 @@ function AuthGuard({ session, ready }: { session: Session | null; ready: boolean
 
     if (!session) {
       if (!isPublic) router.replace("/(auth)/login" as never);
-    } else {
-      if (isPublic && !inPasswordReset) {
-        const role = (session.user.user_metadata?.role as string) ?? "student";
-        if (role === "tutor") router.replace("/(tutor)/" as never);
-        else if (role === "admin") router.replace("/(admin)/" as never);
-        else router.replace("/(student)/" as never);
+    } else if (role && !inPasswordReset) {
+      const targetGroup = `(${role})`;
+      if (isPublic || currentSegments[0] !== targetGroup) {
+        router.replace(`/${targetGroup}/` as never);
       }
     }
-  }, [session, currentSegments, ready, router]);
+  }, [session, role, currentSegments, ready, router]);
 
   return null;
 }
@@ -55,6 +64,8 @@ export default function RootLayout() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [ready,   setReady]   = useState(false);
+  const [accountRole, setAccountRole] = useState<AccountRole | null>(null);
+  const [roleReady, setRoleReady] = useState(false);
   const [fontsLoaded] = useFonts({
     HankenGrotesk_400Regular,
     HankenGrotesk_500Medium,
@@ -106,7 +117,58 @@ export default function RootLayout() {
     };
   }, [router]);
 
-  if (!ready || !fontsLoaded) {
+  useEffect(() => {
+    if (!ready) return;
+    if (!session) {
+      setAccountRole(null);
+      setRoleReady(true);
+      return;
+    }
+
+    let active = true;
+    setRoleReady(false);
+    apiGet<{ role: string }>("/api/v1/auth/me")
+      .then((profile) => {
+        if (!active) return;
+        if (["student", "tutor", "admin"].includes(profile.role)) {
+          setAccountRole(profile.role as AccountRole);
+        } else {
+          void supabase.auth.signOut();
+          setAccountRole(null);
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (error instanceof ApiError && error.status === 401) {
+          void supabase.auth.signOut();
+          setAccountRole(null);
+          return;
+        }
+        // Keep an offline-restored session usable; the API will enforce roles.
+        const fallback = session.user.user_metadata?.role;
+        setAccountRole(
+          ["student", "tutor", "admin"].includes(fallback)
+            ? fallback as AccountRole
+            : "student",
+        );
+      })
+      .finally(() => {
+        if (active) setRoleReady(true);
+      });
+    return () => { active = false; };
+  }, [ready, session]);
+
+  useEffect(() => {
+    const updateRefreshState = (state: string) => {
+      if (state === "active") supabase.auth.startAutoRefresh();
+      else supabase.auth.stopAutoRefresh();
+    };
+    updateRefreshState(AppState.currentState);
+    const subscription = AppState.addEventListener("change", updateRefreshState);
+    return () => subscription.remove();
+  }, []);
+
+  if (!ready || !roleReady || !fontsLoaded) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator color={colors.primary} />
@@ -116,7 +178,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthGuard session={session} ready={ready} />
+      <AuthGuard session={session} role={accountRole} ready={ready && roleReady} />
       <Slot />
     </QueryClientProvider>
   );

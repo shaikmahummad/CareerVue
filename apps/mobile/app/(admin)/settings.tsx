@@ -34,7 +34,9 @@ export default function AdminSettings() {
       const meta = user.user_metadata;
       setName(meta?.full_name ?? meta?.name ?? null);
     });
-    apiGet<DashboardStats>("/api/v1/admin/dashboard").then(setStats).catch(() => {});
+    apiGet<DashboardStats>("/api/v1/admin/dashboard").then(setStats).catch((error) => {
+      console.warn("Failed to load admin settings stats", error instanceof Error ? error.message : "Unknown error");
+    });
   }, []);
 
   async function handleSignOut() {

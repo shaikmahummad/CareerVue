@@ -46,6 +46,24 @@ OTP_SENT = "OTP_SENT"
 OTP_SEND_FAILED = "OTP_SEND_FAILED"
 
 
+def _auth_error(status_code: int, code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": message},
+    )
+
+
+def _provider_error_code(exc: Exception) -> str:
+    return str(getattr(exc, "code", "")).strip().lower()
+
+
+def _provider_email_verified(user) -> bool:
+    return bool(
+        getattr(user, "email_confirmed_at", None)
+        or getattr(user, "confirmed_at", None)
+    )
+
+
 def _safe_error(exc: Exception) -> str:
     return f"{type(exc).__name__}: {str(exc)[:200]}"
 
@@ -545,65 +563,95 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         )
     ).scalar_one_or_none()
     pending = None if profile else await _pending_registration_for_email(db, body.email)
-    if pending or (profile is not None and not getattr(profile, "email_verified", False)):
-        now = datetime.now(timezone.utc)
-        user_id = getattr(profile, "id", None) if profile else pending.user_id
-        if user_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Email verification is required. Enter the OTP sent to your email.",
-            )
-        latest = await latest_token_for_user(db, user_id)
-        if not latest or latest.expires_at <= now:
-            await invalidate_unused_tokens(db, user_id, now=now)
-            raw_token = await issue_verification_token(db, user_id, now=now)
-            await db.commit()
-            try:
-                name = (
-                    getattr(profile, "full_name", "")
-                    if profile
-                    else pending.registration_data["full_name"]
-                )
-                await send_verification_email(
-                    body.email, raw_token, name, registration_id=user_id
-                )
-            except Exception:
-                logger.exception("Failed to send login verification OTP")
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Verification OTP could not be sent. Please try again.",
-                ) from None
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email verification is required. Enter the OTP sent to your email.",
-        )
+
+    # Authenticate first. Verification state must not be disclosed and OTPs
+    # must not be issued until the caller has supplied the correct password.
     try:
         response = supabase_admin.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
         )
-        session = response.session
-        user = response.user
-        return {
-            "success": True,
-            "message": "Login successful",
-            "data": {
-                "access_token": session.access_token,
-                "refresh_token": session.refresh_token,
-                "token_type": "bearer",
-                "expires_in": session.expires_in,
-                "user": {
-                    "id": user.id,
-                    "email": user.email,
-                    "role": user.user_metadata.get("role", "student"),
-                    "full_name": user.user_metadata.get("full_name", ""),
-                },
-            },
-        }
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password, or the account is not verified.",
+    except Exception as exc:
+        provider_code = _provider_error_code(exc)
+        provider_message = str(exc).lower()
+        if provider_code == "email_not_confirmed" or "email not confirmed" in provider_message:
+            if pending or (profile is not None and not getattr(profile, "email_verified", False)):
+                now = datetime.now(timezone.utc)
+                user_id = getattr(profile, "id", None) if profile else pending.user_id
+                latest = await latest_token_for_user(db, user_id)
+                if not latest or latest.expires_at <= now:
+                    await invalidate_unused_tokens(db, user_id, now=now)
+                    raw_token = await issue_verification_token(db, user_id, now=now)
+                    await db.commit()
+                    try:
+                        name = (
+                            getattr(profile, "full_name", "")
+                            if profile
+                            else pending.registration_data["full_name"]
+                        )
+                        await send_verification_email(
+                            body.email, raw_token, name, registration_id=user_id
+                        )
+                    except Exception:
+                        logger.exception("Failed to send login verification OTP")
+                        raise _auth_error(
+                            status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "SERVER_ERROR",
+                            "Verification OTP could not be sent. Please try again.",
+                        ) from None
+                raise _auth_error(
+                    status.HTTP_403_FORBIDDEN,
+                    "ACCOUNT_NOT_VERIFIED",
+                    "Email verification is required. Enter the OTP sent to your email.",
+                ) from None
+        raise _auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "INVALID_CREDENTIALS",
+            "Invalid email or password.",
         ) from None
+
+    session = response.session
+    user = response.user
+    if not session or not user:
+        raise _auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "INVALID_CREDENTIALS",
+            "Invalid email or password.",
+        )
+    if not _provider_email_verified(user):
+        raise _auth_error(
+            status.HTTP_403_FORBIDDEN,
+            "ACCOUNT_NOT_VERIFIED",
+            "Email verification is required. Enter the OTP sent to your email.",
+        )
+    if not profile:
+        # A provider identity without an application profile cannot be safely
+        # assigned a role. Never create a duplicate or guess the account type.
+        raise _auth_error(
+            status.HTTP_409_CONFLICT,
+            "ACCOUNT_SETUP_INCOMPLETE",
+            "Your account setup is incomplete. Please contact support.",
+        )
+    if not getattr(profile, "email_verified", False):
+        profile.email_verified = True
+        await db.commit()
+        log_auth_event("VERIFICATION_STATE_RECONCILED", profile.id)
+
+    return {
+        "success": True,
+        "message": "Login successful",
+        "data": {
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "token_type": "bearer",
+            "expires_in": session.expires_in,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "role": profile.role,
+                "full_name": profile.full_name,
+            },
+        },
+    }
 
 
 @router.get("/me")
@@ -642,7 +690,8 @@ async def refresh_token(body: RefreshRequest):
             },
         }
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token.",
+        raise _auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "REFRESH_TOKEN_INVALID",
+            "Invalid or expired refresh token.",
         ) from None

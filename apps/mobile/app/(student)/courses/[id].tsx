@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  ActivityIndicator, Alert, Dimensions,
+  ActivityIndicator, Alert, Dimensions, Modal,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { WebView } from "react-native-webview";
 import { apiGet, apiPost } from "../../../lib/api";
 import { colors } from "../../../constants/theme";
 
@@ -40,6 +41,21 @@ interface Course {
   modules:        Module[];
   is_enrolled:    boolean;
   status:         string;
+}
+
+interface Review {
+  id: string;
+  student_name: string;
+  rating: number;
+  comment: string | null;
+  created_at: string | null;
+}
+
+interface PaymentOrder {
+  order_id: string;
+  amount: number;
+  currency: string;
+  key_id: string;
 }
 
 type ActiveTab = "curriculum" | "overview" | "reviews";
@@ -81,6 +97,38 @@ function fmtCount(n: number): string {
   return String(n);
 }
 
+function checkoutHtml(order: PaymentOrder, course: Course): string {
+  const options = JSON.stringify({
+    key: order.key_id,
+    amount: order.amount,
+    currency: order.currency,
+    order_id: order.order_id,
+    name: "CareerVue",
+    description: course.title,
+    theme: { color: "#6c63ff" },
+  }).replace(/</g, "\\u003c");
+  return `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>html,body{height:100%;margin:0;background:#050508}</style></head><body>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+try {
+  const options = ${options};
+  options.handler = function (response) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'success', ...response}));
+  };
+  options.modal = { ondismiss: function () {
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'cancel'}));
+  }};
+  new Razorpay(options).open();
+} catch (error) {
+  window.ReactNativeWebView.postMessage(JSON.stringify({
+    type:'error', message:'Could not initialize secure checkout.'
+  }));
+}
+</script></body></html>`;
+}
+
 export default function CourseDetailScreen() {
   const { id }   = useLocalSearchParams<{ id: string }>();
   const router   = useRouter();
@@ -91,6 +139,9 @@ export default function CourseDetailScreen() {
   const [enrolling, setEnrolling] = useState(false);
   const [tab,       setTab]       = useState<ActiveTab>("curriculum");
   const [error,     setError]     = useState("");
+  const [reviews, setReviews] = useState<Review[] | null>(null);
+  const [reviewsError, setReviewsError] = useState("");
+  const [paymentOrder, setPaymentOrder] = useState<PaymentOrder | null>(null);
 
   useEffect(() => {
     apiGet<Course>(`/api/v1/courses/${id}`)
@@ -99,10 +150,29 @@ export default function CourseDetailScreen() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    if (tab !== "reviews" || reviews !== null) return;
+    setReviewsError("");
+    apiGet<Review[]>(`/api/v1/courses/${id}/reviews`)
+      .then(setReviews)
+      .catch((reviewError: unknown) => {
+        setReviewsError(
+          reviewError instanceof Error ? reviewError.message : "Failed to load reviews",
+        );
+      });
+  }, [id, reviews, tab]);
+
   async function handleEnroll() {
     if (!course) return;
     setEnrolling(true);
     try {
+      if (!course.is_free) {
+        const order = await apiPost<PaymentOrder>("/api/v1/payments/create-order", {
+          course_id: course.id,
+        });
+        setPaymentOrder(order);
+        return;
+      }
       await apiPost("/api/v1/enrollments/", { course_id: course.id });
       setCourse(c => c ? { ...c, is_enrolled: true } : c);
       Alert.alert("Enrolled!", "You're now enrolled. Let's get started!");
@@ -110,6 +180,49 @@ export default function CourseDetailScreen() {
       Alert.alert("Error", e.message ?? "Failed to enroll");
     } finally {
       setEnrolling(false);
+    }
+  }
+
+  async function handlePaymentMessage(raw: string) {
+    if (!course) return;
+    let event: {
+      type?: string;
+      razorpay_order_id?: string;
+      razorpay_payment_id?: string;
+      razorpay_signature?: string;
+      message?: string;
+    };
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      Alert.alert("Payment error", "The payment gateway returned an invalid response.");
+      return;
+    }
+    if (event.type === "cancel") {
+      setPaymentOrder(null);
+      return;
+    }
+    if (event.type !== "success") {
+      setPaymentOrder(null);
+      Alert.alert("Payment error", event.message ?? "Could not open the payment gateway.");
+      return;
+    }
+    try {
+      await apiPost("/api/v1/payments/verify", {
+        course_id: course.id,
+        gateway_order_id: event.razorpay_order_id,
+        gateway_payment_id: event.razorpay_payment_id,
+        gateway_signature: event.razorpay_signature,
+      });
+      setCourse((current) => current ? { ...current, is_enrolled: true } : current);
+      setPaymentOrder(null);
+      Alert.alert("Payment complete", "You're enrolled and ready to start learning.");
+    } catch (paymentError) {
+      setPaymentOrder(null);
+      Alert.alert(
+        "Verification failed",
+        paymentError instanceof Error ? paymentError.message : "Please contact support.",
+      );
     }
   }
 
@@ -357,9 +470,25 @@ export default function CourseDetailScreen() {
 
           {/* Tab: Reviews */}
           {tab === "reviews" && (
-            <View style={[s.tabContent, s.reviewsEmpty]}>
-              <Ionicons name="star-outline" size={36} color={colors.outlineVariant} />
-              <Text style={s.emptyModulesText}>Reviews coming soon</Text>
+            <View style={s.tabContent}>
+              {reviews === null && !reviewsError ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : reviewsError ? (
+                <Text style={s.errorText}>{reviewsError}</Text>
+              ) : reviews?.length === 0 ? (
+                <View style={s.reviewsEmpty}>
+                  <Ionicons name="star-outline" size={36} color={colors.outlineVariant} />
+                  <Text style={s.emptyModulesText}>No reviews yet</Text>
+                </View>
+              ) : reviews?.map((review) => (
+                <View key={review.id} style={s.reviewCard}>
+                  <View style={s.reviewHeader}>
+                    <Text style={s.reviewName}>{review.student_name}</Text>
+                    <Text style={s.reviewRating}>★ {review.rating}/5</Text>
+                  </View>
+                  {review.comment ? <Text style={s.reviewComment}>{review.comment}</Text> : null}
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -396,11 +525,11 @@ export default function CourseDetailScreen() {
               <Text style={s.lifetimeLabel}>LIFETIME ACCESS</Text>
               <View style={s.priceRow}>
                 <Text style={s.priceMain}>
-                  {course.is_free ? "Free" : `$${course.price}`}
+                  {course.is_free ? "Free" : `₹${course.price}`}
                 </Text>
                 {!course.is_free && (
                   <Text style={s.priceStrike}>
-                    ${(course.price * 2.6).toFixed(2)}
+                    ₹{(course.price * 2.6).toFixed(2)}
                   </Text>
                 )}
               </View>
@@ -427,6 +556,35 @@ export default function CourseDetailScreen() {
           </>
         )}
       </View>
+
+      <Modal
+        visible={paymentOrder !== null}
+        animationType="slide"
+        onRequestClose={() => setPaymentOrder(null)}
+      >
+        <View style={s.paymentRoot}>
+          <View style={[s.paymentHeader, { paddingTop: insets.top + 8 }]}>
+            <Text style={s.paymentTitle}>Secure checkout</Text>
+            <Pressable onPress={() => setPaymentOrder(null)} hitSlop={12}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </Pressable>
+          </View>
+          {paymentOrder ? (
+            <WebView
+              originWhitelist={["https://*", "http://*"]}
+              source={{ html: checkoutHtml(paymentOrder, course) }}
+              onMessage={({ nativeEvent }) => void handlePaymentMessage(nativeEvent.data)}
+              onError={() => {
+                setPaymentOrder(null);
+                Alert.alert("Payment error", "Could not load secure checkout.");
+              }}
+              javaScriptEnabled
+              domStorageEnabled
+              style={s.paymentWebView}
+            />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -814,13 +972,62 @@ const s = StyleSheet.create({
     color:         colors.textVariant,
   },
 
-  // Reviews placeholder
+  // Reviews
   reviewsEmpty: {
     alignItems:      "center",
     justifyContent:  "center",
     paddingVertical: 32,
     gap:             12,
   },
+  reviewCard: {
+    gap: 8,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginBottom: 10,
+  },
+  reviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  reviewName: {
+    fontFamily: "HankenGrotesk_600SemiBold",
+    fontSize: 15,
+    color: colors.text,
+  },
+  reviewRating: {
+    fontFamily: "JetBrainsMono_500Medium",
+    fontSize: 12,
+    color: colors.tertiary,
+  },
+  reviewComment: {
+    fontFamily: "HankenGrotesk_400Regular",
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textVariant,
+  },
+
+  // Payment
+  paymentRoot: { flex: 1, backgroundColor: colors.bg },
+  paymentHeader: {
+    minHeight: 64,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  paymentTitle: {
+    fontFamily: "HankenGrotesk_600SemiBold",
+    fontSize: 18,
+    color: colors.text,
+  },
+  paymentWebView: { flex: 1, backgroundColor: colors.bg },
 
   // Bottom bar
   bottomBar: {

@@ -57,9 +57,11 @@ export default function ModuleEditor() {
           setIsPreview(mod.is_preview);
         }
       })
-      .catch(() => {})
+      .catch((error) => {
+        console.warn("Failed to load course module", error instanceof Error ? error.message : "Unknown error");
+      })
       .finally(() => setLoading(false));
-  }, [moduleId]);
+  }, [courseId, isEdit, moduleId]);
 
   async function pickAndUploadVideo() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();

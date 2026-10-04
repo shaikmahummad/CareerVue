@@ -36,9 +36,23 @@ async def get_optional_user(
         user_response = supabase_admin.auth.get_user(token)
         supabase_user = user_response.user
         if not supabase_user:
-            return None
-    except Exception:
-        return None
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"code": "UNAUTHORIZED", "message": "Invalid session."},
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        provider_code = str(getattr(exc, "code", "")).lower()
+        is_expired = "expired" in provider_code or "expired" in str(exc).lower()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "TOKEN_EXPIRED" if is_expired else "UNAUTHORIZED",
+                "message": "Your session has expired." if is_expired else "Invalid session.",
+            },
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
 
     result = await db.execute(
         _select(_Profile).where(_Profile.id == _uuid.UUID(supabase_user.id))
@@ -601,7 +615,8 @@ async def get_reviews(
 
     stmt = (
         select(Review, Profile)
-        .join(Profile, Review.student_id == Profile.id)
+        .join(Student, Review.student_id == Student.id)
+        .join(Profile, Student.profile_id == Profile.id)
         .where(Review.course_id == cid)
         .order_by(Review.created_at.desc())
     )

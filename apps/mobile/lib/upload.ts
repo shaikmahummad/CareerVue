@@ -7,11 +7,13 @@ export async function uploadToStorage(
   mimeType: string,
 ): Promise<string> {
   const response = await fetch(uri);
-  const blob     = await response.blob();
+  if (!response.ok) throw new Error("Could not read the selected file.");
+  // Supabase's React Native client expects binary data rather than a web Blob.
+  const bytes = await response.arrayBuffer();
 
   const { error } = await supabase.storage
     .from(bucket)
-    .upload(path, blob, { contentType: mimeType, upsert: true });
+    .upload(path, bytes, { contentType: mimeType, upsert: true });
 
   if (error) throw new Error(error.message);
 
