@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     razorpay_key_secret: str = ""
 
     # App
-    app_env: str = "development"
+    # Fail closed when a deployment forgets to provide APP_ENV. Local
+    # development already sets APP_ENV=development in backend/.env.
+    app_env: str = "production"
     app_cors_origins: str = '["http://localhost:3000","http://localhost:8081"]'
 
     # Quiz abuse protection and maintenance

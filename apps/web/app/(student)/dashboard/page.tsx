@@ -8,7 +8,7 @@ import {
   Loader2, Map, Brain, Star,
 } from "lucide-react";
 import StudentNavbar from "../../../components/StudentNavbar";
-import { apiGet } from "../../../lib/api";
+import { ApiError, apiGet } from "../../../lib/api";
 import { createClient } from "../../../lib/supabase/client";
 
 interface Stats { xp_points: number; streak_days: number; enrolled_count: number; completed_count: number; }
@@ -224,6 +224,7 @@ export default function StudentDashboardPage() {
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [skillProfile, setSkillProfile] = useState<SkillProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     async function loadAll() {
@@ -242,6 +243,19 @@ export default function StudentDashboardPage() {
       if (enrollR.status === "fulfilled") setEnrollments(enrollR.value);
       if (roadmapR.status === "fulfilled") setRoadmap(roadmapR.value);
       if (skillsR.status === "fulfilled") setSkillProfile(skillsR.value);
+      const criticalFailure = [statsR, enrollR, skillsR].find(
+        (result) => result.status === "rejected",
+      );
+      const roadmapFailure = roadmapR.status === "rejected" ? roadmapR.reason : null;
+      if (criticalFailure?.status === "rejected") {
+        setLoadError(
+          criticalFailure.reason instanceof Error
+            ? criticalFailure.reason.message
+            : "Dashboard data could not be loaded.",
+        );
+      } else if (roadmapFailure && !(roadmapFailure instanceof ApiError && roadmapFailure.status === 404)) {
+        setLoadError(roadmapFailure instanceof Error ? roadmapFailure.message : "Roadmap data could not be loaded.");
+      }
       setLoading(false);
     }
     loadAll();
@@ -281,6 +295,12 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
+        {loadError && (
+          <div className="mb-5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 flex items-center justify-between gap-4">
+            <span>Dashboard loading failed: {loadError}</span>
+            <button type="button" onClick={() => window.location.reload()} className="text-xs font-semibold text-white">Retry</button>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-32">
             <Loader2 size={28} className="animate-spin text-[#6c63ff]" />

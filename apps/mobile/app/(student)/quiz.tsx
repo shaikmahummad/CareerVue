@@ -7,7 +7,9 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiGet, apiPost, apiPut } from "../../lib/api";
+import { supabase } from "../../lib/supabase";
 import { colors, TAB_BAR_HEIGHT } from "../../constants/theme";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -19,6 +21,7 @@ interface Question {
   options: { A: string; B: string; C: string; D: string };
   difficulty: string;
 }
+interface CareerGoal { slug: string; title: string; description: string | null; }
 
 interface QuizTemplate {
   attempt_id: string;
@@ -45,6 +48,7 @@ interface SubmitResult {
 
 type QuizState =
   | "init"        // loading profile
+  | "load-error"  // profile/auth/API failure
   | "improvement" // has goal, show start button
   | "goal"        // no goal, enter goal
   | "loading"     // loading quiz template
@@ -54,19 +58,9 @@ type QuizState =
   | "generating"
   | "done";
 
-const POPULAR_GOALS = [
-  "Full Stack Developer",
-  "Data Scientist",
-  "Machine Learning Engineer",
-  "DevOps Engineer",
-  "UI/UX Designer",
-  "Cybersecurity Analyst",
-  "Cloud Architect",
-  "Product Manager",
-];
-
 const OPTIONS = ["A", "B", "C", "D"] as const;
 type OptionKey = typeof OPTIONS[number];
+const QUIZ_DRAFT_PREFIX = "careervue.quiz-draft";
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -80,6 +74,7 @@ export default function QuizScreen() {
   const [goal,         setGoal]         = useState("");
   const [existingGoal, setExistingGoal] = useState<string | null>(null);
   const [fullName,     setFullName]     = useState("");
+  const [careerGoals,  setCareerGoals]  = useState<CareerGoal[]>([]);
   const [template,     setTemplate]     = useState<QuizTemplate | null>(null);
   const [current,      setCurrent]      = useState(0);
   const [answers,      setAnswers]      = useState<Record<string, OptionKey>>({});
@@ -94,8 +89,69 @@ export default function QuizScreen() {
     loadProfile();
   }, []);
 
+  useEffect(() => {
+    if (!template || state !== "quiz") return;
+    void quizDraftKey().then((key) => {
+      if (!key) return;
+      return AsyncStorage.setItem(key, JSON.stringify({
+        template,
+        answers,
+        current,
+        startedAt: startTimeRef.current,
+      }));
+    });
+  }, [answers, current, state, template]);
+
+  async function quizDraftKey() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user.id ? `${QUIZ_DRAFT_PREFIX}.${session.user.id}` : null;
+  }
+
+  async function clearQuizDraft() {
+    const key = await quizDraftKey();
+    if (key) await AsyncStorage.removeItem(key);
+  }
+
+  async function restoreQuizDraft() {
+    if (isChangingGoal) return false;
+    const key = await quizDraftKey();
+    if (!key) return false;
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return false;
+    try {
+      const draft = JSON.parse(raw) as {
+        template: QuizTemplate;
+        answers: Record<string, OptionKey>;
+        current: number;
+        startedAt: number;
+      };
+      if (
+        !draft.template?.attempt_id ||
+        !draft.template.questions?.length ||
+        Date.parse(draft.template.expires_at) <= Date.now()
+      ) {
+        await AsyncStorage.removeItem(key);
+        return false;
+      }
+      setTemplate(draft.template);
+      setGoal(draft.template.goal);
+      setExistingGoal(draft.template.goal);
+      setAnswers(draft.answers ?? {});
+      setCurrent(Math.min(Math.max(draft.current ?? 0, 0), draft.template.questions.length - 1));
+      startTimeRef.current = draft.startedAt || Date.now();
+      setState("quiz");
+      return true;
+    } catch {
+      await AsyncStorage.removeItem(key);
+      return false;
+    }
+  }
+
   async function loadProfile() {
     try {
+      if (await restoreQuizDraft()) return;
+      const supportedCareers = await apiGet<CareerGoal[]>("/api/v1/quiz/careers");
+      setCareerGoals(supportedCareers);
       const data = await apiGet<{ career_goal: string | null; full_name: string }>(
         "/api/v1/students/profile"
       );
@@ -111,8 +167,13 @@ export default function QuizScreen() {
       } else {
         setState("goal");
       }
-    } catch {
-      setState("goal");
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error
+          ? `Unable to load your quiz profile: ${e.message}`
+          : "Unable to load your quiz profile.",
+      );
+      setState("load-error");
     }
   }
 
@@ -141,8 +202,18 @@ export default function QuizScreen() {
   async function handleStartQuizFromGoal() {
     const trimmed = goal.trim();
     if (!trimmed) { Alert.alert("Please enter a career goal"); return; }
-    // Save goal to DB so roadmap generation can use it later
-    try { await apiPut("/api/v1/students/goal", { career_goal: trimmed }); } catch { /* non-fatal */ }
+    // The saved goal and issued quiz must remain one coherent flow because
+    // roadmap generation reads the goal from the backend.
+    try {
+      await apiPut("/api/v1/students/goal", { career_goal: trimmed });
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error
+          ? `Unable to save your career goal: ${e.message}`
+          : "Unable to save your career goal.",
+      );
+      return;
+    }
     await loadQuiz(trimmed);
   }
 
@@ -157,19 +228,17 @@ export default function QuizScreen() {
   function handleAnswer(option: OptionKey) {
     if (!template) return;
     const q = template.questions[current];
-    const newAnswers = { ...answers, [q.id]: option };
-    setAnswers(newAnswers);
-    if (current < template.questions.length - 1) {
-      setCurrent((c) => c + 1);
-    } else {
-      handleSubmit(newAnswers);
-    }
+    setAnswers((previous) => ({ ...previous, [q.id]: option }));
   }
 
   // ── Submit quiz ────────────────────────────────────────────────────────────
 
   async function handleSubmit(finalAnswers: Record<string, OptionKey>) {
     if (!template) return;
+    if (Object.keys(finalAnswers).length !== template.questions.length) {
+      Alert.alert("Quiz incomplete", "Answer every question before submitting.");
+      return;
+    }
     setError("");
     setState("submitting");
     try {
@@ -181,6 +250,7 @@ export default function QuizScreen() {
         time_taken_secs: Math.max(1, Math.floor((Date.now() - startTimeRef.current) / 1000)),
       };
       const result = await apiPost<SubmitResult>("/api/v1/quiz/attempt", payload);
+      await clearQuizDraft();
       setSubmitResult(result);
       setAttemptId(result.attempt_id);
       setState("results");
@@ -235,6 +305,24 @@ export default function QuizScreen() {
       <View style={[s.root, s.center]}>
         <StatusBar style="light" />
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (state === "load-error") {
+    return (
+      <View style={[s.root, s.center]}>
+        <StatusBar style="light" />
+        <Ionicons name="cloud-offline-outline" size={48} color={colors.error} />
+        <Text style={[s.pageTitle, { textAlign: "center", marginTop: 16 }]}>Quiz unavailable</Text>
+        <Text style={[s.pageSubtitle, { textAlign: "center", marginVertical: 12 }]}>{error}</Text>
+        <Pressable style={[s.primaryBtn, { width: "100%" }]} onPress={() => {
+          setError("");
+          setState("init");
+          void loadProfile();
+        }}>
+          <Text style={s.primaryBtnText}>Try again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -330,13 +418,13 @@ export default function QuizScreen() {
 
           <Text style={s.popularLabel}>Popular Goals</Text>
           <View style={s.goalChipsWrap}>
-            {POPULAR_GOALS.map((g) => (
+            {careerGoals.map((career) => (
               <Pressable
-                key={g}
-                style={[s.goalChip, goal === g && s.goalChipSelected]}
-                onPress={() => setGoal(g)}
+                key={career.slug}
+                style={[s.goalChip, goal === career.title && s.goalChipSelected]}
+                onPress={() => setGoal(career.title)}
               >
-                <Text style={[s.goalChipText, goal === g && s.goalChipTextSelected]}>{g}</Text>
+                <Text style={[s.goalChipText, goal === career.title && s.goalChipTextSelected]}>{career.title}</Text>
               </Pressable>
             ))}
           </View>
@@ -366,7 +454,8 @@ export default function QuizScreen() {
   if (state === "quiz" && template) {
     const q     = template.questions[current];
     const total = template.questions.length;
-    const pct   = (current / total) * 100;
+    const pct   = ((current + 1) / total) * 100;
+    const selected = answers[q.id];
 
     return (
       <View style={s.root}>
@@ -415,15 +504,42 @@ export default function QuizScreen() {
             {OPTIONS.map((opt) => (
               <Pressable
                 key={opt}
-                style={s.optionRow}
+                style={[s.optionRow, selected === opt && s.optionRowSelected]}
                 onPress={() => handleAnswer(opt)}
               >
-                <View style={s.optionLabel}>
-                  <Text style={s.optionLabelText}>{opt}</Text>
+                <View style={[s.optionLabel, selected === opt && s.optionLabelSelected]}>
+                  <Text style={[s.optionLabelText, selected === opt && s.optionLabelTextSelected]}>{opt}</Text>
                 </View>
                 <Text style={s.optionText}>{q.options[opt]}</Text>
               </Pressable>
             ))}
+          </View>
+
+          <View style={s.quizActions}>
+            <Pressable
+              style={[s.secondaryBtn, s.quizActionButton, current === 0 && s.disabledButton]}
+              disabled={current === 0}
+              onPress={() => setCurrent((value) => Math.max(0, value - 1))}
+            >
+              <Text style={s.secondaryBtnText}>Previous</Text>
+            </Pressable>
+            {current < total - 1 ? (
+              <Pressable
+                style={[s.primaryBtn, s.quizActionButton, !selected && s.disabledButton]}
+                disabled={!selected}
+                onPress={() => setCurrent((value) => Math.min(total - 1, value + 1))}
+              >
+                <Text style={s.primaryBtnText}>Next</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[s.primaryBtn, s.quizActionButton, Object.keys(answers).length !== total && s.disabledButton]}
+                disabled={Object.keys(answers).length !== total}
+                onPress={() => void handleSubmit(answers)}
+              >
+                <Text style={s.primaryBtnText}>Submit Quiz</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* Dot navigator */}
@@ -834,6 +950,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:   14,
   },
+  optionRowSelected: {
+    borderColor: colors.primary,
+    backgroundColor: "rgba(196,192,255,0.1)",
+  },
   optionLabel: {
     width:           32,
     height:          32,
@@ -843,12 +963,14 @@ const s = StyleSheet.create({
     justifyContent:  "center",
     flexShrink:      0,
   },
+  optionLabelSelected: { backgroundColor: colors.primary },
   optionLabelText: {
     fontFamily:    "JetBrainsMono_500Medium",
     fontSize:      13,
     letterSpacing: 0.3,
     color:         colors.textVariant,
   },
+  optionLabelTextSelected: { color: colors.onPrimary },
   optionText: {
     fontFamily: "HankenGrotesk_400Regular",
     fontSize:   14,
@@ -856,6 +978,9 @@ const s = StyleSheet.create({
     color:      colors.text,
     flex:       1,
   },
+  quizActions: { flexDirection: "row", gap: 12 },
+  quizActionButton: { flex: 1 },
+  disabledButton: { opacity: 0.45 },
 
   // Dot navigator
   dotNav: {

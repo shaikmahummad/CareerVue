@@ -325,9 +325,12 @@ export default function QuizHistoryScreen() {
   const [screen,    setScreen]    = useState<Screen>("list");
   const [attempts,  setAttempts]  = useState<AttemptSummary[]>([]);
   const [loading,   setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  useEffect(() => {
+  function loadAttempts() {
+    setLoading(true);
+    setLoadError("");
     apiGet<AttemptSummary[]>("/api/v1/quiz/my-attempts")
       .then((data) => {
         // Sort most recent first
@@ -336,8 +339,14 @@ export default function QuizHistoryScreen() {
         );
         setAttempts(sorted);
       })
-      .catch(() => Alert.alert("Error", "Failed to load quiz history"))
+      .catch((error) => setLoadError(
+        error instanceof Error ? error.message : "Failed to load quiz history",
+      ))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadAttempts();
   }, []);
 
   if (screen === "detail" && selectedId) {
@@ -363,7 +372,16 @@ export default function QuizHistoryScreen() {
         <View style={s.headerRight} />
       </View>
 
-      {attempts.length === 0 ? (
+      {loadError ? (
+        <View style={s.center}>
+          <Ionicons name="cloud-offline-outline" size={56} color={colors.error} />
+          <Text style={s.emptyTitle}>Quiz history unavailable</Text>
+          <Text style={s.emptySubtitle}>{loadError}</Text>
+          <Pressable style={s.emptyBtn} onPress={loadAttempts}>
+            <Text style={s.emptyBtnText}>Try Again</Text>
+          </Pressable>
+        </View>
+      ) : attempts.length === 0 ? (
         <View style={s.center}>
           <Ionicons name="document-text-outline" size={56} color={colors.surfaceHighest} />
           <Text style={s.emptyTitle}>No attempts yet</Text>

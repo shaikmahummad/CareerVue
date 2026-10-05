@@ -37,6 +37,7 @@ export default function StudentDashboard() {
   const [stats,       setStats]       = useState<Stats | null>(null);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [roadmap,     setRoadmap]     = useState<Roadmap | null>(null);
+  const [loadError,   setLoadError]   = useState("");
 
   useEffect(() => {
     // Fire all API calls immediately — authHeaders() is now synchronous
@@ -54,6 +55,14 @@ export default function StudentDashboard() {
       if (s.status === "fulfilled") setStats(s.value);
       if (e.status === "fulfilled") setEnrollments(e.value);
       if (r.status === "fulfilled") setRoadmap(r.value);
+      const failure = [s, e].find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") {
+        setLoadError(
+          failure.reason instanceof Error
+            ? failure.reason.message
+            : "Dashboard data could not be loaded.",
+        );
+      }
     });
   }, []);
 
@@ -92,6 +101,12 @@ export default function StudentDashboard() {
         }]}
         showsVerticalScrollIndicator={false}
       >
+        {loadError ? (
+          <View style={s.errorBanner}>
+            <Ionicons name="cloud-offline-outline" size={18} color={colors.error} />
+            <Text style={s.errorText}>Dashboard loading failed: {loadError}</Text>
+          </View>
+        ) : null}
         {/* Streak Banner */}
         <LinearGradient
           colors={["#c4c0ff", "#8781ff"]}
@@ -262,6 +277,22 @@ const s = StyleSheet.create({
   scroll: {
     paddingHorizontal: 16,
     gap:               24,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,180,171,0.2)",
+    backgroundColor: "rgba(255,180,171,0.1)",
+    borderRadius: 12,
+    padding: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontFamily: "HankenGrotesk_400Regular",
+    fontSize: 13,
+    color: colors.error,
   },
 
   // Streak Banner

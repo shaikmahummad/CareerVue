@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Annotated
+from typing import Annotated, Optional
 import uuid
 
 from app.database import get_db
@@ -14,13 +14,19 @@ from app.config import settings  # noqa: F401 — kept for potential future use
 
 logger = logging.getLogger(__name__)
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer_scheme)],
     db: AsyncSession = Depends(get_db),
 ) -> Profile:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "UNAUTHORIZED", "message": "Authentication is required."},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = credentials.credentials
 
     # Verify token with Supabase (handles all JWT validation)
@@ -44,6 +50,18 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         ) from None
 
+    if not (
+        getattr(supabase_user, "email_confirmed_at", None)
+        or getattr(supabase_user, "confirmed_at", None)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "ACCOUNT_NOT_VERIFIED",
+                "message": "Email verification is required.",
+            },
+        )
+
     # Get profile from DB
     result = await db.execute(
         select(Profile).where(Profile.id == uuid.UUID(supabase_user.id))
@@ -57,6 +75,12 @@ async def get_current_user(
                 "message": "Profile not found. Please complete registration.",
             },
         )
+
+    # Supabase confirmation is authoritative. Keep the application mirror in
+    # sync for sessions restored directly by the Supabase clients.
+    if not getattr(profile, "email_verified", False):
+        profile.email_verified = True
+        await db.commit()
 
     return profile
 

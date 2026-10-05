@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions, Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -37,21 +37,43 @@ export default function AdminAnalytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [stats,     setStats]     = useState<DashboardStats | null>(null);
   const [loading,   setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState("");
 
-  useEffect(() => {
+  function loadAnalytics() {
+    setLoading(true);
+    setLoadError("");
     Promise.all([
-      apiGet<AnalyticsData>("/api/v1/admin/analytics").catch(() => null),
-      apiGet<DashboardStats>("/api/v1/admin/dashboard").catch(() => null),
+      apiGet<AnalyticsData>("/api/v1/admin/analytics"),
+      apiGet<DashboardStats>("/api/v1/admin/dashboard"),
     ]).then(([a, s]) => {
       setAnalytics(a);
       setStats(s);
+    }).catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "Failed to load analytics.");
     }).finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadAnalytics();
   }, []);
 
   if (loading) {
     return (
       <View style={s.center}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={s.center}>
+        <Ionicons name="cloud-offline-outline" size={48} color={colors.error} />
+        <Text style={s.emptyTitle}>Analytics unavailable</Text>
+        <Text style={s.emptySub}>{loadError}</Text>
+        <Pressable style={s.retryButton} onPress={loadAnalytics}>
+          <Text style={s.retryButtonText}>Try Again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -340,4 +362,6 @@ const s = StyleSheet.create({
   empty: { alignItems: "center", gap: 8, paddingVertical: 48 },
   emptyTitle: { fontFamily: "HankenGrotesk_600SemiBold", fontSize: 16, color: colors.text },
   emptySub:   { fontFamily: "HankenGrotesk_400Regular", fontSize: 13, color: colors.textVariant, textAlign: "center" },
+  retryButton: { marginTop: 16, borderRadius: 14, backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12 },
+  retryButtonText: { fontFamily: "HankenGrotesk_600SemiBold", color: colors.onPrimary },
 });

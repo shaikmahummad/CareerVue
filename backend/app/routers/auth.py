@@ -575,33 +575,20 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         provider_message = str(exc).lower()
         if provider_code == "email_not_confirmed" or "email not confirmed" in provider_message:
             if pending or (profile is not None and not getattr(profile, "email_verified", False)):
-                now = datetime.now(timezone.utc)
-                user_id = getattr(profile, "id", None) if profile else pending.user_id
-                latest = await latest_token_for_user(db, user_id)
-                if not latest or latest.expires_at <= now:
-                    await invalidate_unused_tokens(db, user_id, now=now)
-                    raw_token = await issue_verification_token(db, user_id, now=now)
-                    await db.commit()
-                    try:
-                        name = (
-                            getattr(profile, "full_name", "")
-                            if profile
-                            else pending.registration_data["full_name"]
-                        )
-                        await send_verification_email(
-                            body.email, raw_token, name, registration_id=user_id
-                        )
-                    except Exception:
-                        logger.exception("Failed to send login verification OTP")
-                        raise _auth_error(
-                            status.HTTP_503_SERVICE_UNAVAILABLE,
-                            "SERVER_ERROR",
-                            "Verification OTP could not be sent. Please try again.",
-                        ) from None
                 raise _auth_error(
                     status.HTTP_403_FORBIDDEN,
                     "ACCOUNT_NOT_VERIFIED",
-                    "Email verification is required. Enter the OTP sent to your email.",
+                    "Email verification is required. Enter your registration OTP or request a new one.",
+                ) from None
+            if profile is not None and getattr(profile, "email_verified", False):
+                logger.error(
+                    "Verification state mismatch for user_id=%s: profile verified, provider unconfirmed",
+                    profile.id,
+                )
+                raise _auth_error(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "ACCOUNT_STATE_INCONSISTENT",
+                    "Your account verification state could not be confirmed. Please contact support.",
                 ) from None
         raise _auth_error(
             status.HTTP_401_UNAUTHORIZED,
@@ -621,7 +608,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise _auth_error(
             status.HTTP_403_FORBIDDEN,
             "ACCOUNT_NOT_VERIFIED",
-            "Email verification is required. Enter the OTP sent to your email.",
+            "Email verification is required. Enter your registration OTP or request a new one.",
         )
     if not profile:
         # A provider identity without an application profile cannot be safely
@@ -630,6 +617,12 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
             status.HTTP_409_CONFLICT,
             "ACCOUNT_SETUP_INCOMPLETE",
             "Your account setup is incomplete. Please contact support.",
+        )
+    if profile.role not in {"student", "tutor", "admin"}:
+        raise _auth_error(
+            status.HTTP_403_FORBIDDEN,
+            "ACCOUNT_DISABLED",
+            "This account is disabled. Please contact support.",
         )
     if not getattr(profile, "email_verified", False):
         profile.email_verified = True

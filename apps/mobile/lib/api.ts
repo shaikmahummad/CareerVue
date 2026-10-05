@@ -70,7 +70,13 @@ async function fetchWithRetry(url: string, options: RequestInit): Promise<Respon
   const { error } = await supabase.auth.refreshSession();
   if (error) return res;
   try {
-    return await fetch(url, { ...options, headers: await authHeaders() });
+    return await fetch(url, {
+      ...options,
+      headers: {
+        ...await authHeaders(),
+        ...(options.headers as Record<string, string> | undefined),
+      },
+    });
   } catch {
     throw new ApiError("Unable to reach the server.", 0, "NETWORK_ERROR");
   }

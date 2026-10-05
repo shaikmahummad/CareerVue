@@ -9,10 +9,17 @@ import {
 } from "lucide-react";
 import StudentNavbar from "../../../components/StudentNavbar";
 import { apiGet, apiPost, apiPut } from "../../../lib/api";
+import { createClient } from "../../../lib/supabase/client";
 
 const OPT_KEYS = ["A", "B", "C", "D"] as const;
+const QUIZ_DRAFT_PREFIX = "careervue.quiz-draft";
 type OptionKey = (typeof OPT_KEYS)[number];
 type AppStep = "loading" | "assessment" | "goal" | "quiz" | "review" | "results" | "attempt-detail";
+
+async function quizDraftKey() {
+  const { data: { session } } = await createClient().auth.getSession();
+  return session?.user.id ? `${QUIZ_DRAFT_PREFIX}.${session.user.id}` : null;
+}
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -20,6 +27,7 @@ interface Question {
   id: string; topic: string; question: string;
   options: { A: string; B: string; C: string; D: string }; difficulty: string;
 }
+interface CareerGoal { slug: string; title: string; description: string | null; }
 interface QuizTemplate {
   attempt_id: string; goal: string; topic_areas: string[]; questions: Question[];
   total_questions: number; expires_at: string;
@@ -44,16 +52,12 @@ interface AttemptDetail extends Attempt {
   questions: AttemptQuestion[];
 }
 
-const CAREER_GOALS = [
-  { label: "Frontend Developer",       icon: "🎨", desc: "React, TypeScript, CSS, UI/UX" },
-  { label: "Backend Developer",         icon: "⚙️", desc: "Node.js, Python, Databases, APIs" },
-  { label: "Full Stack Developer",      icon: "🏗️", desc: "End-to-end web development" },
-  { label: "Data Scientist",            icon: "📊", desc: "Python, ML, Statistics, Analytics" },
-  { label: "Machine Learning Engineer", icon: "🤖", desc: "Deep Learning, MLOps, PyTorch" },
-  { label: "DevOps Engineer",           icon: "🚀", desc: "CI/CD, Docker, Kubernetes, Cloud" },
-  { label: "Android Developer",         icon: "📱", desc: "Kotlin, Jetpack Compose, Android SDK" },
-  { label: "Cloud Architect",           icon: "☁️", desc: "AWS, Azure, GCP, Infrastructure" },
-];
+const CAREER_ICONS: Record<string, string> = {
+  "frontend-developer": "🎨", "backend-developer": "⚙️", "full-stack-developer": "🏗️",
+  "data-scientist": "📊", "machine-learning-engineer": "🤖", "devops-engineer": "🚀",
+  "android-developer": "📱", "cloud-architect": "☁️", "ui-ux-designer": "✏️",
+  "cybersecurity-analyst": "🛡️", "product-manager": "🧭",
+};
 
 const LEVEL_CONFIG = {
   strong:       { label: "Strong",       color: "#00d4ff", icon: CheckCircle2 },
@@ -169,8 +173,8 @@ function RadarChart({ skills }: { skills: { label: string; value: number }[] }) 
 
 /* ─── Goal Select ────────────────────────────────────────────────────────── */
 
-function GoalSelect({ onSelect, loading, error }: {
-  onSelect: (goal: string) => void; loading: boolean; error: string;
+function GoalSelect({ goals, onSelect, loading, error }: {
+  goals: CareerGoal[]; onSelect: (goal: string) => void; loading: boolean; error: string;
 }) {
   const [selected, setSelected] = useState("");
   return (
@@ -184,15 +188,15 @@ function GoalSelect({ onSelect, loading, error }: {
       </div>
       {error && <p className="mb-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">{error}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-        {CAREER_GOALS.map((goal) => (
-          <button key={goal.label} onClick={() => setSelected(goal.label)}
+        {goals.map((goal) => (
+          <button key={goal.slug} onClick={() => setSelected(goal.title)}
             className={`flex items-start gap-4 p-4 rounded-2xl border text-left transition-all ${
-              selected === goal.label ? "border-[#6c63ff] bg-[#6c63ff]/10" : "border-white/[0.07] hover:border-white/20 bg-white/[0.02] hover:bg-white/[0.04]"
+              selected === goal.title ? "border-[#6c63ff] bg-[#6c63ff]/10" : "border-white/[0.07] hover:border-white/20 bg-white/[0.02] hover:bg-white/[0.04]"
             }`}>
-            <span className="text-2xl flex-shrink-0">{goal.icon}</span>
+            <span className="text-2xl flex-shrink-0">{CAREER_ICONS[goal.slug] ?? "🎯"}</span>
             <div>
-              <p className={`font-semibold text-sm ${selected === goal.label ? "text-white" : "text-[#cbc4d2]"}`}>{goal.label}</p>
-              <p className="text-xs text-[#7c7a8a] mt-0.5">{goal.desc}</p>
+              <p className={`font-semibold text-sm ${selected === goal.title ? "text-white" : "text-[#cbc4d2]"}`}>{goal.title}</p>
+              <p className="text-xs text-[#7c7a8a] mt-0.5">{goal.description}</p>
             </div>
           </button>
         ))}
@@ -649,6 +653,7 @@ export default function QuizPage() {
   const [step, setStep] = useState<AppStep>("loading");
   const [goalLoading, setGoalLoading] = useState(false);
   const [goalError, setGoalError] = useState("");
+  const [careerGoals, setCareerGoals] = useState<CareerGoal[]>([]);
   const [template, setTemplate] = useState<QuizTemplate | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -675,9 +680,53 @@ export default function QuizPage() {
   }, [step]);
 
   useEffect(() => {
+    async function restoreDraft() {
+      const { data: { session } } = await createClient().auth.getSession();
+      const key = session?.user.id ? `${QUIZ_DRAFT_PREFIX}.${session.user.id}` : null;
+      if (!key) return false;
+      const raw = localStorage.getItem(key);
+      if (!raw) return false;
+      try {
+        const draft = JSON.parse(raw) as {
+          template: QuizTemplate;
+          answers: Record<string, string>;
+          currentIdx: number;
+          flagged: string[];
+          startedAt: number;
+        };
+        const expiresAt = Date.parse(draft.template?.expires_at);
+        if (!draft.template?.questions?.length || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+          localStorage.removeItem(key);
+          return false;
+        }
+        const secondsLeft = Math.max(1, Math.floor((expiresAt - Date.now()) / 1000));
+        setTemplate(draft.template);
+        setExistingGoal(draft.template.goal);
+        setAnswers(draft.answers ?? {});
+        setCurrentIdx(Math.min(Math.max(draft.currentIdx ?? 0, 0), draft.template.questions.length - 1));
+        setFlagged(new Set(draft.flagged ?? []));
+        setTimeLeft(secondsLeft);
+        setTotalTime(draft.template.questions.length * 90);
+        setTimerActive(true);
+        setTimeExpired(false);
+        startTimeRef.current = draft.startedAt || Date.now();
+        setStep("quiz");
+        return true;
+      } catch {
+        localStorage.removeItem(key);
+        return false;
+      }
+    }
+
     async function init() {
       const params = new URLSearchParams(window.location.search);
       const isChanging = params.get("change") === "1";
+      if (!isChanging && await restoreDraft()) return;
+      try {
+        setCareerGoals(await apiGet<CareerGoal[]>("/api/v1/quiz/careers"));
+      } catch (error) {
+        setGoalError(error instanceof Error ? `Unable to load career options: ${error.message}` : "Unable to load career options.");
+      }
       try {
         const profile = await apiGet<{ career_goal: string | null }>("/api/v1/students/profile");
         if (profile.career_goal && !isChanging) {
@@ -686,13 +735,45 @@ export default function QuizPage() {
         } else {
           setStep("goal");
         }
-      } catch {
+      } catch (error) {
+        setGoalError(
+          error instanceof Error
+            ? `Unable to load your quiz profile: ${error.message}`
+            : "Unable to load your quiz profile.",
+        );
         setStep("goal");
       }
-      apiGet<Attempt[]>("/api/v1/quiz/my-attempts").then(setAttempts).catch(() => {});
+      apiGet<Attempt[]>("/api/v1/quiz/my-attempts")
+        .then(setAttempts)
+        .catch((error) => {
+          setGoalError((current) => current || (
+            error instanceof Error
+              ? `Unable to load quiz history: ${error.message}`
+              : "Unable to load quiz history."
+          ));
+        });
     }
     init();
   }, []);
+
+  async function clearQuizDraft() {
+    const key = await quizDraftKey();
+    if (key) localStorage.removeItem(key);
+  }
+
+  useEffect(() => {
+    if (!template || (step !== "quiz" && step !== "review")) return;
+    void quizDraftKey().then((key) => {
+      if (!key) return;
+      localStorage.setItem(key, JSON.stringify({
+        template,
+        answers,
+        currentIdx,
+        flagged: [...flagged],
+        startedAt: startTimeRef.current,
+      }));
+    });
+  }, [answers, currentIdx, flagged, step, template]);
 
   // Protect an in-progress assessment from an accidental refresh, tab close,
   // or browser navigation. Browsers intentionally display their own generic
@@ -767,6 +848,7 @@ export default function QuizPage() {
         answers: Object.entries(answers).map(([question_id, selected_option]) => ({ question_id, selected_option })),
         time_taken_secs: Math.max(1, timeTaken),
       });
+      await clearQuizDraft();
       setResult(res);
       setStep("results");
     } catch (err) {
@@ -908,7 +990,7 @@ export default function QuizPage() {
 
         {step === "goal" && (
           <>
-            <GoalSelect onSelect={handleGoalSelect} loading={goalLoading} error={goalError} />
+            <GoalSelect goals={careerGoals} onSelect={handleGoalSelect} loading={goalLoading} error={goalError} />
             {attempts.length > 0 && (
               <div className="max-w-2xl mx-auto mt-10">
                 <p className="text-xs font-semibold text-[#7c7a8a] uppercase tracking-wider mb-3">Past Attempts</p>

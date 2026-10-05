@@ -24,8 +24,6 @@ function LoginContent() {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [resendMessage, setResendMessage] = useState("");
   const [verificationRequired, setVerificationRequired] = useState(false);
   const verified = searchParams.get("verified") === "1";
   const verificationFailed = searchParams.get("verification") === "failed";
@@ -79,33 +77,6 @@ function LoginContent() {
     if (role === "tutor") router.push("/tutor/dashboard");
     else if (role === "admin") router.push("/admin/dashboard");
     else router.push("/dashboard");
-  }
-
-  async function resendVerification() {
-    if (!isValidEmail(email)) {
-      setResendMessage("Enter your account email first.");
-      return;
-    }
-    setResending(true);
-    setResendMessage("");
-    try {
-      const response = await fetch(`${API}/api/v1/auth/resend-verification`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizeEmail(email) }),
-      });
-      setResendMessage(
-        response.ok
-          ? "If this account is awaiting verification, a new OTP is on its way."
-          : response.status === 429
-            ? "Please wait a minute before requesting another OTP."
-            : "Unable to resend the OTP right now. Please try again."
-      );
-    } catch {
-      setResendMessage("Unable to resend right now. Please try again.");
-    } finally {
-      setResending(false);
-    }
   }
 
   return (
@@ -203,24 +174,14 @@ function LoginContent() {
           {error && (
             <div className="mb-4 text-xs bg-red-500/10 border border-red-500/20 px-4 py-2.5 rounded-xl">
               <p className="text-red-400">{error}</p>
-              {verificationRequired ? (
+              {verificationRequired && (
                 <Link
                   href={`/verify-email?email=${encodeURIComponent(normalizeEmail(email))}`}
                   className="mt-2 inline-block text-[#c4c0ff] hover:text-white"
                 >
-                  Enter verification OTP
+                  Enter or resend registration OTP
                 </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={resendVerification}
-                  disabled={resending}
-                  className="mt-2 text-[#c4c0ff] hover:text-white disabled:opacity-50"
-                >
-                  {resending ? "Resending…" : "Resend OTP"}
-                </button>
               )}
-              {resendMessage && <p className="mt-2 text-[#7c7a8a]">{resendMessage}</p>}
             </div>
           )}
           {verified && !error && (

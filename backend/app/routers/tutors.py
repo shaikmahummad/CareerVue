@@ -48,7 +48,7 @@ def _merge_tutor_profile(profile: Profile, tutor: Tutor) -> dict:
         "is_verified": tutor.is_verified or False,
         "total_earnings": float(tutor.total_earnings) if tutor.total_earnings is not None else 0.0,
         "tutor_created_at": tutor.created_at.isoformat() if tutor.created_at else None,
-        "tutor_updated_at": tutor.updated_at.isoformat() if tutor.updated_at else None,
+        "tutor_updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
     }
 
 
@@ -68,8 +68,10 @@ def _course_summary(course: Course) -> dict:
     }
 
 
-async def _get_tutor_or_404(db: AsyncSession, tutor_id: uuid.UUID) -> Tutor:
-    tutor = await db.get(Tutor, tutor_id)
+async def _get_tutor_or_404(db: AsyncSession, profile_id: uuid.UUID) -> Tutor:
+    tutor = (
+        await db.execute(select(Tutor).where(Tutor.profile_id == profile_id))
+    ).scalar_one_or_none()
     if not tutor:
         raise HTTPException(status_code=404, detail="Tutor profile not found")
     return tutor
@@ -109,8 +111,6 @@ async def update_tutor_profile(
         value = getattr(body, field, None)
         if value is not None:
             setattr(tutor, field, value)
-    tutor.updated_at = datetime.now(timezone.utc)
-
     await db.commit()
     await db.refresh(current_user)
     await db.refresh(tutor)
@@ -124,7 +124,8 @@ async def tutor_courses(
     current_user: TutorUser,
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Course).where(Course.tutor_id == current_user.id).order_by(Course.created_at.desc())
+    tutor = await _get_tutor_or_404(db, current_user.id)
+    stmt = select(Course).where(Course.tutor_id == tutor.id).order_by(Course.created_at.desc())
     courses = (await db.execute(stmt)).scalars().all()
     data = [_course_summary(c) for c in courses]
     return {"success": True, "message": "Tutor courses fetched", "data": data}
@@ -138,7 +139,7 @@ async def tutor_analytics(
     tutor = await _get_tutor_or_404(db, current_user.id)
 
     courses_result = (
-        await db.execute(select(Course).where(Course.tutor_id == current_user.id))
+        await db.execute(select(Course).where(Course.tutor_id == tutor.id))
     ).scalars().all()
 
     total_students = sum(c.enrolled_count or 0 for c in courses_result)
@@ -171,7 +172,7 @@ async def list_all_tutors(
 ):
     stmt = (
         select(Profile, Tutor)
-        .join(Tutor, Profile.id == Tutor.id)
+        .join(Tutor, Profile.id == Tutor.profile_id)
         .where(Profile.role.in_(["tutor", "admin"]))
     )
     rows = (await db.execute(stmt)).all()
@@ -187,7 +188,7 @@ async def list_all_tutors(
     data = []
     for profile, tutor in rows:
         d = _merge_tutor_profile(profile, tutor)
-        d["course_count"] = course_count_map.get(str(profile.id), 0)
+        d["course_count"] = course_count_map.get(str(tutor.id), 0)
         data.append(d)
 
     return {"success": True, "message": "All tutors fetched", "data": data}
@@ -207,14 +208,16 @@ async def get_tutor_public_profile(
     if not profile or profile.role not in ("tutor", "admin"):
         raise HTTPException(status_code=404, detail="Tutor not found")
 
-    tutor = await db.get(Tutor, tid)
+    tutor = (
+        await db.execute(select(Tutor).where(Tutor.profile_id == tid))
+    ).scalar_one_or_none()
     if not tutor:
         raise HTTPException(status_code=404, detail="Tutor profile not found")
 
     # Approved courses by this tutor
     courses_stmt = (
         select(Course)
-        .where(Course.tutor_id == tid, Course.status == "approved")
+        .where(Course.tutor_id == tutor.id, Course.status == "approved")
         .order_by(Course.created_at.desc())
     )
     courses = (await db.execute(courses_stmt)).scalars().all()

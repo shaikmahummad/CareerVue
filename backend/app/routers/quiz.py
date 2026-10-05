@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import StudentUser
 from app.models.quiz import QuizAttempt, QuizTemplate
+from app.models.knowledge import CareerRole
 from app.models.roadmap import Roadmap
 from app.models.user import SkillProfile
 from app.schemas.quiz import QuizAttemptCreate
@@ -24,6 +25,33 @@ from app.services.quiz_service import (
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
 logger = logging.getLogger(__name__)
+
+
+@router.get("/careers")
+async def get_supported_careers(
+    current_user: StudentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the active, seeded careers that can issue reviewed quizzes."""
+    careers = (
+        await db.execute(
+            select(CareerRole)
+            .where(CareerRole.is_active.is_(True))
+            .order_by(CareerRole.title)
+        )
+    ).scalars().all()
+    return {
+        "success": True,
+        "message": "Supported quiz careers fetched",
+        "data": [
+            {
+                "slug": career.slug,
+                "title": career.title,
+                "description": career.description,
+            }
+            for career in careers
+        ],
+    }
 
 
 # ── Request / Response bodies ─────────────────────────────────────────────────

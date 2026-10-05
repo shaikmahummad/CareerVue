@@ -29,38 +29,6 @@ export default function LoginScreen() {
   const [show,  setShow]    = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const resendVerification = useCallback(async () => {
-    if (!isValidEmail(email)) {
-      Alert.alert("Enter your email", "Enter a valid account email first.");
-      return;
-    }
-    try {
-      await apiPost("/api/v1/auth/resend-verification", {
-        email: normalizeEmail(email),
-      });
-      Alert.alert(
-        "Check your email",
-        "If this account is awaiting verification, a new OTP is on its way.",
-        [
-          {
-            text: "Enter OTP",
-            onPress: () =>
-              router.push({
-                pathname: "/(auth)/verify-email",
-                params: { email: normalizeEmail(email) },
-              } as never),
-          },
-          { text: "Close", style: "cancel" },
-        ]
-      );
-    } catch (error) {
-      Alert.alert(
-        "Unable to resend",
-        error instanceof Error ? error.message : "Please try again."
-      );
-    }
-  }, [email]);
-
   const handleLogin = useCallback(async () => {
     if (!isValidEmail(email) || !pass) {
       Alert.alert("Check your details", "Enter a valid email address and password.");
@@ -81,35 +49,30 @@ export default function LoginScreen() {
       const message = error instanceof Error ? error.message : "";
       if (error instanceof ApiError && error.code === "ACCOUNT_NOT_VERIFIED") {
         Alert.alert(
-          "Check your email",
-          "A 6-digit OTP was sent to your email. Enter it to continue.",
+          "Email not verified",
+          "Enter the OTP from registration, or request a new OTP on the verification screen.",
           [
             {
-              text: "Enter OTP",
+              text: "Verify email",
               onPress: () =>
                 router.push({
                   pathname: "/(auth)/verify-email",
                   params: { email: normalizeEmail(email) },
                 } as never),
             },
+            { text: "Cancel", style: "cancel" },
           ]
         );
         return;
       }
       Alert.alert(
         "Sign in failed",
-        message || "Invalid email or password. Please try again.",
-        error instanceof ApiError && error.code === "INVALID_CREDENTIALS"
-          ? [{ text: "OK" }]
-          : [
-              { text: "Cancel", style: "cancel" },
-              { text: "Resend verification", onPress: () => void resendVerification() },
-            ]
+        message || "Invalid email or password. Please try again."
       );
     } finally {
       setLoading(false);
     }
-  }, [email, pass, resendVerification]);
+  }, [email, pass, router]);
 
   return (
     <View style={s.root}>

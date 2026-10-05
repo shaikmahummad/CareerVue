@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentProps } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions, Pressable,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -39,17 +39,26 @@ export default function StudentAnalytics() {
   const [profile,  setProfile]  = useState<StudentStats | null>(null);
   const [skills, setSkills] = useState<SkillProfile[]>([]);
   const [loading,  setLoading]  = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  function loadAnalytics() {
+    setLoading(true);
+    setLoadError("");
+    Promise.all([
+      apiGet<QuizAttempt[]>("/api/v1/quiz/my-attempts"),
+      apiGet<StudentStats>("/api/v1/students/stats"),
+      apiGet<SkillProfile[]>("/api/v1/students/skill-profile"),
+    ]).then(([att, prof, skillData]) => {
+      setAttempts(att);
+      setProfile(prof);
+      setSkills(skillData);
+    }).catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "Failed to load analytics.");
+    }).finally(() => setLoading(false));
+  }
 
   useEffect(() => {
-    Promise.all([
-      apiGet<QuizAttempt[]>("/api/v1/quiz/my-attempts").catch(() => []),
-      apiGet<StudentStats>("/api/v1/students/stats").catch(() => null),
-      apiGet<SkillProfile[]>("/api/v1/students/skill-profile").catch(() => []),
-    ]).then(([att, prof, skillData]) => {
-      setAttempts(att ?? []);
-      setProfile(prof);
-      setSkills(skillData ?? []);
-    }).finally(() => setLoading(false));
+    loadAnalytics();
   }, []);
 
   const bestScore   = attempts.length ? Math.max(...attempts.map((a) => a.score ?? 0)) : 0;
@@ -69,6 +78,19 @@ export default function StudentAnalytics() {
     return (
       <View style={s.center}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={s.center}>
+        <Ionicons name="cloud-offline-outline" size={48} color={colors.error} />
+        <Text style={s.emptyTitle}>Analytics unavailable</Text>
+        <Text style={s.emptySub}>{loadError}</Text>
+        <Pressable style={s.retryButton} onPress={loadAnalytics}>
+          <Text style={s.retryButtonText}>Try Again</Text>
+        </Pressable>
       </View>
     );
   }
@@ -337,6 +359,8 @@ const s = StyleSheet.create({
   empty: { alignItems: "center", gap: 8, paddingVertical: 48 },
   emptyTitle: { fontFamily: "HankenGrotesk_600SemiBold", fontSize: 16, color: colors.text },
   emptySub:   { fontFamily: "HankenGrotesk_400Regular", fontSize: 13, color: colors.textVariant, textAlign: "center" },
+  retryButton: { marginTop: 16, borderRadius: 14, backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12 },
+  retryButtonText: { fontFamily: "HankenGrotesk_600SemiBold", color: colors.onPrimary },
 });
 
 const sc = StyleSheet.create({

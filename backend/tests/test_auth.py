@@ -353,7 +353,7 @@ class LoginTests(unittest.TestCase):
                 "sign_in_with_password",
                 side_effect=Exception("Email not confirmed"),
             ) as sign_in,
-            patch.object(auth, "send_verification_email", new_callable=AsyncMock),
+            patch.object(auth, "send_verification_email", new_callable=AsyncMock) as send,
             self.assertRaises(HTTPException) as raised,
         ):
             __import__("asyncio").run(login_result(
@@ -363,8 +363,9 @@ class LoginTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 403)
         self.assertEqual(raised.exception.detail["code"], "ACCOUNT_NOT_VERIFIED")
         sign_in.assert_called_once()
+        send.assert_not_awaited()
 
-    def test_unverified_user_login_sends_otp_and_blocks_login(self):
+    def test_unverified_user_login_never_issues_or_sends_an_otp(self):
         profile = SimpleNamespace(
             id=uuid.uuid4(),
             email="user@gmail.com",
@@ -373,6 +374,7 @@ class LoginTests(unittest.TestCase):
         )
         with (
             patch.object(auth, "send_verification_email", new_callable=AsyncMock) as send,
+            patch.object(auth, "issue_verification_token", new_callable=AsyncMock) as issue,
             patch.object(
                 auth.supabase_admin.auth,
                 "sign_in_with_password",
@@ -387,8 +389,34 @@ class LoginTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 403)
         self.assertEqual(raised.exception.detail["code"], "ACCOUNT_NOT_VERIFIED")
         sign_in.assert_called_once()
-        send.assert_awaited_once()
-        self.assertEqual(len(send.await_args.args[1]), 6)
+        send.assert_not_awaited()
+        issue.assert_not_awaited()
+
+    def test_verified_profile_with_unconfirmed_provider_is_not_reverified(self):
+        profile = SimpleNamespace(
+            id=uuid.uuid4(),
+            email="user@gmail.com",
+            full_name="User",
+            email_verified=True,
+        )
+        with (
+            patch.object(
+                auth.supabase_admin.auth,
+                "sign_in_with_password",
+                side_effect=Exception("Email not confirmed"),
+            ),
+            patch.object(auth, "send_verification_email", new_callable=AsyncMock) as send,
+            patch.object(auth, "issue_verification_token", new_callable=AsyncMock) as issue,
+            self.assertRaises(HTTPException) as raised,
+        ):
+            __import__("asyncio").run(login_result(
+                {"email": profile.email, "password": "secret1"},
+                FlowSession(profile),
+            ))
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail["code"], "ACCOUNT_STATE_INCONSISTENT")
+        send.assert_not_awaited()
+        issue.assert_not_awaited()
 
     def test_provider_confirmation_repairs_stale_profile_verification(self):
         profile = SimpleNamespace(
@@ -422,6 +450,40 @@ class LoginTests(unittest.TestCase):
         self.assertEqual(result["data"]["access_token"], "access")
         self.assertTrue(profile.email_verified)
         self.assertEqual(session.commits, 1)
+
+    def test_deactivated_profile_cannot_receive_a_login_session(self):
+        profile = SimpleNamespace(
+            id=uuid.uuid4(),
+            email_verified=True,
+            role="deactivated",
+            full_name="Disabled User",
+        )
+        response = SimpleNamespace(
+            session=SimpleNamespace(
+                access_token="access",
+                refresh_token="refresh",
+                expires_in=3600,
+            ),
+            user=SimpleNamespace(
+                id=str(profile.id),
+                email="user@gmail.com",
+                email_confirmed_at=datetime.now(timezone.utc),
+            ),
+        )
+        with (
+            patch.object(
+                auth.supabase_admin.auth,
+                "sign_in_with_password",
+                return_value=response,
+            ),
+            self.assertRaises(HTTPException) as raised,
+        ):
+            __import__("asyncio").run(login_result(
+                {"email": "user@gmail.com", "password": "secret1"},
+                FlowSession(profile),
+            ))
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(raised.exception.detail["code"], "ACCOUNT_DISABLED")
 
 
 class EmailVerificationTests(unittest.TestCase):
