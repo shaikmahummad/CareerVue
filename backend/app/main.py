@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager, suppress
 import logging
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,7 +100,19 @@ LOCAL_DEVELOPMENT_ORIGINS = {
 
 # Keep local web/Expo development usable even when a deployment-level
 # APP_CORS_ORIGINS variable replaces the defaults from backend/.env.
-allowed_origins = sorted(set(settings.cors_origins) | LOCAL_DEVELOPMENT_ORIGINS)
+configured_frontend_origin = ""
+if settings.frontend_url.strip():
+    frontend_parts = urlsplit(settings.frontend_url.strip())
+    if frontend_parts.scheme and frontend_parts.netloc:
+        configured_frontend_origin = (
+            f"{frontend_parts.scheme}://{frontend_parts.netloc}"
+        )
+
+allowed_origins = sorted(
+    set(settings.cors_origins)
+    | LOCAL_DEVELOPMENT_ORIGINS
+    | ({configured_frontend_origin} if configured_frontend_origin else set())
+)
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 
+cd /app
+
 echo "Applying database migrations..."
-alembic upgrade head
+alembic -c /app/alembic.ini upgrade head
 
 echo "Seeding reviewed career question banks..."
 python seed_question_banks.py
