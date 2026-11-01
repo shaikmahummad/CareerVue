@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +39,6 @@ from app.services.email_verification_service import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
-PENDING_REGISTRATION_TTL = timedelta(minutes=30)
 MAX_OTP_ATTEMPTS = 5
 PENDING = "PENDING"
 OTP_SENT = "OTP_SENT"
@@ -99,31 +98,9 @@ async def _pending_registration_for_email(db: AsyncSession, email: str):
 
 
 async def _cleanup_expired_pending_registrations(db: AsyncSession) -> None:
-    now = datetime.now(timezone.utc)
-    expired = (
-        await db.execute(
-            select(PendingRegistration).where(
-                PendingRegistration.expires_at <= now
-            )
-        )
-    ).scalars().all()
-    if not expired:
-        return
-    expired_ids = [registration.user_id for registration in expired]
-    await db.execute(
-        delete(EmailVerificationToken).where(
-            EmailVerificationToken.user_id.in_(expired_ids)
-        )
-    )
-    await db.execute(
-        delete(PendingRegistration).where(
-            PendingRegistration.user_id.in_(expired_ids)
-        )
-    )
-    await db.commit()
-    for user_id in expired_ids:
-        log_auth_event("REGISTRATION_EXPIRED", user_id)
-        _delete_auth_user(user_id)
+    # Pending registrations are retained until the user completes verification
+    # or explicitly deletes the account. Individual OTPs still expire.
+    return
 
 
 async def cleanup_expired_pending_registrations() -> None:
@@ -161,13 +138,6 @@ def _signup_with_verification(body, role: str) -> uuid.UUID:
             detail="An account with this email already exists.",
         )
     return uuid.UUID(user.id)
-
-
-def _delete_auth_user(user_id: uuid.UUID) -> None:
-    try:
-        supabase_admin.auth.admin.delete_user(str(user_id))
-    except Exception:
-        logger.exception("Failed to clean up auth user after registration rollback")
 
 
 async def _persist_student(
@@ -265,7 +235,7 @@ async def _persist_registration(db, body, user_id, persist) -> None:
             exclude={"password", "confirm_password"}
         ),
         status=PENDING,
-        expires_at=datetime.now(timezone.utc) + PENDING_REGISTRATION_TTL,
+        expires_at=None,
     )
     committed = False
     try:
@@ -291,7 +261,11 @@ async def _persist_registration(db, body, user_id, persist) -> None:
         pending.last_error = None
     except IntegrityError:
         await db.rollback()
-        _delete_auth_user(user_id)
+        logger.error(
+            "Registration persistence failed after Auth user creation; "
+            "retaining Auth user_id=%s for explicit account cleanup",
+            user_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
@@ -301,7 +275,11 @@ async def _persist_registration(db, body, user_id, persist) -> None:
     except Exception:
         await db.rollback()
         if not committed:
-            _delete_auth_user(user_id)
+            logger.error(
+                "Registration setup failed after Auth user creation; "
+                "retaining Auth user_id=%s for explicit account cleanup",
+                user_id,
+            )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Verification OTP could not be sent. Please try again.",
@@ -321,19 +299,10 @@ async def register_student(
     await _cleanup_expired_pending_registrations(db)
     pending = await _pending_registration_for_email(db, body.email)
     if pending:
-        if pending.expires_at <= datetime.now(timezone.utc):
-            await db.execute(
-                delete(PendingRegistration).where(
-                    PendingRegistration.user_id == pending.user_id
-                )
-            )
-            await db.commit()
-            _delete_auth_user(pending.user_id)
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email verification is already pending for this account.",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email verification is already pending for this account. Request a new OTP if needed.",
+        )
     user_id = _signup_with_verification(body, "student")
     await _persist_registration(db, body, user_id, _persist_student)
     return {
@@ -356,19 +325,10 @@ async def register_tutor(
     await _cleanup_expired_pending_registrations(db)
     pending = await _pending_registration_for_email(db, body.email)
     if pending:
-        if pending.expires_at <= datetime.now(timezone.utc):
-            await db.execute(
-                delete(PendingRegistration).where(
-                    PendingRegistration.user_id == pending.user_id
-                )
-            )
-            await db.commit()
-            _delete_auth_user(pending.user_id)
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email verification is already pending for this account.",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email verification is already pending for this account. Request a new OTP if needed.",
+        )
     user_id = _signup_with_verification(body, "tutor")
     await _persist_registration(db, body, user_id, _persist_tutor)
     return {

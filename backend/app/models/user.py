@@ -56,7 +56,9 @@ class PendingRegistration(Base):
         Text, nullable=False, server_default=text("'PENDING'")
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
