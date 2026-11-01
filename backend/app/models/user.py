@@ -31,8 +31,18 @@ class Profile(Base):
     )
 
     # Relationships
-    student: Mapped["Student | None"] = relationship(back_populates="profile", uselist=False, foreign_keys="Student.profile_id")
-    tutor: Mapped["Tutor | None"] = relationship(back_populates="profile", uselist=False, foreign_keys="Tutor.profile_id")
+    student: Mapped["Student | None"] = relationship(
+        back_populates="profile",
+        uselist=False,
+        foreign_keys="Student.profile_id",
+        lazy="selectin",
+    )
+    tutor: Mapped["Tutor | None"] = relationship(
+        back_populates="profile",
+        uselist=False,
+        foreign_keys="Tutor.profile_id",
+        lazy="selectin",
+    )
 
 
 class PendingRegistration(Base):
@@ -99,7 +109,11 @@ class Student(Base):
     )
 
     # Relationships
-    profile: Mapped["Profile"] = relationship(back_populates="student", foreign_keys=[profile_id])
+    profile: Mapped["Profile"] = relationship(
+        back_populates="student",
+        foreign_keys=[profile_id],
+        lazy="selectin",
+    )
 
 
 class Tutor(Base):
@@ -126,7 +140,11 @@ class Tutor(Base):
     )
 
     # Relationships
-    profile: Mapped["Profile"] = relationship(back_populates="tutor", foreign_keys=[profile_id])
+    profile: Mapped["Profile"] = relationship(
+        back_populates="tutor",
+        foreign_keys=[profile_id],
+        lazy="selectin",
+    )
 
 
 class SkillProfile(Base):

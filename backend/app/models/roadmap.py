@@ -35,6 +35,7 @@ class Roadmap(Base):
         back_populates="roadmap",
         cascade="all, delete-orphan",
         order_by="RoadmapCourse.order_index",
+        lazy="selectin",
     )
 
 
@@ -64,4 +65,4 @@ class RoadmapCourse(Base):
     )
 
     # Relationships
-    roadmap: Mapped["Roadmap"] = relationship(back_populates="items")
+    roadmap: Mapped["Roadmap"] = relationship(back_populates="items", lazy="selectin")

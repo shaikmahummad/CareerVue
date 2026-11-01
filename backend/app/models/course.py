@@ -49,10 +49,15 @@ class Course(Base):
 
     # Relationships
     modules: Mapped[list["CourseModule"]] = relationship(
-        back_populates="course", cascade="all, delete-orphan", order_by="CourseModule.order_index"
+        back_populates="course",
+        cascade="all, delete-orphan",
+        order_by="CourseModule.order_index",
+        lazy="selectin",
     )
     approvals: Mapped[list["CourseApproval"]] = relationship(
-        back_populates="course", cascade="all, delete-orphan"
+        back_populates="course",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 
@@ -79,7 +84,7 @@ class CourseModule(Base):
     )
 
     # Relationships
-    course: Mapped["Course"] = relationship(back_populates="modules")
+    course: Mapped["Course"] = relationship(back_populates="modules", lazy="selectin")
 
 
 class CourseApproval(Base):
@@ -102,4 +107,4 @@ class CourseApproval(Base):
     )
 
     # Relationships
-    course: Mapped["Course"] = relationship(back_populates="approvals")
+    course: Mapped["Course"] = relationship(back_populates="approvals", lazy="selectin")
