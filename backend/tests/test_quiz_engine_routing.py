@@ -57,6 +57,23 @@ class QuizEngineRoutingTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(template.questions, QUIZ_DATA["questions"])
 
+    async def test_inactive_legacy_template_does_not_block_active_v2_bank(self):
+        db = fake_db()
+        with (
+            patch(
+                "app.services.quiz_service.build_verified_quiz",
+                new=AsyncMock(return_value=(
+                    "android-developer", "Android Developer", QUIZ_DATA
+                )),
+            ),
+        ):
+            template = await get_or_create_quiz_template(db, "Android Developer")
+
+        statement = db.execute.await_args.args[0]
+        self.assertIn("WHERE quiz_templates.generation_key", str(statement))
+        self.assertEqual(template.generation_key, "question-bank:android-developer:beginner:v2")
+        self.assertTrue(template.is_active)
+
     async def test_unsupported_career_returns_clear_availability_error(self):
         db = fake_db()
         with (

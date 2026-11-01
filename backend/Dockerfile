@@ -2,17 +2,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app/ ./app/
-COPY alembic/ ./alembic/
-COPY alembic.ini .
-COPY question_banks/ ./question_banks/
-COPY seed_frontend_knowledge.py .
-COPY seed_question_banks.py .
-COPY cleanup_abandoned_quiz_attempts.py .
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY backend/app/ ./app/
+COPY backend/alembic/ ./alembic/
+COPY backend/alembic.ini .
+COPY backend/question_banks/ ./question_banks/
+COPY backend/seed_frontend_knowledge.py .
+COPY backend/seed_question_banks.py .
+COPY backend/cleanup_abandoned_quiz_attempts.py .
+COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENTRYPOINT ["docker-entrypoint.sh"]

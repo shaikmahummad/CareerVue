@@ -266,10 +266,7 @@ async def get_or_create_quiz_template(
         existing = (
             await db.execute(
                 select(QuizTemplate).where(
-                    or_(
-                        QuizTemplate.generation_key == bank_key,
-                        QuizTemplate.goal == career_title,
-                    )
+                    QuizTemplate.generation_key == bank_key
                 )
             )
         ).scalar_one_or_none()
@@ -295,10 +292,7 @@ async def get_or_create_quiz_template(
             concurrent = (
                 await db.execute(
                     select(QuizTemplate).where(
-                        or_(
-                            QuizTemplate.generation_key == bank_key,
-                            QuizTemplate.goal == career_title,
-                        )
+                        QuizTemplate.generation_key == bank_key
                     )
                 )
             ).scalar_one_or_none()
