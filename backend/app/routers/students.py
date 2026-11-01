@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -62,10 +63,22 @@ def _merge_profile(profile: Profile, student: Student) -> dict:
 async def _get_student_or_404(db: AsyncSession, profile_id: uuid.UUID) -> Student:
     student = (await db.execute(select(Student).where(Student.profile_id == profile_id))).scalar_one_or_none()
     if not student:
-        student = Student(profile_id=profile_id)
-        db.add(student)
-        await db.commit()
-        await db.refresh(student)
+        student_id = (
+            await db.execute(
+                pg_insert(Student)
+                .values(profile_id=profile_id)
+                .on_conflict_do_nothing(index_elements=["profile_id"])
+                .returning(Student.id)
+            )
+        ).scalar_one_or_none()
+        if student_id is not None:
+            student = await db.get(Student, student_id)
+        else:
+            student = (
+                await db.execute(
+                    select(Student).where(Student.profile_id == profile_id)
+                )
+            ).scalar_one()
     return student
 
 

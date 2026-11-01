@@ -34,10 +34,22 @@ async def _get_student(db: AsyncSession, profile_id: uuid.UUID) -> Student:
         await db.execute(select(Student).where(Student.profile_id == profile_id))
     ).scalar_one_or_none()
     if not student:
-        student = Student(profile_id=profile_id)
-        db.add(student)
-        await db.commit()
-        await db.refresh(student)
+        student_id = (
+            await db.execute(
+                pg_insert(Student)
+                .values(profile_id=profile_id)
+                .on_conflict_do_nothing(index_elements=["profile_id"])
+                .returning(Student.id)
+            )
+        ).scalar_one_or_none()
+        if student_id is not None:
+            student = await db.get(Student, student_id)
+        else:
+            student = (
+                await db.execute(
+                    select(Student).where(Student.profile_id == profile_id)
+                )
+            ).scalar_one()
     return student
 
 
