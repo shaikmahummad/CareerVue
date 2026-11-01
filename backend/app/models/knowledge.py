@@ -22,7 +22,7 @@ class CareerRole(Base):
     skills: Mapped[list["CareerSkill"]] = relationship(
         back_populates="career",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="noload",
     )
 
 
@@ -56,8 +56,8 @@ class CareerSkill(Base):
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
-    career: Mapped[CareerRole] = relationship(back_populates="skills", lazy="selectin")
-    skill: Mapped[Skill] = relationship(lazy="selectin")
+    career: Mapped[CareerRole] = relationship(back_populates="skills", lazy="noload")
+    skill: Mapped[Skill] = relationship(lazy="noload")
 
 
 class SkillPrerequisite(Base):
@@ -112,5 +112,5 @@ class QuizQuestion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
-    skill: Mapped[Skill] = relationship(lazy="selectin")
-    source: Mapped[QuestionSource | None] = relationship(lazy="selectin")
+    skill: Mapped[Skill] = relationship(lazy="noload")
+    source: Mapped[QuestionSource | None] = relationship(lazy="noload")

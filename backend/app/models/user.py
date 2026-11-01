@@ -35,13 +35,13 @@ class Profile(Base):
         back_populates="profile",
         uselist=False,
         foreign_keys="Student.profile_id",
-        lazy="selectin",
+        lazy="noload",
     )
     tutor: Mapped["Tutor | None"] = relationship(
         back_populates="profile",
         uselist=False,
         foreign_keys="Tutor.profile_id",
-        lazy="selectin",
+        lazy="noload",
     )
 
 
@@ -114,7 +114,7 @@ class Student(Base):
     profile: Mapped["Profile"] = relationship(
         back_populates="student",
         foreign_keys=[profile_id],
-        lazy="selectin",
+        lazy="noload",
     )
 
 
@@ -145,7 +145,7 @@ class Tutor(Base):
     profile: Mapped["Profile"] = relationship(
         back_populates="tutor",
         foreign_keys=[profile_id],
-        lazy="selectin",
+        lazy="noload",
     )
 
 
