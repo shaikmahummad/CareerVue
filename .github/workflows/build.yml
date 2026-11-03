@@ -139,7 +139,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
       - name: Reclaim runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet
