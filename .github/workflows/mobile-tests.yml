@@ -65,22 +65,32 @@ jobs:
           script: |
             mkdir -p artifacts/appium/logs
             adb wait-for-device
-            for attempt in {1..30}; do
+            attempt=1
+            while [ "$attempt" -le 30 ]; do
               if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
                 break
               fi
               sleep 2
+              attempt=$((attempt + 1))
             done
-            adb shell getprop sys.boot_completed | grep -q "1"
+            if [ "$attempt" -gt 30 ]; then
+              echo "Android emulator did not boot within 60 seconds" >&2
+              exit 1
+            fi
             adb shell ls /data/local/tmp > /dev/null
             appium --log artifacts/appium/logs/appium-server.log > /dev/null 2>&1 &
-            for attempt in {1..30}; do
+            attempt=1
+            while [ "$attempt" -le 30 ]; do
               if curl --silent http://127.0.0.1:4723/status | grep -q ready; then
                 break
               fi
               sleep 2
+              attempt=$((attempt + 1))
             done
-            curl --silent http://127.0.0.1:4723/status | grep -q ready
+            if [ "$attempt" -gt 30 ]; then
+              echo "Appium server did not become ready within 60 seconds" >&2
+              exit 1
+            fi
             python -m pytest tests/appium -v --junitxml=artifacts/appium/junit-results.xml --html=artifacts/appium/report.html --self-contained-html
       - name: Write Appium status
         if: always()
