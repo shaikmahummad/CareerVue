@@ -16,10 +16,9 @@ depends_on = None
 def upgrade() -> None:
     # Legacy templates were unique by goal. Versioned question-bank templates
     # are uniquely identified by generation_key, so the goal may repeat.
-    op.drop_constraint(
-        "quiz_templates_goal_key",
-        "quiz_templates",
-        type_="unique",
+    op.execute(
+        "ALTER TABLE quiz_templates "
+        "DROP CONSTRAINT IF EXISTS quiz_templates_goal_key"
     )
 
 

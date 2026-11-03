@@ -34,7 +34,8 @@ CREATE_STATEMENTS = (
         topic_areas TEXT[],
         questions JSONB NOT NULL,
         created_at TIMESTAMPTZ DEFAULT now(),
-        updated_at TIMESTAMPTZ DEFAULT now()
+        updated_at TIMESTAMPTZ DEFAULT now(),
+        CONSTRAINT quiz_templates_goal_key UNIQUE (goal)
     )
     """,
     """
