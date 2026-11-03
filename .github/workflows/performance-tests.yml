@@ -1,0 +1,62 @@
+name: Reusable k6 performance tests
+
+on:
+  workflow_call:
+    inputs:
+      base_url:
+        required: true
+        type: string
+      profile:
+        type: string
+        default: smoke
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Authorized staging API URL (production is prohibited)
+        required: true
+        type: string
+      profile:
+        type: choice
+        options: [smoke, load, stress, spike]
+        default: smoke
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    if: inputs.base_url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      PERF_BASE_URL: ${{ inputs.base_url }}
+      K6_PROFILE: ${{ inputs.profile }}
+      K6_P95_MS: ${{ vars.K6_P95_MS || '500' }}
+      K6_FAILURE_RATE: ${{ vars.K6_FAILURE_RATE || '0.01' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject production performance targets
+        shell: bash
+        run: |
+          case "$PERF_BASE_URL" in
+            *careervue-api.welcos.in*) echo "Production load testing is prohibited"; exit 2 ;;
+          esac
+      - name: Run selected k6 profile
+        shell: bash
+        run: |
+          mkdir -p artifacts/performance
+          docker run --rm --user 0:0 -v "$PWD:/work" -w /work \
+            -e PERF_BASE_URL -e K6_PROFILE -e K6_P95_MS -e K6_FAILURE_RATE \
+            grafana/k6:0.54.0 run --out json=artifacts/performance/k6-results.json tests/performance/careervue.js
+      - name: Write performance status
+        if: always()
+        run: python scripts/ci/write_status.py performance "${{ job.status }}" --details "k6 $K6_PROFILE profile ($PERF_BASE_URL)" --output artifacts/performance/status.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-reports
+          path: artifacts/performance
+          if-no-files-found: error
+          retention-days: 14
+

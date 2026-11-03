@@ -73,6 +73,12 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+artifacts/
+ci-reports/
+ci-reports.zip
+downloaded-reports/
+web-server.pid
+/apps/mobile/dist-ci*/
 
 # Misc
 *.tsbuildinfo

@@ -1,0 +1,78 @@
+name: Reusable Selenium tests
+
+on:
+  workflow_call:
+    inputs:
+      base_url:
+        type: string
+        default: ""
+    secrets:
+      E2E_STUDENT_EMAIL: { required: false }
+      E2E_STUDENT_PASSWORD: { required: false }
+      E2E_TUTOR_EMAIL: { required: false }
+      E2E_TUTOR_PASSWORD: { required: false }
+
+permissions:
+  contents: read
+
+jobs:
+  selenium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      WEB_BASE_URL: ${{ inputs.base_url || 'http://localhost:3000' }}
+      E2E_BROWSER: chrome
+      E2E_HEADLESS: "true"
+      E2E_REQUIRE_AUTH: ${{ inputs.base_url != '' && 'true' || 'false' }}
+      E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
+      E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
+      E2E_TUTOR_EMAIL: ${{ secrets.E2E_TUTOR_EMAIL }}
+      E2E_TUTOR_PASSWORD: ${{ secrets.E2E_TUTOR_PASSWORD }}
+      NEXT_PUBLIC_API_URL: https://example.test
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tests/requirements-ci.txt
+      - uses: actions/setup-node@v4
+        if: inputs.base_url == ''
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Start local web application
+        if: inputs.base_url == ''
+        shell: bash
+        run: |
+          npm ci
+          npm run dev --workspace=@careervue/web > web-server.log 2>&1 &
+          echo $! > web-server.pid
+          for attempt in {1..60}; do
+            curl --fail --silent http://localhost:3000 >/dev/null && exit 0
+            sleep 2
+          done
+          cat web-server.log
+          exit 1
+      - run: python -m pip install -r tests/requirements-ci.txt
+      - name: Run Selenium journeys
+        run: >-
+          python -m pytest tests/selenium -v
+          --junitxml=artifacts/selenium/junit-results.xml
+          --html=artifacts/selenium/report.html --self-contained-html
+      - name: Preserve local server log
+        if: always() && inputs.base_url == ''
+        run: cp web-server.log artifacts/selenium/web-server.log || true
+      - name: Write Selenium status
+        if: always()
+        run: python scripts/ci/write_status.py selenium "${{ job.status }}" --details "Selenium web journeys ($WEB_BASE_URL)" --output artifacts/selenium/status.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selenium-reports
+          path: artifacts/selenium
+          if-no-files-found: error
+          retention-days: 14
+
