@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: careervue-ci-${{ github.workflow }}-${{ github.ref }}
