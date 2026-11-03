@@ -121,11 +121,10 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
       - run: npm ci
       - name: Validate Expo configuration
         working-directory: apps/mobile
@@ -135,6 +134,10 @@ jobs:
       - name: Generate native Android project
         working-directory: apps/mobile
         run: npx expo prebuild --platform android --no-install --clean
+      - name: Ensure Gradle wrapper exists
+        run: |
+          test -f apps/mobile/android/gradlew
+          chmod +x apps/mobile/android/gradlew
       - name: Build emulator APK
         working-directory: apps/mobile/android
         run: ./gradlew assembleDebug --no-daemon
@@ -157,4 +160,3 @@ jobs:
           path: artifacts/build/mobile-build-status.json
           if-no-files-found: error
           retention-days: 14
-
