@@ -1,7 +1,24 @@
 # Dependency security review
 
-Reviewed again on 2026-08-25 with `npm audit --omit=dev --json`, package metadata, and a
-non-force audit-fix dry run. `npm audit fix --force` was not used.
+## Current review — 2026-11-03
+
+The CI/CD implementation re-ran `npm audit --omit=dev --audit-level=critical`
+after the Expo SDK 57 compatibility patches and clean `npm ci`. The current npm
+advisory database reports 55 production-tree findings: 2 low, 35 moderate, 15
+high, and 3 critical. The critical advisories currently reach Next.js 16.3.2,
+`proxy-addr`, and `shell-quote`. npm proposes a mixture of compatible transitive
+updates and forced framework/Expo changes; `npm audit fix --force` was not used.
+
+This supersedes the August counts below. Production web deployment must remain
+disabled until the critical runtime paths are upgraded and regression-tested or
+an owner records a time-bounded risk acceptance. Add a required SCA gate after
+the compatible upgrade is merged; enabling it now would intentionally keep all
+CI runs red.
+
+## Historical review — 2026-08-25
+
+The earlier review used `npm audit --omit=dev --json`, package metadata, and a
+non-force audit-fix dry run.
 
 ## Changes applied
 

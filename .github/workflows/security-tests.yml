@@ -1,0 +1,71 @@
+name: Reusable OWASP ZAP baseline
+
+on:
+  workflow_call:
+    inputs:
+      web_url:
+        required: true
+        type: string
+      api_url:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      web_url:
+        description: Authorized staging web URL
+        required: true
+        type: string
+      api_url:
+        description: Authorized staging API URL
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  zap:
+    if: inputs.web_url != '' && inputs.api_url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: staging
+    env:
+      SECURITY_WEB_URL: ${{ inputs.web_url }}
+      SECURITY_API_URL: ${{ inputs.api_url }}
+      ZAP_FAIL_ON: ${{ vars.ZAP_FAIL_ON || 'high' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject known production targets
+        shell: bash
+        run: |
+          case "$SECURITY_WEB_URL $SECURITY_API_URL" in
+            *careervue-api.welcos.in*) echo "Production DAST is prohibited by this routine workflow"; exit 2 ;;
+          esac
+      - name: Run passive web baseline
+        shell: bash
+        run: |
+          mkdir -p artifacts/security
+          docker run --rm --user 0:0 -v "$PWD:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:2.16.1 \
+            zap-baseline.py -t "$SECURITY_WEB_URL" -m 3 -I \
+            -c tests/security/zap-rules.tsv -J artifacts/security/zap-web-report.json \
+            -r artifacts/security/zap-web-report.html
+      - name: Run passive API-description baseline
+        shell: bash
+        run: |
+          docker run --rm --user 0:0 -v "$PWD:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:2.16.1 \
+            zap-baseline.py -t "${SECURITY_API_URL%/}/openapi.json" -m 2 -I \
+            -c tests/security/zap-rules.tsv -J artifacts/security/zap-api-report.json \
+            -r artifacts/security/zap-api-report.html
+      - name: Enforce configured severity gate
+        run: python scripts/ci/zap_summary.py artifacts/security/zap-web-report.json artifacts/security/zap-api-report.json --output artifacts/security/severity-summary.json --fail-on "$ZAP_FAIL_ON"
+      - name: Write security status
+        if: always()
+        run: python scripts/ci/write_status.py security "${{ job.status }}" --details "OWASP ZAP passive baseline; gate=$ZAP_FAIL_ON" --output artifacts/security/status.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: artifacts/security
+          if-no-files-found: error
+          retention-days: 14
+

@@ -33,10 +33,9 @@ build.
   normalized-email unique index is present.
 - Live API: `/health`, `/`, and the database-backed `/api/v1/courses/` endpoint
   return HTTP 200.
-- Dependency audit: zero critical, four high, and eleven moderate findings.
-  The remaining findings are in the supported Expo/Metro build toolchain; npm's
-  suggested forced fix is an incompatible Expo 46 downgrade and must not be
-  applied. See `DEPENDENCY_AUDIT.md`.
+- Dependency audit: the 2026-11-03 advisory refresh supersedes this document's
+  earlier zero-critical result. It now reports three critical production-tree
+  findings, including Next.js 16.3.2. See `DEPENDENCY_AUDIT.md`.
 
 ## P0 release blockers
 
@@ -67,6 +66,10 @@ build.
    approved courses titled `z` and `X` with placeholder descriptions. An owner
    must archive/reject placeholder records and approve the final catalog before
    launch.
+7. **Critical dependency advisories need remediation.** Upgrade and regression-
+   test the affected Next.js/runtime dependency paths, then require a clean
+   `npm audit --omit=dev --audit-level=critical` result before enabling web
+   deployment. Do not use the incompatible blanket `--force` proposal.
 
 ## Exact final command gate
 

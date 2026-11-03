@@ -1,0 +1,75 @@
+name: Reusable Appium tests
+
+on:
+  workflow_call:
+    inputs:
+      require_auth:
+        type: boolean
+        default: false
+    secrets:
+      E2E_STUDENT_EMAIL: { required: false }
+      E2E_STUDENT_PASSWORD: { required: false }
+
+permissions:
+  contents: read
+
+jobs:
+  appium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      E2E_REQUIRE_AUTH: ${{ inputs.require_auth }}
+      E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
+      E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-build-apk
+          path: artifacts/apk
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: tests/requirements-ci.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Appium test tooling
+        run: |
+          python -m pip install -r tests/requirements-ci.txt
+          npm install --global appium@2.19.0
+          appium driver install uiautomator2@4.2.1
+      - name: Run Appium journeys on Android emulator
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
+        env:
+          ANDROID_APP_PATH: ${{ github.workspace }}/artifacts/apk/app-debug.apk
+          E2E_REQUIRE_AUTH: ${{ env.E2E_REQUIRE_AUTH }}
+          E2E_STUDENT_EMAIL: ${{ env.E2E_STUDENT_EMAIL }}
+          E2E_STUDENT_PASSWORD: ${{ env.E2E_STUDENT_PASSWORD }}
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            mkdir -p artifacts/appium/logs
+            appium --log artifacts/appium/logs/appium-server.log > /dev/null 2>&1 &
+            for attempt in {1..30}; do curl --silent http://127.0.0.1:4723/status | grep -q ready && break; sleep 2; done
+            python -m pytest tests/appium -v --junitxml=artifacts/appium/junit-results.xml --html=artifacts/appium/report.html --self-contained-html
+      - name: Write Appium status
+        if: always()
+        run: python scripts/ci/write_status.py appium "${{ job.status }}" --details "Appium Android emulator journeys" --output artifacts/appium/status.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: appium-reports
+          path: artifacts/appium
+          if-no-files-found: error
+          retention-days: 14
+

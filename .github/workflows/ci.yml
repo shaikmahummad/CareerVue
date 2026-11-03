@@ -1,0 +1,104 @@
+name: CareerVue CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main, development, develop]
+  workflow_dispatch:
+    inputs:
+      performance_profile:
+        description: Staging k6 profile
+        type: choice
+        options: [smoke, load, stress, spike]
+        default: smoke
+      run_staging_scans:
+        description: Run performance and passive DAST against staging
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: careervue-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  selenium:
+    needs: build
+    uses: ./.github/workflows/web-tests.yml
+    with:
+      base_url: ${{ (github.event_name != 'pull_request' && vars.RUN_STAGING_E2E == 'true') && vars.STAGING_WEB_URL || '' }}
+    secrets: inherit
+
+  appium:
+    needs: build
+    uses: ./.github/workflows/mobile-tests.yml
+    with:
+      require_auth: ${{ github.event_name != 'pull_request' && vars.RUN_STAGING_E2E == 'true' }}
+    secrets: inherit
+
+  performance:
+    if: ${{ always() && needs.build.result == 'success' && vars.STAGING_API_URL != '' && ((github.event_name == 'workflow_dispatch' && inputs.run_staging_scans) || (github.event_name == 'push' && vars.RUN_STAGING_SCANS == 'true')) }}
+    needs: [build, selenium, appium]
+    uses: ./.github/workflows/performance-tests.yml
+    with:
+      base_url: ${{ vars.STAGING_API_URL }}
+      profile: ${{ github.event_name == 'workflow_dispatch' && inputs.performance_profile || 'smoke' }}
+
+  security:
+    if: ${{ always() && needs.performance.result == 'success' && vars.STAGING_WEB_URL != '' && vars.STAGING_API_URL != '' }}
+    needs: performance
+    uses: ./.github/workflows/security-tests.yml
+    with:
+      web_url: ${{ vars.STAGING_WEB_URL }}
+      api_url: ${{ vars.STAGING_API_URL }}
+
+  reports:
+    if: always()
+    needs: [build, selenium, appium, performance, security]
+    uses: ./.github/workflows/report.yml
+
+  quality-gate:
+    if: always()
+    needs: [build, selenium, appium, performance, security, reports]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce mandatory results
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          SELENIUM_RESULT: ${{ needs.selenium.result }}
+          APPIUM_RESULT: ${{ needs.appium.result }}
+          PERFORMANCE_RESULT: ${{ needs.performance.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          REPORT_RESULT: ${{ needs.reports.result }}
+        shell: bash
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$SELENIUM_RESULT" = success
+          test "$APPIUM_RESULT" = success
+          test "$REPORT_RESULT" = success
+          test "$PERFORMANCE_RESULT" != failure
+          test "$SECURITY_RESULT" != failure
+
+  deploy-staging:
+    if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && vars.WEB_DEPLOY_ENABLED == 'true' && vars.STAGING_WEB_URL != '' }}
+    needs: quality-gate
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      web_url: ${{ vars.STAGING_WEB_URL }}
+    secrets: inherit
+
+  deploy-production:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.WEB_DEPLOY_ENABLED == 'true' && vars.PRODUCTION_WEB_URL != '' }}
+    needs: quality-gate
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      web_url: ${{ vars.PRODUCTION_WEB_URL }}
+    secrets: inherit
+

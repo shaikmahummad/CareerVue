@@ -1,0 +1,47 @@
+name: Reusable consolidated reports
+
+on:
+  workflow_call:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-reports"
+          path: downloaded-reports
+      - name: Generate consolidated HTML, JSON, and ZIP
+        run: python scripts/ci/bundle_reports.py --input downloaded-reports --output ci-reports --archive ci-reports
+      - name: Publish workflow summary
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          data = json.loads(Path("ci-reports/summary/pipeline-summary.json").read_text())
+          print("# CareerVue CI/CD summary\n")
+          print("| Stage | Result | Details |\n|---|---|---|")
+          for name, stage in data["stages"].items():
+              print(f"| {name} | {stage['result']} | {stage.get('details', '')} |")
+          if data.get("performance"):
+              p = data["performance"]
+              print(f"\nPerformance: P95 `{p.get('response_time_ms', {}).get('p95')}` ms; failed rate `{p.get('failed_request_rate')}`.")
+          if data.get("security"):
+              print(f"\nSecurity findings: `{data['security'].get('counts')}`.")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: consolidated-ci-reports
+          path: |
+            ci-reports
+            ci-reports.zip
+          if-no-files-found: error
+          retention-days: 30
+

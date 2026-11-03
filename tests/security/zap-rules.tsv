@@ -1,0 +1,7 @@
+# rule_id	action	message
+# WARN keeps informational/header findings visible without hiding them. Add an
+# reviewed rule as FAIL only when the application team accepts it as a gate.
+10020	WARN	X-Frame-Options header
+10021	WARN	X-Content-Type-Options header
+10038	WARN	Content Security Policy header
+
