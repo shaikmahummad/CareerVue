@@ -11,6 +11,7 @@ on:
       E2E_STUDENT_PASSWORD: { required: false }
 
 permissions:
+  actions: read
   contents: read
 
 jobs:

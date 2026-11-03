@@ -36,6 +36,9 @@ jobs:
 
   appium:
     needs: build
+    permissions:
+      actions: read
+      contents: read
     uses: ./.github/workflows/mobile-tests.yml
     with:
       require_auth: ${{ github.event_name != 'pull_request' && vars.RUN_STAGING_E2E == 'true' }}
@@ -60,6 +63,9 @@ jobs:
   reports:
     if: always()
     needs: [build, selenium, appium, performance, security]
+    permissions:
+      actions: read
+      contents: read
     uses: ./.github/workflows/report.yml
 
   quality-gate:
