@@ -56,6 +56,7 @@ jobs:
         working-directory: backend
         run: |
           python -m alembic heads
+          python -m alembic upgrade head
           python -m unittest discover -s tests -v
           python -m pip check
           python -m compileall -q app
@@ -125,7 +126,18 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - run: npm ci
+      - name: Reclaim runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/lib/android/sdk/system-images
+          sudo apt-get clean
+          df -h /
+      - name: Report disk usage before npm install
+        run: df -h /
+      - name: Install locked JavaScript dependencies
+        run: npm ci
       - name: Validate Expo configuration
         working-directory: apps/mobile
         run: |
@@ -134,13 +146,20 @@ jobs:
       - name: Generate native Android project
         working-directory: apps/mobile
         run: npx expo prebuild --platform android --no-install --clean
+      - name: Remove temporary Expo export
+        run: rm -rf apps/mobile/dist-ci
       - name: Ensure Gradle wrapper exists
         run: |
           test -f apps/mobile/android/gradlew
           chmod +x apps/mobile/android/gradlew
+      - name: Report disk usage before Gradle build
+        run: df -h /
       - name: Build emulator APK
         working-directory: apps/mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -PreactNativeArchitectures=x86_64
+      - name: Report disk usage after Gradle build
+        if: always()
+        run: df -h /
       - name: Verify APK
         run: test -f apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
       - name: Write mobile build status
