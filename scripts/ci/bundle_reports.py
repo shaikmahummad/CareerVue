@@ -8,7 +8,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-STAGES = ("quality", "selenium", "appium", "performance", "security", "web-build", "mobile-build", "deployment")
+STAGES = (
+    "routing",
+    "backend-quality",
+    "web-build",
+    "mobile-build",
+    "selenium",
+    "appium",
+    "performance",
+    "security",
+    "deployment",
+)
 
 
 def copy_artifacts(source: Path, destination: Path) -> None:

@@ -1,0 +1,77 @@
+name: Intentional full E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: E2E suite to execute
+        type: choice
+        options: [web, mobile, full]
+        default: full
+      use_staging:
+        description: Use configured staging URLs and authentication
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: careervue-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-build:
+    if: inputs.suite == 'mobile' || inputs.suite == 'full'
+    uses: ./.github/workflows/build.yml
+    with:
+      run_backend: false
+      run_web: false
+      run_mobile: true
+
+  selenium:
+    if: inputs.suite == 'web' || inputs.suite == 'full'
+    uses: ./.github/workflows/web-tests.yml
+    with:
+      base_url: ${{ inputs.use_staging && vars.STAGING_WEB_URL || '' }}
+    secrets: inherit
+
+  appium:
+    needs: mobile-build
+    if: always() && (inputs.suite == 'mobile' || inputs.suite == 'full') && needs.mobile-build.result == 'success'
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/mobile-tests.yml
+    with:
+      require_auth: ${{ inputs.use_staging }}
+    secrets: inherit
+
+  reports:
+    if: always()
+    needs: [mobile-build, selenium, appium]
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/report.yml
+
+  quality-gate:
+    if: always()
+    needs: [mobile-build, selenium, appium, reports]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce selected E2E result
+        env:
+          SUITE: ${{ inputs.suite }}
+          MOBILE_BUILD_RESULT: ${{ needs.mobile-build.result }}
+          SELENIUM_RESULT: ${{ needs.selenium.result }}
+          APPIUM_RESULT: ${{ needs.appium.result }}
+          REPORT_RESULT: ${{ needs.reports.result }}
+        shell: bash
+        run: |
+          if [[ "$SUITE" == "web" || "$SUITE" == "full" ]]; then test "$SELENIUM_RESULT" = success; fi
+          if [[ "$SUITE" == "mobile" || "$SUITE" == "full" ]]; then
+            test "$MOBILE_BUILD_RESULT" = success
+            test "$APPIUM_RESULT" = success
+          fi
+          test "$REPORT_RESULT" = success

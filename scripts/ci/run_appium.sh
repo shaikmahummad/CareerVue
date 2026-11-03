@@ -37,19 +37,18 @@ stop_appium() {
 
 trap stop_appium EXIT
 
-adb -s emulator-5554 wait-for-device
+if ! timeout 30 adb -s emulator-5554 wait-for-device; then
+  echo "Android emulator emulator-5554 was not reachable within 30 seconds" >&2
+  appium_diagnostics
+  exit 1
+fi
 
-attempt=1
-while [ "$attempt" -le 30 ]; do
-  if [ "$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
-    break
-  fi
-  sleep 2
-  attempt=$((attempt + 1))
-done
-
-if [ "$attempt" -gt 30 ]; then
-  echo "Android emulator emulator-5554 did not boot within 60 seconds" >&2
+# android-emulator-runner already performs the boot wait before invoking this script.
+# Check that invariant once instead of repeating noisy getprop polling.
+boot_completed="$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+if [ "${boot_completed}" != "1" ]; then
+  echo "Android emulator emulator-5554 is reachable but not fully booted (sys.boot_completed=${boot_completed:-unset})" >&2
+  appium_diagnostics
   exit 1
 fi
 

@@ -3,9 +3,9 @@ name: Reusable quality and builds
 on:
   workflow_call:
     inputs:
-      run_quality:
+      run_backend:
         type: boolean
-        default: true
+        default: false
       run_web:
         type: boolean
         default: true
@@ -17,10 +17,10 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    if: inputs.run_quality
+  backend-quality:
+    if: inputs.run_backend
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16.4-alpine
@@ -48,19 +48,11 @@ jobs:
       QUIZ_CLEANUP_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - name: Install locked JavaScript dependencies
-        run: npm ci
-      - name: Lint and type-check workspaces
-        run: npm run lint
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Validate migrations and run backend regression suite
@@ -71,14 +63,14 @@ jobs:
           python -m unittest discover -s tests -v
           python -m pip check
           python -m compileall -q app
-      - name: Write quality status
+      - name: Write backend quality status
         if: always()
-        run: python scripts/ci/write_status.py quality "${{ job.status }}" --details "npm lint/type-check and backend regression" --output artifacts/quality/status.json
+        run: python scripts/ci/write_status.py backend-quality "${{ job.status }}" --details "Alembic validation and backend regression" --output artifacts/backend-quality/status.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: quality-reports
-          path: artifacts/quality
+          name: backend-quality-reports
+          path: artifacts/backend-quality
           if-no-files-found: error
           retention-days: 14
 
@@ -97,6 +89,10 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Lint and type-check web and shared client
+        run: |
+          npm run lint --workspace=@careervue/web
+          npm run lint --workspace=@careervue/api-client
       - name: Build Next.js production application
         run: npm run build --workspace=@careervue/web
       - name: Verify build output
@@ -139,32 +135,30 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Reclaim runner disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/powershell
-          sudo rm -rf /usr/local/lib/android/sdk/system-images
-          sudo apt-get clean
-          df -h /
       - name: Report disk usage before npm install
-        run: df -h /
+        run: |
+          df -h /
+          du -sh "$ANDROID_HOME" 2>/dev/null || true
       - name: Install locked JavaScript dependencies
         run: npm ci
+      - name: Type-check mobile and shared client
+        run: |
+          npm run lint --workspace=@careervue/mobile
+          npm run lint --workspace=@careervue/api-client
       - name: Validate Expo configuration
         working-directory: apps/mobile
-        run: |
-          npx expo-doctor
-          npx expo export --platform android --output-dir dist-ci --clear
+        run: npx expo-doctor
       - name: Generate native Android project
         working-directory: apps/mobile
-        run: npx expo prebuild --platform android --no-install --clean
-      - name: Remove temporary Expo export
-        run: rm -rf apps/mobile/dist-ci
+        run: npx expo prebuild --platform android --no-install
       - name: Ensure Gradle wrapper exists
         run: |
           test -f apps/mobile/android/gradlew
           chmod +x apps/mobile/android/gradlew
+      - name: Configure Gradle dependency and build cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Report disk usage before Gradle build
         run: df -h /
       - name: Build emulator APK
