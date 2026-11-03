@@ -31,6 +31,7 @@ def driver(request: pytest.FixtureRequest):
             "uiautomator2ServerInstallTimeout": int(
                 os.getenv("UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT_MS", "120000")
             ),
+            "adbExecTimeout": int(os.getenv("APPIUM_ADB_EXEC_TIMEOUT_MS", "120000")),
         }
     )
     instance = webdriver.Remote(

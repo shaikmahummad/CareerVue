@@ -22,6 +22,8 @@ jobs:
       E2E_REQUIRE_AUTH: ${{ inputs.require_auth }}
       E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
       E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
+      UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT_MS: "120000"
+      APPIUM_ADB_EXEC_TIMEOUT_MS: "120000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -52,6 +54,8 @@ jobs:
           E2E_REQUIRE_AUTH: ${{ env.E2E_REQUIRE_AUTH }}
           E2E_STUDENT_EMAIL: ${{ env.E2E_STUDENT_EMAIL }}
           E2E_STUDENT_PASSWORD: ${{ env.E2E_STUDENT_PASSWORD }}
+          UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT_MS: ${{ env.UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT_MS }}
+          APPIUM_ADB_EXEC_TIMEOUT_MS: ${{ env.APPIUM_ADB_EXEC_TIMEOUT_MS }}
         with:
           api-level: 35
           arch: x86_64
@@ -60,8 +64,23 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
             mkdir -p artifacts/appium/logs
+            adb wait-for-device
+            for attempt in {1..30}; do
+              if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+                break
+              fi
+              sleep 2
+            done
+            adb shell getprop sys.boot_completed | grep -q "1"
+            adb shell ls /data/local/tmp > /dev/null
             appium --log artifacts/appium/logs/appium-server.log > /dev/null 2>&1 &
-            for attempt in {1..30}; do curl --silent http://127.0.0.1:4723/status | grep -q ready && break; sleep 2; done
+            for attempt in {1..30}; do
+              if curl --silent http://127.0.0.1:4723/status | grep -q ready; then
+                break
+              fi
+              sleep 2
+            done
+            curl --silent http://127.0.0.1:4723/status | grep -q ready
             python -m pytest tests/appium -v --junitxml=artifacts/appium/junit-results.xml --html=artifacts/appium/report.html --self-contained-html
       - name: Write Appium status
         if: always()
@@ -73,4 +92,3 @@ jobs:
           path: artifacts/appium
           if-no-files-found: error
           retention-days: 14
-
