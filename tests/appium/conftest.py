@@ -28,6 +28,9 @@ def driver(request: pytest.FixtureRequest):
             "appWaitActivity": "*",
             "autoGrantPermissions": True,
             "newCommandTimeout": 120,
+            "uiautomator2ServerInstallTimeout": int(
+                os.getenv("UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT_MS", "120000")
+            ),
         }
     )
     instance = webdriver.Remote(
@@ -51,4 +54,3 @@ def driver(request: pytest.FixtureRequest):
 def pytest_runtest_makereport(item, call):
     outcome = yield
     setattr(item, f"rep_{outcome.get_result().when}", outcome.get_result())
-
