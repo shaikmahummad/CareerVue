@@ -47,6 +47,9 @@ jobs:
           python -m pip install -r tests/requirements-ci.txt
           npm install --global appium@2.19.0
           appium driver install uiautomator2@4.2.1
+      - name: Validate Appium runner script
+        run: |
+          sh -n scripts/ci/run_appium.sh
       - name: Run Appium journeys on Android emulator
         uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
         env:
@@ -62,36 +65,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: |
-            mkdir -p artifacts/appium/logs
-            adb wait-for-device
-            attempt=1
-            while [ "$attempt" -le 30 ]; do
-              if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
-                break
-              fi
-              sleep 2
-              attempt=$((attempt + 1))
-            done
-            if [ "$attempt" -gt 30 ]; then
-              echo "Android emulator did not boot within 60 seconds" >&2
-              exit 1
-            fi
-            adb shell ls /data/local/tmp > /dev/null
-            appium --log artifacts/appium/logs/appium-server.log > /dev/null 2>&1 &
-            attempt=1
-            while [ "$attempt" -le 30 ]; do
-              if curl --silent http://127.0.0.1:4723/status | grep -q ready; then
-                break
-              fi
-              sleep 2
-              attempt=$((attempt + 1))
-            done
-            if [ "$attempt" -gt 30 ]; then
-              echo "Appium server did not become ready within 60 seconds" >&2
-              exit 1
-            fi
-            python -m pytest tests/appium -v --junitxml=artifacts/appium/junit-results.xml --html=artifacts/appium/report.html --self-contained-html
+          script: sh scripts/ci/run_appium.sh
       - name: Write Appium status
         if: always()
         run: python scripts/ci/write_status.py appium "${{ job.status }}" --details "Appium Android emulator journeys" --output artifacts/appium/status.json

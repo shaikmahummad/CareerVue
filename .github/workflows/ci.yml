@@ -24,18 +24,94 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      web: ${{ steps.filter.outputs.web }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      workflow: ${{ steps.filter.outputs.workflow }}
+      build: ${{ steps.route.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/quiz-postgres-integration.yml'
+            web:
+              - 'apps/web/**'
+              - 'tests/selenium/**'
+            mobile:
+              - 'apps/mobile/**'
+              - 'tests/appium/**'
+              - 'scripts/ci/run_appium.sh'
+            workflow:
+              - '.github/workflows/**'
+              - 'scripts/ci/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.nvmrc'
+              - 'packages/**'
+      - name: Determine affected build jobs
+        id: route
+        env:
+          BACKEND: ${{ steps.filter.outputs.backend }}
+          WEB: ${{ steps.filter.outputs.web }}
+          MOBILE: ${{ steps.filter.outputs.mobile }}
+          WORKFLOW: ${{ steps.filter.outputs.workflow }}
+        shell: bash
+        run: |
+          if [[ "$WORKFLOW" == "true" || "$BACKEND" == "true" || "$WEB" == "true" || "$MOBILE" == "true" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Write routing status
+        run: |
+          mkdir -p artifacts/routing
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          Path("artifacts/routing/status.json").write_text(
+              json.dumps({
+                  "stage": "routing",
+                  "result": "success",
+                  "details": "Path-based CI routing completed",
+              }),
+              encoding="utf-8",
+          )
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: routing-reports
+          path: artifacts/routing
+          if-no-files-found: error
+          retention-days: 14
+
   build:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     uses: ./.github/workflows/build.yml
+    with:
+      run_quality: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflow == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile == 'true' }}
+      run_web: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.workflow == 'true' }}
+      run_mobile: ${{ needs.changes.outputs.mobile == 'true' || needs.changes.outputs.workflow == 'true' }}
 
   selenium:
-    needs: build
+    needs: [changes, build]
+    if: always() && (needs.changes.outputs.web == 'true' || needs.changes.outputs.workflow == 'true') && needs.build.result == 'success'
     uses: ./.github/workflows/web-tests.yml
     with:
       base_url: ${{ (github.event_name != 'pull_request' && vars.RUN_STAGING_E2E == 'true') && vars.STAGING_WEB_URL || '' }}
     secrets: inherit
 
   appium:
-    needs: build
+    needs: [changes, build]
+    if: always() && (needs.changes.outputs.mobile == 'true' || needs.changes.outputs.workflow == 'true') && needs.build.result == 'success'
     permissions:
       actions: read
       contents: read
@@ -46,7 +122,7 @@ jobs:
 
   performance:
     if: ${{ always() && needs.build.result == 'success' && vars.STAGING_API_URL != '' && ((github.event_name == 'workflow_dispatch' && inputs.run_staging_scans) || (github.event_name == 'push' && vars.RUN_STAGING_SCANS == 'true')) }}
-    needs: [build, selenium, appium]
+    needs: [changes, build, selenium, appium]
     uses: ./.github/workflows/performance-tests.yml
     with:
       base_url: ${{ vars.STAGING_API_URL }}
@@ -62,7 +138,7 @@ jobs:
 
   reports:
     if: always()
-    needs: [build, selenium, appium, performance, security]
+    needs: [changes, build, selenium, appium, performance, security]
     permissions:
       actions: read
       contents: read
@@ -70,11 +146,14 @@ jobs:
 
   quality-gate:
     if: always()
-    needs: [build, selenium, appium, performance, security, reports]
+    needs: [changes, build, selenium, appium, performance, security, reports]
     runs-on: ubuntu-latest
     steps:
       - name: Enforce mandatory results
         env:
+          BUILD_REQUIRED: ${{ needs.changes.outputs.build }}
+          WEB_REQUIRED: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.workflow == 'true' }}
+          MOBILE_REQUIRED: ${{ needs.changes.outputs.mobile == 'true' || needs.changes.outputs.workflow == 'true' }}
           BUILD_RESULT: ${{ needs.build.result }}
           SELENIUM_RESULT: ${{ needs.selenium.result }}
           APPIUM_RESULT: ${{ needs.appium.result }}
@@ -83,9 +162,9 @@ jobs:
           REPORT_RESULT: ${{ needs.reports.result }}
         shell: bash
         run: |
-          test "$BUILD_RESULT" = success
-          test "$SELENIUM_RESULT" = success
-          test "$APPIUM_RESULT" = success
+          if [[ "$BUILD_REQUIRED" == "true" ]]; then test "$BUILD_RESULT" = success; fi
+          if [[ "$WEB_REQUIRED" == "true" ]]; then test "$SELENIUM_RESULT" = success; fi
+          if [[ "$MOBILE_REQUIRED" == "true" ]]; then test "$APPIUM_RESULT" = success; fi
           test "$REPORT_RESULT" = success
           test "$PERFORMANCE_RESULT" != failure
           test "$SECURITY_RESULT" != failure
@@ -107,4 +186,3 @@ jobs:
       environment: production
       web_url: ${{ vars.PRODUCTION_WEB_URL }}
     secrets: inherit
-

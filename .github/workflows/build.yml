@@ -2,12 +2,23 @@ name: Reusable quality and builds
 
 on:
   workflow_call:
+    inputs:
+      run_quality:
+        type: boolean
+        default: true
+      run_web:
+        type: boolean
+        default: true
+      run_mobile:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 jobs:
   quality:
+    if: inputs.run_quality
     runs-on: ubuntu-latest
     timeout-minutes: 25
     services:
@@ -72,6 +83,7 @@ jobs:
           retention-days: 14
 
   web-build:
+    if: inputs.run_web
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -110,6 +122,7 @@ jobs:
           retention-days: 14
 
   mobile-build:
+    if: inputs.run_mobile
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -126,6 +139,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
       - name: Reclaim runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet
