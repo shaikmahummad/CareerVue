@@ -27,6 +27,7 @@ def driver(request: pytest.FixtureRequest):
             "appPackage": "com.careervue.mobile",
             "appWaitActivity": "*",
             "autoGrantPermissions": True,
+            "ignoreHiddenApiPolicyError": True,
             "newCommandTimeout": 120,
             "uiautomator2ServerInstallTimeout": int(
                 os.getenv("UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT_MS", "120000")
