@@ -18,32 +18,105 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: careervue-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      web: ${{ steps.filter.outputs.web }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      shared: ${{ steps.filter.outputs.shared }}
+      workflow: ${{ steps.filter.outputs.workflow }}
+      build: ${{ steps.route.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/quiz-postgres-integration.yml'
+            web:
+              - 'apps/web/**'
+              - 'tests/selenium/**'
+              - '.github/workflows/web-tests.yml'
+              - '.github/workflows/deploy.yml'
+            mobile:
+              - 'apps/mobile/**'
+              - 'tests/appium/**'
+              - 'scripts/ci/run_appium.sh'
+              - '.github/workflows/mobile-tests.yml'
+            shared:
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.nvmrc'
+              - 'turbo.json'
+              - '.github/workflows/frontend-release.yml'
+            workflow:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/build.yml'
+              - '.github/workflows/full-e2e.yml'
+              - '.github/workflows/report.yml'
+              - 'scripts/ci/write_status.py'
+              - 'scripts/ci/bundle_reports.py'
+      - name: Determine affected build jobs
+        id: route
+        env:
+          BACKEND: ${{ steps.filter.outputs.backend }}
+          WEB: ${{ steps.filter.outputs.web }}
+          MOBILE: ${{ steps.filter.outputs.mobile }}
+          SHARED: ${{ steps.filter.outputs.shared }}
+          WORKFLOW: ${{ steps.filter.outputs.workflow }}
+        shell: bash
+        run: |
+          if [[ "$WORKFLOW" == "true" || "$SHARED" == "true" || "$BACKEND" == "true" || "$WEB" == "true" || "$MOBILE" == "true" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Write routing status
+        run: |
+          mkdir -p artifacts/routing
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          Path("artifacts/routing/status.json").write_text(
+              json.dumps({
+                  "stage": "routing",
+                  "result": "success",
+                  "details": "Path-based CI routing completed",
+              }),
+              encoding="utf-8",
+          )
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: routing-reports
+          path: artifacts/routing
+          if-no-files-found: error
+          retention-days: 14
+
   build:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     uses: ./.github/workflows/build.yml
-
-  selenium:
-    needs: build
-    uses: ./.github/workflows/web-tests.yml
     with:
-      base_url: ${{ (github.event_name != 'pull_request' && vars.RUN_STAGING_E2E == 'true') && vars.STAGING_WEB_URL || '' }}
-    secrets: inherit
-
-  appium:
-    needs: build
-    uses: ./.github/workflows/mobile-tests.yml
-    with:
-      require_auth: ${{ github.event_name != 'pull_request' && vars.RUN_STAGING_E2E == 'true' }}
-    secrets: inherit
+      run_backend: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflow == 'true' }}
+      run_web: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true' }}
+      run_mobile: ${{ needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true' }}
 
   performance:
-    if: ${{ always() && needs.build.result == 'success' && vars.STAGING_API_URL != '' && ((github.event_name == 'workflow_dispatch' && inputs.run_staging_scans) || (github.event_name == 'push' && vars.RUN_STAGING_SCANS == 'true')) }}
-    needs: [build, selenium, appium]
+    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && vars.STAGING_API_URL != '' && ((github.event_name == 'workflow_dispatch' && inputs.run_staging_scans) || (github.event_name == 'push' && vars.RUN_STAGING_SCANS == 'true')) }}
+    needs: [changes, build]
     uses: ./.github/workflows/performance-tests.yml
     with:
       base_url: ${{ vars.STAGING_API_URL }}
@@ -59,34 +132,36 @@ jobs:
 
   reports:
     if: always()
-    needs: [build, selenium, appium, performance, security]
+    needs: [changes, build, performance, security]
+    permissions:
+      actions: read
+      contents: read
     uses: ./.github/workflows/report.yml
 
   quality-gate:
     if: always()
-    needs: [build, selenium, appium, performance, security, reports]
+    needs: [changes, build, performance, security, reports]
     runs-on: ubuntu-latest
     steps:
       - name: Enforce mandatory results
         env:
+          BUILD_REQUIRED: ${{ needs.changes.outputs.build }}
           BUILD_RESULT: ${{ needs.build.result }}
-          SELENIUM_RESULT: ${{ needs.selenium.result }}
-          APPIUM_RESULT: ${{ needs.appium.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
           REPORT_RESULT: ${{ needs.reports.result }}
         shell: bash
         run: |
-          test "$BUILD_RESULT" = success
-          test "$SELENIUM_RESULT" = success
-          test "$APPIUM_RESULT" = success
+          if [[ "$BUILD_REQUIRED" == "true" ]]; then test "$BUILD_RESULT" = success; fi
           test "$REPORT_RESULT" = success
           test "$PERFORMANCE_RESULT" != failure
+          test "$PERFORMANCE_RESULT" != cancelled
           test "$SECURITY_RESULT" != failure
+          test "$SECURITY_RESULT" != cancelled
 
   deploy-staging:
-    if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && vars.WEB_DEPLOY_ENABLED == 'true' && vars.STAGING_WEB_URL != '' }}
-    needs: quality-gate
+    needs: [changes, quality-gate]
+    if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true') && vars.WEB_DEPLOY_ENABLED == 'true' && vars.STAGING_WEB_URL != '' }}
     uses: ./.github/workflows/deploy.yml
     with:
       environment: staging
@@ -94,11 +169,10 @@ jobs:
     secrets: inherit
 
   deploy-production:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.WEB_DEPLOY_ENABLED == 'true' && vars.PRODUCTION_WEB_URL != '' }}
-    needs: quality-gate
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true') && vars.WEB_DEPLOY_ENABLED == 'true' && vars.PRODUCTION_WEB_URL != '' }}
+    needs: [changes, quality-gate]
     uses: ./.github/workflows/deploy.yml
     with:
       environment: production
       web_url: ${{ vars.PRODUCTION_WEB_URL }}
     secrets: inherit
-

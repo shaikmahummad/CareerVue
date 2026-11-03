@@ -34,7 +34,7 @@ from app.services.quiz_maintenance_service import mark_abandoned_attempts
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-HEAD_REVISION = "c9d0e1f2a3b4"
+HEAD_REVISION = "head"
 PREVIOUS_REVISION = "b8c9d0e1f2a3"
 TEST_DATABASE_URL = os.getenv("QUIZ_TEST_DATABASE_URL", "")
 RESET_ALLOWED = os.getenv("CAREERVUE_ALLOW_TEST_DB_RESET") == "1"
@@ -225,6 +225,10 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         "skill_profiles"
                     )
                 },
+                "profile_columns": {
+                    column["name"]: column
+                    for column in inspect(sync_connection).get_columns("profiles")
+                },
             })
 
         async with self.session_factory() as session:
@@ -253,11 +257,27 @@ class PostgreSQLQuizIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("quiz_id",), schema["attempt_foreign_keys"])
         self.assertIn("quiz_attempts_lifecycle_check", schema["attempt_checks"])
         self.assertIn(("student_id", "topic"), schema["skill_uniques"])
+        email_verified = schema["profile_columns"]["email_verified"]
+        self.assertFalse(email_verified["nullable"])
+        self.assertEqual(email_verified["default"], "false")
         self.assertEqual(row.status, "submitted")
         self.assertEqual(row.answers, ANSWERS)
         self.assertEqual(row.question_ids, [question["id"] for question in QUESTIONS])
         self.assertEqual(template.version, 2)
         self.assertTrue(template.is_active)
+
+        async with self.session_factory() as session:
+            legacy_profile = await session.get(Profile, self.profile_id)
+            new_profile = Profile(
+                id=uuid.uuid4(),
+                role="student",
+                full_name="Default Verification",
+                email=f"default-verification-{uuid.uuid4()}@example.test",
+            )
+            session.add(new_profile)
+            await session.flush()
+            self.assertTrue(legacy_profile.email_verified)
+            self.assertFalse(new_profile.email_verified)
 
     async def test_postgresql_cleanup_workers_do_not_duplicate_processing(self):
         now = datetime.now(timezone.utc)

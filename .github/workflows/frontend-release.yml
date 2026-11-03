@@ -7,6 +7,7 @@ on:
       - "packages/**"
       - "package.json"
       - "package-lock.json"
+      - ".nvmrc"
       - "turbo.json"
       - ".github/workflows/frontend-release.yml"
   push:
@@ -16,12 +17,14 @@ on:
       - "packages/**"
       - "package.json"
       - "package-lock.json"
+      - ".nvmrc"
       - "turbo.json"
       - ".github/workflows/frontend-release.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: frontend-release-${{ github.ref }}
@@ -42,6 +45,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+            mobile:
+              - 'apps/mobile/**'
+            shared:
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.nvmrc'
+              - 'turbo.json'
+              - '.github/workflows/frontend-release.yml'
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22.13.1
@@ -50,12 +69,23 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Lint and typecheck every workspace
-        run: npm run lint
+      - name: Lint and type-check affected workspaces
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.web == 'true' || steps.filter.outputs.mobile == 'true' || steps.filter.outputs.shared == 'true'
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ steps.filter.outputs.web }}" == "true" || "${{ steps.filter.outputs.shared }}" == "true" ]]; then
+            npm run lint --workspace=@careervue/web
+          fi
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ steps.filter.outputs.mobile }}" == "true" || "${{ steps.filter.outputs.shared }}" == "true" ]]; then
+            npm run lint --workspace=@careervue/mobile
+          fi
+          npm run lint --workspace=@careervue/api-client
 
       - name: Build web production bundle
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.web == 'true' || steps.filter.outputs.shared == 'true'
         run: npm run build --workspace=@careervue/web
 
       - name: Export Android release bundle
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.mobile == 'true' || steps.filter.outputs.shared == 'true'
         working-directory: apps/mobile
         run: npx expo export --platform android --output-dir dist-ci
