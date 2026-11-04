@@ -52,7 +52,7 @@ jobs:
               - 'apps/web/**'
               - 'tests/selenium/**'
               - '.github/workflows/web-tests.yml'
-              - '.github/workflows/deploy.yml'
+              - '.github/workflows/provider-deploy.yml'
             mobile:
               - 'apps/mobile/**'
               - 'tests/appium/**'
@@ -117,11 +117,6 @@ jobs:
   staging-config:
     needs: changes
     if: >-
-      (github.event_name == 'pull_request' &&
-        (needs.changes.outputs.web == 'true' ||
-         needs.changes.outputs.mobile == 'true' ||
-         needs.changes.outputs.shared == 'true' ||
-         needs.changes.outputs.workflow == 'true')) ||
       (github.event_name == 'workflow_dispatch' &&
         (inputs.run_staging_scans || inputs.run_full_validation)) ||
       (github.event_name == 'push' &&
@@ -151,7 +146,7 @@ jobs:
           STAGING_WEB_URL: ${{ vars.STAGING_WEB_URL }}
           STAGING_API_URL: ${{ vars.STAGING_API_URL }}
           STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
-          STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          STAGING_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY }}
           E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
           E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
           E2E_TUTOR_EMAIL: ${{ secrets.E2E_TUTOR_EMAIL }}
@@ -197,10 +192,6 @@ jobs:
       needs.build.result == 'success' &&
       needs.staging-config.result == 'success' &&
       (
-        (github.event_name == 'pull_request' &&
-          (needs.changes.outputs.web == 'true' ||
-           needs.changes.outputs.shared == 'true' ||
-           needs.changes.outputs.workflow == 'true')) ||
         (github.event_name == 'push' &&
           github.ref == 'refs/heads/main' &&
           (needs.changes.outputs.web == 'true' ||
@@ -229,10 +220,6 @@ jobs:
       needs.build.result == 'success' &&
       needs.staging-config.result == 'success' &&
       (
-        (github.event_name == 'pull_request' &&
-          (needs.changes.outputs.mobile == 'true' ||
-           needs.changes.outputs.shared == 'true' ||
-           needs.changes.outputs.workflow == 'true')) ||
         (github.event_name == 'push' &&
           github.ref == 'refs/heads/main' &&
           (needs.changes.outputs.mobile == 'true' ||
@@ -254,11 +241,6 @@ jobs:
       (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       needs.staging-config.result == 'success' &&
       (
-        (github.event_name == 'pull_request' &&
-          (needs.changes.outputs.web == 'true' ||
-           needs.changes.outputs.mobile == 'true' ||
-           needs.changes.outputs.shared == 'true' ||
-           needs.changes.outputs.workflow == 'true')) ||
         (github.event_name == 'workflow_dispatch' &&
           (inputs.run_staging_scans || inputs.run_full_validation)) ||
         (github.event_name == 'push' &&
@@ -303,7 +285,7 @@ jobs:
           SELENIUM_RESULT: ${{ needs.selenium.result }}
           APPIUM_RESULT: ${{ needs.appium.result }}
           REPORT_RESULT: ${{ needs.reports.result }}
-          FULL_VALIDATION: ${{ (github.event_name == 'pull_request' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true')) || (github.event_name == 'workflow_dispatch' && inputs.run_full_validation) }}
+          FULL_VALIDATION: ${{ github.event_name == 'workflow_dispatch' && inputs.run_full_validation }}
         shell: bash
         run: |
           if [[ "$BUILD_REQUIRED" == "true" ]]; then test "$BUILD_RESULT" = success; fi
@@ -322,7 +304,7 @@ jobs:
   deploy-staging:
     needs: [changes, staging-config, quality-gate]
     if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && needs.staging-config.result == 'success' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true') && vars.WEB_DEPLOY_ENABLED == 'true' }}
-    uses: ./.github/workflows/deploy.yml
+    uses: ./.github/workflows/provider-deploy.yml
     with:
       environment: staging
       web_url: ${{ needs.staging-config.outputs.web_url }}
@@ -331,7 +313,7 @@ jobs:
   deploy-production:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true') && vars.WEB_DEPLOY_ENABLED == 'true' && vars.PRODUCTION_WEB_URL != '' }}
     needs: [changes, quality-gate]
-    uses: ./.github/workflows/deploy.yml
+    uses: ./.github/workflows/provider-deploy.yml
     with:
       environment: production
       web_url: ${{ vars.PRODUCTION_WEB_URL }}
