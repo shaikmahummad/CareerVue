@@ -117,13 +117,22 @@ jobs:
   staging-config:
     needs: changes
     if: >-
-      (github.event_name == 'workflow_dispatch' && (inputs.run_staging_scans || inputs.run_full_validation)) ||
+      (github.event_name == 'pull_request' &&
+        (needs.changes.outputs.web == 'true' ||
+         needs.changes.outputs.mobile == 'true' ||
+         needs.changes.outputs.shared == 'true' ||
+         needs.changes.outputs.workflow == 'true')) ||
+      (github.event_name == 'workflow_dispatch' &&
+        (inputs.run_staging_scans || inputs.run_full_validation)) ||
       (github.event_name == 'push' &&
         (((github.ref == 'refs/heads/main') &&
-          (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile == 'true' ||
-           needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true')) ||
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.mobile == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
          ((github.ref != 'refs/heads/main') &&
-          (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' ||
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
            needs.changes.outputs.workflow == 'true')) ||
          vars.RUN_STAGING_SCANS == 'true'))
     runs-on: ubuntu-latest
@@ -188,9 +197,17 @@ jobs:
       needs.build.result == 'success' &&
       needs.staging-config.result == 'success' &&
       (
-        (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-          (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && inputs.run_full_validation)
+        (github.event_name == 'pull_request' &&
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'workflow_dispatch' &&
+          inputs.run_full_validation)
       )
     uses: ./.github/workflows/web-tests.yml
     with:
@@ -212,9 +229,17 @@ jobs:
       needs.build.result == 'success' &&
       needs.staging-config.result == 'success' &&
       (
-        (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-          (needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true')) ||
-        (github.event_name == 'workflow_dispatch' && inputs.run_full_validation)
+        (github.event_name == 'pull_request' &&
+          (needs.changes.outputs.mobile == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          (needs.changes.outputs.mobile == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'workflow_dispatch' &&
+          inputs.run_full_validation)
       )
     uses: ./.github/workflows/mobile-tests.yml
     with:
@@ -229,8 +254,15 @@ jobs:
       (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       needs.staging-config.result == 'success' &&
       (
-        (github.event_name == 'workflow_dispatch' && (inputs.run_staging_scans || inputs.run_full_validation)) ||
-        (github.event_name == 'push' && vars.RUN_STAGING_SCANS == 'true')
+        (github.event_name == 'pull_request' &&
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.mobile == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'workflow_dispatch' &&
+          (inputs.run_staging_scans || inputs.run_full_validation)) ||
+        (github.event_name == 'push' &&
+          vars.RUN_STAGING_SCANS == 'true')
       )
     needs: [changes, staging-config, build]
     uses: ./.github/workflows/performance-tests.yml
@@ -271,7 +303,7 @@ jobs:
           SELENIUM_RESULT: ${{ needs.selenium.result }}
           APPIUM_RESULT: ${{ needs.appium.result }}
           REPORT_RESULT: ${{ needs.reports.result }}
-          FULL_VALIDATION: ${{ github.event_name == 'workflow_dispatch' && inputs.run_full_validation || 'false' }}
+          FULL_VALIDATION: ${{ (github.event_name == 'pull_request' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true')) || (github.event_name == 'workflow_dispatch' && inputs.run_full_validation) }}
         shell: bash
         run: |
           if [[ "$BUILD_REQUIRED" == "true" ]]; then test "$BUILD_RESULT" = success; fi
