@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import AdminNavbar from "../../../../../components/AdminNavbar";
 import { apiGet, apiPut } from "../../../../../lib/api";
+import CourseVideoPlayer from "../../../../../components/CourseVideoPlayer";
 
 interface Module {
   id: string;
@@ -48,6 +49,7 @@ export default function CourseReviewPage() {
   const [acting,      setActing]      = useState<"approve" | "reject" | null>(null);
   const [rejectNote,  setRejectNote]  = useState("");
   const [showReject,  setShowReject]  = useState(false);
+  const [openVideoId, setOpenVideoId] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<CourseDetail>(`/api/v1/courses/${id}`)
@@ -236,14 +238,23 @@ export default function CourseReviewPage() {
                             )}
                             <div className="flex items-center flex-wrap gap-2">
                               {mod.video_url && (
-                                <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400 bg-sky-400/10 px-2 py-0.5 rounded-md">
-                                  <Video size={9} /> Video
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenVideoId((current) => current === mod.id ? null : mod.id)}
+                                  className="flex items-center gap-1 text-[10px] font-semibold text-sky-300 bg-sky-400/10 hover:bg-sky-400/20 border border-sky-400/15 px-2.5 py-1 rounded-md transition-colors"
+                                >
+                                  <Video size={10} /> {openVideoId === mod.id ? "Hide video" : "Watch video"}
+                                </button>
                               )}
                               {mod.pdf_url && (
-                                <span className="flex items-center gap-1 text-[10px] font-semibold text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-md">
+                                <a
+                                  href={mod.pdf_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-[10px] font-semibold text-yellow-300 bg-yellow-400/10 hover:bg-yellow-400/20 border border-yellow-400/15 px-2.5 py-1 rounded-md transition-colors"
+                                >
                                   <FileText size={9} /> PDF
-                                </span>
+                                </a>
                               )}
                               {mod.is_preview && (
                                 <span className="flex items-center gap-1 text-[10px] font-semibold text-green-400 bg-green-400/10 px-2 py-0.5 rounded-md">
@@ -254,6 +265,14 @@ export default function CourseReviewPage() {
                                 <span className="text-[10px] text-[#7c7a8a]">{mod.duration_mins} min</span>
                               )}
                             </div>
+                            {mod.video_url && openVideoId === mod.id && (
+                              <div className="mt-4 overflow-hidden rounded-xl border border-white/[0.08] bg-black shadow-2xl">
+                                <CourseVideoPlayer
+                                  url={mod.video_url}
+                                  title={`${course.title} — ${mod.title}`}
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Save, Loader2, Check, AlertCircle, Plus, X } from "lucide-react";
 import TutorNavbar from "../../../../components/TutorNavbar";
+import ProfilePhotoUpload from "../../../../components/ProfilePhotoUpload";
 import { apiGet, apiPut } from "../../../../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,21 +26,6 @@ interface TutorProfile {
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
-
-function AvatarInitial({ name }: { name: string }) {
-  const initials = name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
-
-  return (
-    <div className="w-20 h-20 rounded-2xl gradient-primary flex items-center justify-center text-white text-2xl font-bold shadow-[0_0_24px_rgba(108,99,255,0.2)] flex-shrink-0">
-      {initials || "T"}
-    </div>
-  );
-}
 
 // ─── Field ────────────────────────────────────────────────────────────────────
 
@@ -148,7 +134,12 @@ export default function TutorProfilePage() {
         {/* Identity card */}
         <div className="glass-card rounded-2xl p-6 mb-5">
           <div className="flex items-center gap-4 mb-6">
-            <AvatarInitial name={profile?.full_name ?? ""} />
+            <ProfilePhotoUpload
+              name={profile?.full_name ?? "Tutor"}
+              avatarUrl={profile?.avatar_url ?? null}
+              variant="dark"
+              onUploaded={(avatarUrl) => setProfile((current) => current ? { ...current, avatar_url: avatarUrl } : current)}
+            />
             <div>
               <p className="text-lg font-bold text-white">{profile?.full_name}</p>
               <p className="text-sm text-[#7c7a8a]">{profile?.email}</p>

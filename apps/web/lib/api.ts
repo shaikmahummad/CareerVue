@@ -13,7 +13,7 @@ export class ApiError extends Error {
   }
 }
 
-async function authHeaders(): Promise<HeadersInit> {
+async function authHeaders(): Promise<Record<string, string>> {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -43,13 +43,17 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 async function fetchWithRefresh(path: string, options: RequestInit): Promise<Response> {
-  const request = async () => fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      ...await authHeaders(),
-      ...(options.headers as Record<string, string> | undefined),
-    },
-  });
+  const request = async () => {
+    const headers = await authHeaders();
+    if (options.body instanceof FormData) delete headers["Content-Type"];
+    return fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        ...headers,
+        ...(options.headers as Record<string, string> | undefined),
+      },
+    });
+  };
 
   let response: Response;
   try {
@@ -77,6 +81,13 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return handleResponse<T>(await fetchWithRefresh(path, {
     method: "POST",
     body: body !== undefined ? JSON.stringify(body) : undefined,
+  }));
+}
+
+export async function apiPostForm<T>(path: string, body: FormData): Promise<T> {
+  return handleResponse<T>(await fetchWithRefresh(path, {
+    method: "POST",
+    body,
   }));
 }
 
