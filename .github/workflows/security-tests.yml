@@ -28,7 +28,9 @@ jobs:
     if: inputs.web_url != '' && inputs.api_url != ''
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    environment: staging
+    environment:
+      name: staging
+      deployment: false
     env:
       SECURITY_WEB_URL: ${{ inputs.web_url }}
       SECURITY_API_URL: ${{ inputs.api_url }}
@@ -45,6 +47,8 @@ jobs:
       - name: Reject known production targets
         shell: bash
         run: |
+          test -n "$SECURITY_WEB_URL"
+          test -n "$SECURITY_API_URL"
           case "$SECURITY_WEB_URL $SECURITY_API_URL" in
             *careervue-api.welcos.in*) echo "Production DAST is prohibited by this routine workflow"; exit 2 ;;
           esac

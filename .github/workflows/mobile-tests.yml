@@ -18,6 +18,9 @@ jobs:
   appium:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    environment:
+      name: staging
+      deployment: false
     env:
       E2E_REQUIRE_AUTH: ${{ inputs.require_auth }}
       E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
@@ -29,6 +32,12 @@ jobs:
       APPIUM_BASE_PATH: "/"
     steps:
       - uses: actions/checkout@v4
+      - name: Validate required staging credentials
+        if: inputs.require_auth
+        shell: bash
+        run: |
+          test -n "$E2E_STUDENT_EMAIL"
+          test -n "$E2E_STUDENT_PASSWORD"
       - uses: actions/download-artifact@v4
         with:
           name: mobile-build-apk

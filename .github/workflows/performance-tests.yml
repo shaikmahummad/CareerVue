@@ -28,7 +28,9 @@ jobs:
     if: inputs.base_url != ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: staging
+    environment:
+      name: staging
+      deployment: false
     env:
       PERF_BASE_URL: ${{ inputs.base_url }}
       K6_PROFILE: ${{ inputs.profile }}
@@ -46,6 +48,7 @@ jobs:
       - name: Reject production performance targets
         shell: bash
         run: |
+          test -n "$PERF_BASE_URL"
           case "$PERF_BASE_URL" in
             *careervue-api.welcos.in*) echo "Production load testing is prohibited"; exit 2 ;;
           esac
