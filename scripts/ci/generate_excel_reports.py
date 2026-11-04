@@ -664,7 +664,8 @@ def _style_results_sheet(sheet, title: str, evidence_note: str, rows: list[tuple
         color="44546A" if rows else "9C0006",
     )
     sheet["A2"].alignment = Alignment(wrap_text=True, vertical="top")
-    sheet.row_dimensions[2].height = 32
+    sheet.merge_cells("A2:K2")
+    sheet.row_dimensions[2].height = 36
 
     for column, heading in enumerate(FINAL_COLUMNS, start=1):
         cell = sheet.cell(4, column, heading)
@@ -952,6 +953,8 @@ def validate_final_workbook(output_path: Path, results: dict[str, StageResults])
             raise ValueError(
                 f"{output_path.name}: {sheet_name} rows {actual_rows} != source rows {len(rows_by_stage[stage])}"
             )
+        if "A2:K2" not in {str(region) for region in sheet.merged_cells.ranges}:
+            raise ValueError(f"{output_path.name}: {sheet_name} evidence note is not readable across the table width")
         if sheet.freeze_panes != "A5" or not sheet.auto_filter.ref:
             raise ValueError(f"{output_path.name}: {sheet_name} table controls are incomplete")
     workbook.close()
