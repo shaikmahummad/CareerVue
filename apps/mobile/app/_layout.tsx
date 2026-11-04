@@ -76,7 +76,7 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    async function finishAuthRedirect(url: string | null) {
+    async function finishAuthRedirect(url: string | null | undefined) {
       if (
         !url ||
         (!url.startsWith("careervue://auth/callback") &&
@@ -159,7 +159,7 @@ export default function RootLayout() {
   }, [ready, session]);
 
   useEffect(() => {
-    const updateRefreshState = (state: string) => {
+    const updateRefreshState = (state: string | null | undefined) => {
       if (state === "active") supabase.auth.startAutoRefresh();
       else supabase.auth.stopAutoRefresh();
     };

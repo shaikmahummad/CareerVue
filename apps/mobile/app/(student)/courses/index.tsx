@@ -308,7 +308,7 @@ export default function CoursesScreen() {
                   ? <ActivityIndicator size="small" color={colors.primary} />
                   : <Text style={s.loadMoreText}>Load more</Text>}
               </Pressable>
-            ) : null
+            ) : undefined
           }
         />
       )}
