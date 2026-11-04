@@ -183,6 +183,8 @@ jobs:
           done
 
       - name: Run Web Load & Performance scenarios
+        env:
+          PYTHONPATH: .
         run: python tests/load/run_load_tests.py --base-url http://localhost:3000 --output artifacts/load
 
       - name: Publish Load testing summary
@@ -251,6 +253,8 @@ jobs:
           done
 
       - name: Run Web DAST Security checks
+        env:
+          PYTHONPATH: .
         run: python tests/dast/run_dast_tests.py --base-url http://localhost:3000 --output artifacts/dast
 
       - name: Publish DAST summary
@@ -323,6 +327,8 @@ jobs:
           path: downloaded-reports/dast
 
       - name: Consolidate reports and generate master workbooks
+        env:
+          PYTHONPATH: .
         run: python scripts/ci/bundle_reports.py --input downloaded-reports --output reports --archive bundled-reports
 
       - name: Publish Final Quality summary
