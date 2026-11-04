@@ -83,3 +83,6 @@ web-server.pid
 # Misc
 *.tsbuildinfo
 .eslintcache
+
+reports/
+test-cases/
