@@ -24,6 +24,28 @@ REPORTS = {
     "appium": ("Appium_Testing_Report.xlsx", "Appium Testing Report", "APPIUM"),
 }
 
+FINAL_WORKBOOK_NAME = "FINAL_TEST_SUMMARY.xlsx"
+FINAL_SUITES = {
+    "selenium": ("Selenium Web", "SELENIUM"),
+    "appium": ("Appium Mobile", "APPIUM"),
+    "performance": ("Load Performance", "LOAD"),
+    "security": ("DAST Security", "DAST"),
+}
+
+FINAL_COLUMNS = (
+    "Test ID",
+    "Suite",
+    "Category",
+    "Test Name",
+    "Objective",
+    "Expected Result",
+    "Actual Result",
+    "Status",
+    "Priority",
+    "Severity",
+    "Duration",
+)
+
 DETAIL_COLUMNS = (
     "Test Case ID",
     "Test Case Name / Description",
@@ -48,6 +70,10 @@ class TestCase:
     status: str = "PASS"
     duration: float | None = None
     error: str = ""
+    category: str = ""
+    objective: str = ""
+    priority: str = ""
+    severity: str = ""
 
 
 @dataclass
@@ -271,6 +297,108 @@ def discover_results(input_dir: Path) -> dict[str, StageResults]:
     return stages
 
 
+def _load_json(path: Path) -> dict | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _stage_status(input_dir: Path, stage: str) -> tuple[str | None, Path | None]:
+    for path in sorted(input_dir.rglob("*status.json")):
+        payload = _load_json(path)
+        if payload and payload.get("stage") == stage:
+            result = _clean(payload.get("result")).lower()
+            status = {
+                "success": "PASS",
+                "failure": "FAIL",
+                "cancelled": "BLOCKED",
+                "skipped": "SKIPPED",
+            }.get(result)
+            return status, path
+    return None, None
+
+
+def _discover_performance_result(input_dir: Path) -> StageResults:
+    result = StageResults(stage="performance", tests=[], source_files=[], status_files=[])
+    summary_path = next(iter(sorted(input_dir.rglob("performance-summary.json"))), None)
+    status, status_path = _stage_status(input_dir, "performance")
+    if status_path:
+        result.status_files.append(status_path)
+    if not summary_path:
+        return result
+    summary = _load_json(summary_path)
+    if not summary:
+        return result
+    profile = _clean(summary.get("profile")) or "unspecified"
+    response = summary.get("response_time_ms") if isinstance(summary.get("response_time_ms"), dict) else {}
+    actual = (
+        f"profile={profile}; requests={summary.get('requests')}; "
+        f"failed_request_rate={summary.get('failed_request_rate')}; "
+        f"p95_ms={response.get('p95')}; requests_per_second={summary.get('requests_per_second')}"
+    )
+    result.tests.append(
+        TestCase(
+            name=f"k6 {profile} performance execution",
+            description=f"k6 {profile} performance execution",
+            category="Performance",
+            objective="Verify the executed web performance profile against its configured k6 thresholds.",
+            expected="All configured k6 thresholds pass.",
+            actual=actual,
+            status=status or "BLOCKED",
+            severity="High",
+        )
+    )
+    result.source_files.append(summary_path)
+    result.declared_test_count = 1
+    return result
+
+
+def _discover_security_result(input_dir: Path) -> StageResults:
+    result = StageResults(stage="security", tests=[], source_files=[], status_files=[])
+    summary_path = next(iter(sorted(input_dir.rglob("severity-summary.json"))), None)
+    status, status_path = _stage_status(input_dir, "security")
+    if status_path:
+        result.status_files.append(status_path)
+    if not summary_path:
+        return result
+    summary = _load_json(summary_path)
+    if not summary:
+        return result
+    counts = summary.get("counts") if isinstance(summary.get("counts"), dict) else {}
+    actual = (
+        f"gate={summary.get('gate')}; high={counts.get('high', 0)}; "
+        f"medium={counts.get('medium', 0)}; low={counts.get('low', 0)}; "
+        f"informational={counts.get('informational', 0)}"
+    )
+    result.tests.append(
+        TestCase(
+            name="OWASP ZAP passive DAST execution",
+            description="OWASP ZAP passive DAST execution",
+            category="Security",
+            objective="Verify the executed passive DAST scan against its configured severity gate.",
+            expected="No findings at or above the configured failure gate.",
+            actual=actual,
+            status=status or "BLOCKED",
+            severity="Critical",
+        )
+    )
+    result.source_files.append(summary_path)
+    result.declared_test_count = 1
+    return result
+
+
+def discover_final_results(input_dir: Path) -> dict[str, StageResults]:
+    ordinary = discover_results(input_dir)
+    return {
+        "selenium": ordinary["selenium"],
+        "appium": ordinary["appium"],
+        "performance": _discover_performance_result(input_dir),
+        "security": _discover_security_result(input_dir),
+    }
+
+
 def _relative_paths(paths: Iterable[Path], base: Path) -> str:
     values = []
     for path in paths:
@@ -479,6 +607,346 @@ def validate_workbook(output_path: Path, result: StageResults) -> None:
     workbook.close()
 
 
+def _final_actual_result(test: TestCase) -> str:
+    if test.actual:
+        return test.actual
+    if test.status == "PASS":
+        return "The source execution report recorded this test as passed."
+    if test.status == "FAIL":
+        return test.error or "The source execution report recorded this test as failed."
+    if test.status == "SKIPPED":
+        return f"Skipped by the source test runner. {test.error}".strip()
+    if test.status == "BLOCKED":
+        return test.error or "Execution evidence was incomplete or unavailable."
+    return test.error
+
+
+def _final_rows(results: dict[str, StageResults]) -> dict[str, list[tuple]]:
+    rows: dict[str, list[tuple]] = {}
+    for stage, result in results.items():
+        suite_name, prefix = FINAL_SUITES[stage]
+        stage_rows = []
+        for index, test in enumerate(result.tests, start=1):
+            stage_rows.append(
+                (
+                    f"{prefix}-{index:03d}",
+                    suite_name,
+                    test.category or ("Automated UI" if stage in {"selenium", "appium"} else suite_name),
+                    test.name,
+                    test.objective,
+                    test.expected,
+                    _final_actual_result(test),
+                    test.status,
+                    test.priority,
+                    test.severity,
+                    test.duration,
+                )
+            )
+        rows[stage] = stage_rows
+    return rows
+
+
+def _style_results_sheet(sheet, title: str, evidence_note: str, rows: list[tuple], table_name: str) -> None:
+    dark_blue = "17365D"
+    pale_blue = "DCE6F1"
+    body_font = Font(name="Arial", size=10, color="172033")
+    header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    sheet.sheet_view.showGridLines = False
+    sheet["A1"] = title
+    sheet["A1"].font = Font(name="Arial", size=15, bold=True, color="17365D")
+    sheet["A2"] = evidence_note
+    sheet["A2"].font = Font(
+        name="Arial",
+        size=10,
+        italic=True,
+        color="44546A" if rows else "9C0006",
+    )
+    sheet["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+    sheet.row_dimensions[2].height = 32
+
+    for column, heading in enumerate(FINAL_COLUMNS, start=1):
+        cell = sheet.cell(4, column, heading)
+        cell.fill = PatternFill("solid", fgColor=dark_blue)
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = Border(right=Side(style="thin", color="FFFFFF"))
+    sheet.row_dimensions[4].height = 32
+
+    for row_values in rows:
+        sheet.append(row_values)
+    for row in sheet.iter_rows(min_row=5, max_row=sheet.max_row, min_col=1, max_col=len(FINAL_COLUMNS)):
+        for cell in row:
+            cell.font = body_font
+            cell.alignment = Alignment(vertical="top", wrap_text=cell.column in {4, 5, 6, 7})
+        row[7].alignment = Alignment(horizontal="center", vertical="center")
+        if row[10].value is not None:
+            row[10].number_format = '0.000 "s"'
+        sheet.row_dimensions[row[0].row].height = 48
+
+    widths = (18, 22, 18, 42, 48, 42, 50, 14, 14, 14, 18)
+    for index, width in enumerate(widths, start=1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+    sheet.freeze_panes = "A5"
+    sheet.auto_filter.ref = f"A4:K{max(sheet.max_row, 4)}"
+
+    if rows:
+        table = Table(displayName=table_name, ref=f"A4:K{sheet.max_row}")
+        table.tableStyleInfo = TableStyleInfo(
+            name="TableStyleMedium2",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False,
+        )
+        sheet.add_table(table)
+        status_range = f"H5:H{sheet.max_row}"
+        formats = {
+            "PASS": ("C6EFCE", "006100"),
+            "FAIL": ("FFC7CE", "9C0006"),
+            "SKIPPED": ("FFF2CC", "7F6000"),
+            "BLOCKED": ("E7E6E6", "595959"),
+        }
+        for status, (fill, font) in formats.items():
+            sheet.conditional_formatting.add(
+                status_range,
+                FormulaRule(
+                    formula=[f'H5="{status}"'],
+                    fill=PatternFill("solid", fgColor=fill),
+                    font=Font(color=font, bold=True),
+                ),
+            )
+    else:
+        sheet["A5"] = "No verified execution rows are available for this suite."
+        sheet["A5"].font = Font(name="Arial", size=10, italic=True, color="9C0006")
+        sheet["A5"].fill = PatternFill("solid", fgColor="FCE4D6")
+        sheet["A5"].alignment = Alignment(wrap_text=True)
+        sheet.merge_cells("A5:K5")
+        sheet.row_dimensions[5].height = 30
+        sheet.auto_filter.ref = "A4:K4"
+
+    sheet.sheet_properties.tabColor = pale_blue
+    sheet.print_title_rows = "1:4"
+    sheet.page_setup.orientation = "landscape"
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+
+
+def build_final_workbook(input_dir: Path, output_path: Path) -> dict[str, StageResults]:
+    results = discover_final_results(input_dir)
+    rows_by_stage = _final_rows(results)
+    all_rows = [row for stage in FINAL_SUITES for row in rows_by_stage[stage]]
+    all_tests = [test for stage in FINAL_SUITES for test in results[stage].tests]
+    counts = Counter(test.status for test in all_tests)
+    total = len(all_tests)
+    pass_rate = counts["PASS"] / total if total else 0
+    complete_evidence = all(results[stage].tests for stage in FINAL_SUITES)
+    all_passed = complete_evidence and all(test.status == "PASS" for test in all_tests)
+    deployment_status = "READY" if all_passed else "NOT READY — INCOMPLETE OR NON-PASSING EVIDENCE"
+
+    workbook = Workbook()
+    summary = workbook.active
+    summary.title = "Executive Summary"
+    summary.sheet_view.showGridLines = False
+    summary.sheet_properties.tabColor = "17365D"
+    summary["A2"] = "CareerVue Test Execution Executive Summary"
+    summary["A2"].font = Font(name="Arial", size=16, bold=True, color="17365D")
+    summary["A3"] = "Consolidated strictly from available execution artifacts; missing suites are not inferred."
+    summary["A3"].font = Font(name="Arial", size=10, italic=True, color="44546A")
+
+    cards = (
+        ("A5:B5", "A6:B6", "Total Verified", total, "D9EAF7", "17365D"),
+        ("C5:D5", "C6:D6", "Passed", counts["PASS"], "E2F0D9", "006100"),
+        ("E5:F5", "E6:F6", "Failed", counts["FAIL"], "FCE4D6", "9C0006"),
+        ("G5:H5", "G6:H6", "Overall Pass Rate", pass_rate, "FFF2CC", "7F6000"),
+        ("I5:K5", "I6:K6", "Deployment Status", deployment_status, "E7E6E6", "595959"),
+    )
+    for header_range, value_range, label, value, fill, color in cards:
+        summary.merge_cells(header_range)
+        summary.merge_cells(value_range)
+        header = summary[header_range.split(":")[0]]
+        value_cell = summary[value_range.split(":")[0]]
+        header.value = label
+        value_cell.value = value
+        for row in summary[header_range]:
+            for cell in row:
+                cell.fill = PatternFill("solid", fgColor="17365D")
+                cell.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+        for row in summary[value_range]:
+            for cell in row:
+                cell.fill = PatternFill("solid", fgColor=fill)
+                cell.font = Font(name="Arial", size=13, bold=True, color=color)
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        if label == "Overall Pass Rate":
+            value_cell.number_format = "0.0%"
+    summary.row_dimensions[5].height = 25
+    summary.row_dimensions[6].height = 42
+
+    suite_headers = (
+        "Suite",
+        "Evidence",
+        "Total Verified",
+        "Passed",
+        "Failed",
+        "Skipped",
+        "Blocked",
+        "Pass Rate",
+        "Source Artifact(s)",
+    )
+    for column, heading in enumerate(suite_headers, start=1):
+        cell = summary.cell(8, column, heading)
+        cell.fill = PatternFill("solid", fgColor="17365D")
+        cell.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for row_index, stage in enumerate(FINAL_SUITES, start=9):
+        result = results[stage]
+        stage_counts = result.counts
+        stage_total = len(result.tests)
+        sources = _relative_paths(result.source_files, input_dir) or "Missing detailed execution source"
+        values = (
+            FINAL_SUITES[stage][0],
+            "VERIFIED" if stage_total else "MISSING",
+            stage_total,
+            stage_counts["PASS"],
+            stage_counts["FAIL"],
+            stage_counts["SKIPPED"],
+            stage_counts["BLOCKED"],
+            stage_counts["PASS"] / stage_total if stage_total else None,
+            sources,
+        )
+        for column, value in enumerate(values, start=1):
+            cell = summary.cell(row_index, column, value)
+            cell.font = Font(name="Arial", size=10, color="172033")
+            cell.alignment = Alignment(vertical="top", wrap_text=column == 9)
+            if column == 8 and value is not None:
+                cell.number_format = "0.0%"
+        summary.cell(row_index, 2).font = Font(
+            name="Arial",
+            size=10,
+            bold=True,
+            color="006100" if stage_total else "9C0006",
+        )
+        summary.row_dimensions[row_index].height = 32
+    suite_table = Table(displayName="ExecutiveSuiteSummary", ref="A8:I12")
+    suite_table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
+    summary.add_table(suite_table)
+
+    summary["A15"] = "Deployment assessment"
+    summary["A15"].font = Font(name="Arial", size=11, bold=True, color="17365D")
+    summary.merge_cells("A16:K17")
+    summary["A16"] = (
+        "Deployment is not ready because one or more required suites have missing or non-passing execution evidence. "
+        "This workbook does not infer readiness from stage metadata or test source code."
+        if not all_passed
+        else "All four required suites contain verified execution evidence and every recorded execution passed."
+    )
+    summary["A16"].fill = PatternFill("solid", fgColor="FCE4D6" if not all_passed else "E2F0D9")
+    summary["A16"].font = Font(name="Arial", size=10, bold=True, color="9C0006" if not all_passed else "006100")
+    summary["A16"].alignment = Alignment(wrap_text=True, vertical="center")
+    summary["A19"] = "Calculation note"
+    summary["A19"].font = Font(name="Arial", size=10, bold=True, color="17365D")
+    summary.merge_cells("A20:K20")
+    summary["A20"] = "Overall pass rate = passed ÷ total verified, including skipped or blocked executions in total verified."
+    summary["A20"].font = Font(name="Arial", size=10, italic=True, color="44546A")
+    summary["A22"] = "Generated at (UTC)"
+    summary["B22"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+    summary_widths = (22, 16, 16, 14, 14, 14, 14, 16, 28, 18, 18)
+    for index, width in enumerate(summary_widths, start=1):
+        summary.column_dimensions[get_column_letter(index)].width = width
+    summary.page_setup.orientation = "landscape"
+    summary.sheet_properties.pageSetUpPr.fitToPage = True
+    summary.page_setup.fitToWidth = 1
+    summary.page_setup.fitToHeight = 1
+
+    consolidated = workbook.create_sheet("Consolidated Results")
+    _style_results_sheet(
+        consolidated,
+        "Consolidated Results",
+        "Only verified execution rows from available artifacts are included.",
+        all_rows,
+        "ConsolidatedExecutionResults",
+    )
+    consolidated.sheet_properties.tabColor = "4472C4"
+
+    expected_sources = {
+        "selenium": "Selenium JUnit XML or pytest JSON",
+        "appium": "Appium JUnit XML or pytest JSON",
+        "performance": "performance-summary.json plus performance status.json",
+        "security": "severity-summary.json plus security status.json",
+    }
+    table_names = {
+        "selenium": "SeleniumWebResults",
+        "appium": "AppiumMobileResults",
+        "performance": "LoadPerformanceResults",
+        "security": "DastSecurityResults",
+    }
+    for stage, (sheet_name, _) in FINAL_SUITES.items():
+        result = results[stage]
+        sources = _relative_paths(result.source_files, input_dir)
+        note = (
+            f"Verified source artifact(s): {sources}"
+            if result.tests
+            else f"Missing detailed execution source: {expected_sources[stage]}. No execution rows or PASS statuses were invented."
+        )
+        sheet = workbook.create_sheet(sheet_name)
+        _style_results_sheet(sheet, f"{sheet_name} Results", note, rows_by_stage[stage], table_names[stage])
+
+    workbook.properties.title = "CareerVue Final Test Summary"
+    workbook.properties.subject = "Consolidated CareerVue test execution evidence"
+    workbook.properties.creator = "CareerVue CI report generator"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(output_path)
+    return results
+
+
+def validate_final_workbook(output_path: Path, results: dict[str, StageResults]) -> None:
+    workbook = load_workbook(output_path, data_only=False, read_only=False)
+    expected_sheets = [
+        "Executive Summary",
+        "Consolidated Results",
+        "Selenium Web",
+        "Appium Mobile",
+        "Load Performance",
+        "DAST Security",
+    ]
+    if workbook.sheetnames != expected_sheets:
+        raise ValueError(f"{output_path.name}: expected sheets {expected_sheets}, got {workbook.sheetnames}")
+    rows_by_stage = _final_rows(results)
+    total = sum(len(result.tests) for result in results.values())
+    counts = Counter(test.status for result in results.values() for test in result.tests)
+    summary = workbook["Executive Summary"]
+    if summary["A6"].value != total or summary["C6"].value != counts["PASS"] or summary["E6"].value != counts["FAIL"]:
+        raise ValueError(f"{output_path.name}: executive counts do not match source artifacts")
+    deployment = summary["I6"].value
+    complete_and_passed = all(results[stage].tests for stage in FINAL_SUITES) and all(
+        test.status == "PASS" for result in results.values() for test in result.tests
+    )
+    if (deployment == "READY") != complete_and_passed:
+        raise ValueError(f"{output_path.name}: deployment readiness is inconsistent with evidence")
+    consolidated = workbook["Consolidated Results"]
+    consolidated_rows = consolidated.max_row - 4 if total else 0
+    if consolidated_rows != total:
+        raise ValueError(f"{output_path.name}: consolidated rows {consolidated_rows} != source rows {total}")
+    headers = tuple(consolidated.cell(4, column).value for column in range(1, len(FINAL_COLUMNS) + 1))
+    if headers != FINAL_COLUMNS:
+        raise ValueError(f"{output_path.name}: consolidated columns do not match required columns")
+    for stage, (sheet_name, _) in FINAL_SUITES.items():
+        sheet = workbook[sheet_name]
+        headers = tuple(sheet.cell(4, column).value for column in range(1, len(FINAL_COLUMNS) + 1))
+        if headers != FINAL_COLUMNS:
+            raise ValueError(f"{output_path.name}: {sheet_name} columns do not match required columns")
+        actual_rows = sheet.max_row - 4 if rows_by_stage[stage] else 0
+        if actual_rows != len(rows_by_stage[stage]):
+            raise ValueError(
+                f"{output_path.name}: {sheet_name} rows {actual_rows} != source rows {len(rows_by_stage[stage])}"
+            )
+        if sheet.freeze_panes != "A5" or not sheet.auto_filter.ref:
+            raise ValueError(f"{output_path.name}: {sheet_name} table controls are incomplete")
+    workbook.close()
+
+
 def generate_all(input_dir: Path, output_dir: Path, validate: bool = True) -> dict[str, StageResults]:
     input_dir = input_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -488,6 +956,9 @@ def generate_all(input_dir: Path, output_dir: Path, validate: bool = True) -> di
         build_workbook(result, input_dir, output_path)
         if validate:
             validate_workbook(output_path, result)
+    final_results = build_final_workbook(input_dir, output_dir / FINAL_WORKBOOK_NAME)
+    if validate:
+        validate_final_workbook(output_dir / FINAL_WORKBOOK_NAME, final_results)
     return results
 
 
@@ -512,6 +983,7 @@ def main() -> int:
             "Missing detailed test results for: " + ", ".join(missing) + ". Placeholder workbooks were created without fabricated cases.",
             file=sys.stderr,
         )
+    print(f"final: {args.output / FINAL_WORKBOOK_NAME}")
     return 0
 
 

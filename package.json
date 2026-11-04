@@ -14,6 +14,7 @@
     "test:backend": "cd backend && python -m unittest discover -s tests -v",
     "test:selenium": "python -m pytest tests/selenium -v --junitxml=artifacts/selenium/junit-results.xml --html=artifacts/selenium/report.html --self-contained-html",
     "test:appium": "python -m pytest tests/appium -v --junitxml=artifacts/appium/junit-results.xml --html=artifacts/appium/report.html --self-contained-html",
+    "test:catalogs": "python scripts/ci/generate_test_catalogs.py",
     "dev:web": "turbo run dev --filter=web",
     "dev:mobile": "turbo run dev --filter=mobile",
     "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000"
