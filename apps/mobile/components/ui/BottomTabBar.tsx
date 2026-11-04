@@ -57,7 +57,10 @@ function TabItem({
           <MotiView
             from={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: "spring", damping: 18, stiffness: 300 }}
+            transition={{
+              opacity: { type: "spring", damping: 18, stiffness: 300 },
+              scale: { type: "spring", damping: 18, stiffness: 300 },
+            }}
             style={s.glow}
           />
         )}
@@ -76,7 +79,10 @@ function TabItem({
         <MotiView
           from={{ opacity: 0, translateY: 4 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: "timing", duration: 180 }}
+          transition={{
+            opacity: { type: "timing", duration: 180 },
+            translateY: { type: "timing", duration: 180 },
+          }}
         >
           <Text style={s.label}>{tab.label}</Text>
         </MotiView>

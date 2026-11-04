@@ -10,6 +10,7 @@ import uuid
 from app.database import get_db
 from app.utils.supabase import supabase_admin
 from app.models.user import Profile
+from app.services.registration_service import reconcile_pending_registration
 from app.config import settings  # noqa: F401 — kept for potential future use
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,8 @@ async def get_current_user(
     # sync for sessions restored directly by the Supabase clients.
     if not getattr(profile, "email_verified", False):
         profile.email_verified = True
-        await db.commit()
+    profile = await reconcile_pending_registration(db, profile)
+    await db.commit()
 
     return profile
 

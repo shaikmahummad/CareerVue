@@ -32,6 +32,16 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; icon: React.El
 
 const ROLE_FILTERS = ["all", "student", "tutor", "admin", "deactivated"] as const;
 type RoleFilter = typeof ROLE_FILTERS[number];
+type UserRoleCounts = Record<RoleFilter, number>;
+
+const EMPTY_ROLE_COUNTS: UserRoleCounts = {
+  all: 0,
+  student: 0,
+  tutor: 0,
+  admin: 0,
+  deactivated: 0,
+};
+
 const FILTER_LABELS: Record<RoleFilter, string> = {
   all: "All", student: "Students", tutor: "Tutors",
   admin: "Admins", deactivated: "Deactivated",
@@ -216,6 +226,7 @@ function UserRow({
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [roleCounts, setRoleCounts] = useState<UserRoleCounts>(EMPTY_ROLE_COUNTS);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<RoleFilter>("all");
   const [search, setSearch] = useState("");
@@ -232,10 +243,21 @@ export default function AdminUsersPage() {
       .finally(() => setLoading(false));
   }
 
+  function fetchRoleCounts() {
+    apiGet<UserRoleCounts>("/api/v1/admin/users/counts")
+      .then(setRoleCounts)
+      .catch(() => {});
+  }
+
   useEffect(() => {
     const timer = window.setTimeout(() => fetchUsers(filter, ""), 0);
     return () => window.clearTimeout(timer);
   }, [filter]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchRoleCounts, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   function handleSearchChange(val: string) {
     setSearch(val);
@@ -244,17 +266,18 @@ export default function AdminUsersPage() {
   }
 
   function handleRoleChange(id: string, newRole: string) {
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role: newRole } : u));
+    setUsers((prev) => prev
+      .map((u) => u.id === id ? { ...u, role: newRole } : u)
+      .filter((u) => filter === "all" || u.role === filter));
+    fetchRoleCounts();
   }
 
   function handleDeactivate(id: string) {
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role: "deactivated" } : u));
+    setUsers((prev) => prev
+      .map((u) => u.id === id ? { ...u, role: "deactivated" } : u)
+      .filter((u) => filter === "all" || u.role === filter));
+    fetchRoleCounts();
   }
-
-  const roleCounts = users.reduce<Record<string, number>>((acc, u) => {
-    acc[u.role] = (acc[u.role] ?? 0) + 1;
-    return acc;
-  }, {});
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -280,7 +303,7 @@ export default function AdminUsersPage() {
         {/* Filters */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {ROLE_FILTERS.map((f) => {
-            const count = f === "all" ? users.length : (roleCounts[f] ?? 0);
+            const count = roleCounts[f];
             return (
               <button
                 key={f}

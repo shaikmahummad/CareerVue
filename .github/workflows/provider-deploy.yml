@@ -1,0 +1,70 @@
+name: Guarded provider deployment
+
+on:
+  workflow_call:
+    inputs:
+      web_url:
+        required: true
+        type: string
+      environment:
+        type: string
+        default: staging
+    secrets:
+      WEB_DEPLOY_HOOK_URL:
+        required: true
+  workflow_dispatch:
+    inputs:
+      web_url:
+        description: Expected deployed web URL
+        required: true
+        type: string
+      environment:
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    env:
+      WEB_URL: ${{ inputs.web_url }}
+      WEB_DEPLOY_HOOK_URL: ${{ secrets.WEB_DEPLOY_HOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate provider configuration
+        shell: bash
+        run: |
+          test -n "$WEB_URL" || { echo "The expected web URL is not configured"; exit 2; }
+          test -n "$WEB_DEPLOY_HOOK_URL" || { echo "WEB_DEPLOY_HOOK_URL is not configured for this GitHub Environment"; exit 2; }
+      - name: Trigger configured provider deployment
+        run: curl --fail-with-body --silent --show-error --request POST "$WEB_DEPLOY_HOOK_URL"
+      - name: Post-deployment smoke test
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "$WEB_URL" >/dev/null; then exit 0; fi
+            sleep 10
+          done
+          exit 1
+      - name: Write deployment status
+        if: always()
+        run: >-
+          python scripts/ci/write_status.py deployment "${{ job.status }}"
+          --details "${{ inputs.environment }} web deploy: $WEB_URL"
+          --output artifacts/deployment/status.json
+      - name: Publish deployment URL
+        if: always()
+        run: |
+          echo "Deployed URL: $WEB_URL" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deployment-reports
+          path: artifacts/deployment
+          if-no-files-found: error
+          retention-days: 14

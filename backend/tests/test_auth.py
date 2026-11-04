@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.database import get_db
-from app.models.user import EmailVerificationToken, Profile, Student
+from app.models.user import EmailVerificationToken, Profile, Student, Tutor
 from app.routers import auth
 from app.schemas.auth import (
     LoginRequest,
@@ -91,6 +91,9 @@ class FlowSession:
 
     def add(self, value):
         self.added.append(value)
+
+    async def flush(self):
+        pass
 
     async def commit(self):
         self.commits += 1
@@ -302,6 +305,7 @@ class LoginTests(unittest.TestCase):
     def test_valid_verified_login_returns_tokens(self):
         profile = SimpleNamespace(
             id=uuid.uuid4(),
+            email="user@gmail.com",
             email_verified=True,
             role="student",
             full_name="Student",
@@ -421,6 +425,7 @@ class LoginTests(unittest.TestCase):
     def test_provider_confirmation_repairs_stale_profile_verification(self):
         profile = SimpleNamespace(
             id=uuid.uuid4(),
+            email="user@gmail.com",
             email_verified=False,
             role="student",
             full_name="Existing User",
@@ -454,6 +459,7 @@ class LoginTests(unittest.TestCase):
     def test_deactivated_profile_cannot_receive_a_login_session(self):
         profile = SimpleNamespace(
             id=uuid.uuid4(),
+            email="user@gmail.com",
             email_verified=True,
             role="deactivated",
             full_name="Disabled User",
@@ -508,7 +514,7 @@ class EmailVerificationTests(unittest.TestCase):
             email="user@gmail.com",
             email_verified=False,
         )
-        session = FlowSession(profile, token_row)
+        session = FlowSession(profile, None, token_row)
         with patch.object(
             auth.supabase_admin.auth.admin, "update_user_by_id"
         ) as confirm_user:
@@ -522,6 +528,49 @@ class EmailVerificationTests(unittest.TestCase):
         self.assertTrue(profile.email_verified)
         self.assertEqual(session.commits, 1)
         confirm_user.assert_called_once_with(str(profile.id), {"email_confirm": True})
+
+    def test_verification_finishes_precreated_tutor_profile(self):
+        raw_token = "123456"
+        user_id = uuid.uuid4()
+        profile = Profile(
+            id=user_id,
+            role="tutor",
+            full_name="Tutor User",
+            email="tutor@gmail.com",
+            email_verified=False,
+        )
+        pending = SimpleNamespace(
+            user_id=user_id,
+            email=profile.email,
+            role="tutor",
+            registration_data={
+                "full_name": "Tutor User",
+                "phone": "+919876543210",
+                "bio": "Teaches backend engineering",
+                "expertise_tags": ["Python"],
+                "qualification": "M.Tech",
+                "years_experience": 5,
+            },
+        )
+        token_row = self.token_row(raw_token, user_id=user_id)
+        session = FlowSession(profile, pending, token_row, None)
+
+        with patch.object(
+            auth.supabase_admin.auth.admin, "update_user_by_id"
+        ):
+            result = __import__("asyncio").run(
+                auth.verify_otp(
+                    body=VerifyOtpRequest(email=profile.email, otp=raw_token),
+                    db=session,
+                )
+            )
+
+        self.assertTrue(result["success"])
+        tutors = [row for row in session.added if isinstance(row, Tutor)]
+        self.assertEqual(len(tutors), 1)
+        self.assertEqual(tutors[0].profile_id, user_id)
+        self.assertEqual(tutors[0].expertise_tags, ["Python"])
+        self.assertEqual(session.deleted, [pending])
 
     def test_successful_otp_verification_activates_pending_registration(self):
         raw_token = "123456"

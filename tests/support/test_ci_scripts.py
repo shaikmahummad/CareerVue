@@ -88,6 +88,12 @@ class CiSupportScriptTests(unittest.TestCase):
             )
             summary = json.loads((output / "summary/pipeline-summary.json").read_text())
             self.assertEqual(summary["stages"]["quality"]["result"], "success")
+            self.assertEqual(summary["total_verified"], 0)
+            self.assertTrue(summary["readiness"].startswith("NOT READY"))
+            self.assertTrue((output / "excel/API_Testing_Report.xlsx").is_file())
+            self.assertTrue((output / "excel/Selenium_Testing_Report.xlsx").is_file())
+            self.assertTrue((output / "excel/Appium_Testing_Report.xlsx").is_file())
+            self.assertTrue((output / "excel/FINAL_TEST_SUMMARY.xlsx").is_file())
             self.assertTrue((output / "summary/pipeline-summary.html").is_file())
             self.assertTrue(archive.with_suffix(".zip").is_file())
 

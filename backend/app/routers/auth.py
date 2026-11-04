@@ -35,6 +35,11 @@ from app.services.email_verification_service import (
     log_auth_event,
     send_verification_email,
 )
+from app.services.registration_service import (
+    activate_pending_registration,
+    pending_registration_for_email,
+    reconcile_pending_registration,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -88,13 +93,7 @@ async def _email_exists(db: AsyncSession, email: str) -> bool:
 
 
 async def _pending_registration_for_email(db: AsyncSession, email: str):
-    return (
-        await db.execute(
-            select(PendingRegistration)
-            .where(func.lower(PendingRegistration.email) == email)
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
+    return await pending_registration_for_email(db, email)
 
 
 async def _cleanup_expired_pending_registrations(db: AsyncSession) -> None:
@@ -351,7 +350,12 @@ async def verify_otp(
             .with_for_update()
         )
     ).scalar_one_or_none()
-    pending = None if profile else await _pending_registration_for_email(db, body.email)
+    pending = await _pending_registration_for_email(db, body.email)
+    if profile is not None and pending is not None and profile.id != pending.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Account registration state is inconsistent.",
+        )
     user_id = profile.id if profile else pending.user_id if pending else None
     token_row = None
     if user_id:
@@ -404,38 +408,7 @@ async def verify_otp(
         ) from None
 
     if pending:
-        data = pending.registration_data
-        profile = Profile(
-            id=pending.user_id,
-            role=pending.role,
-            full_name=data["full_name"],
-            email=pending.email,
-            phone=data.get("phone"),
-            email_verified=True,
-        )
-        db.add(profile)
-        if pending.role == "student":
-            db.add(Student(
-                profile_id=pending.user_id,
-                college_name=data.get("college"),
-                branch=data.get("branch"),
-                year_of_study=data.get("year_of_study"),
-                graduation_year=data.get("graduation_year"),
-                city=data.get("city"),
-                linkedin_url=data.get("linkedin_url"),
-                github_url=data.get("github_url"),
-            ))
-        else:
-            db.add(Tutor(
-                profile_id=pending.user_id,
-                bio=data.get("bio"),
-                expertise_tags=data.get("expertise_tags") or [],
-                qualification=data.get("qualification"),
-                experience_years=data.get("years_experience"),
-                linkedin_url=data.get("linkedin_url"),
-                website_url=data.get("website_url"),
-            ))
-        await db.delete(pending)
+        profile = await activate_pending_registration(db, pending, profile)
     else:
         profile.email_verified = True
     await invalidate_unused_tokens(db, user_id, now=now)
@@ -584,10 +557,11 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
             "ACCOUNT_DISABLED",
             "This account is disabled. Please contact support.",
         )
+    profile = await reconcile_pending_registration(db, profile)
     if not getattr(profile, "email_verified", False):
         profile.email_verified = True
-        await db.commit()
         log_auth_event("VERIFICATION_STATE_RECONCILED", profile.id)
+    await db.commit()
 
     return {
         "success": True,
