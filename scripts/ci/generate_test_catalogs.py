@@ -197,6 +197,31 @@ def write_catalog(name: str, cases: list[TestCase], output: Path) -> None:
     workbook.save(output / f"{name}_test_cases.xlsx")
 
 
+def write_combined_catalog(catalogs: dict[str, list[TestCase]], output: Path) -> None:
+    rows = [
+        {"suite": suite.upper(), **asdict(case)}
+        for suite, cases in catalogs.items()
+        for case in cases
+    ]
+    workbook = Workbook()
+    summary = workbook.active
+    summary.title = "SUMMARY"
+    summary.append(["Field", "Value"])
+    summary.append(["Total Tests", len(rows)])
+    for suite, cases in catalogs.items():
+        summary.append([f"{suite.upper()} Tests", len(cases)])
+    summary.append(["Status", "NOT_EXECUTED (catalog)"])
+    summary.append(["Automation Status", "AUTOMATED_CANDIDATE"])
+    summary.append(["Source", "Generated from repository routes/screens/endpoints"])
+
+    results = workbook.create_sheet("TEST RESULTS")
+    headers = list(rows[0])
+    results.append(headers)
+    for row in rows:
+        results.append([row[header] for header in headers])
+    workbook.save(output / "ALL_TEST_CASES.xlsx")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate repository-derived test case catalogs.")
     parser.add_argument("--output", type=Path, default=ROOT / "test-cases")
@@ -207,6 +232,8 @@ def main() -> None:
         catalogs = {args.suite: catalogs[args.suite]}
     for name, cases in catalogs.items():
         write_catalog(name, cases, args.output)
+    if not args.suite:
+        write_combined_catalog(catalogs, args.output)
     print(json.dumps({name: len(cases) for name, cases in catalogs.items()}, sort_keys=True))
 
 

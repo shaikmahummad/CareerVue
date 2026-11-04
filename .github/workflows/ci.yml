@@ -15,6 +15,10 @@ on:
         description: Run performance and passive DAST against staging
         type: boolean
         default: false
+      run_full_validation:
+        description: Run Selenium, Appium, performance, and DAST validation
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -118,8 +122,45 @@ jobs:
       run_web: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true' }}
       run_mobile: ${{ needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true' }}
 
+  selenium:
+    needs: [changes, build]
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'workflow_dispatch' && inputs.run_full_validation)
+      )
+    uses: ./.github/workflows/web-tests.yml
+    with:
+      base_url: ${{ vars.STAGING_WEB_URL || '' }}
+    secrets: inherit
+
+  appium:
+    needs: [changes, build]
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          (needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'workflow_dispatch' && inputs.run_full_validation)
+      )
+    uses: ./.github/workflows/mobile-tests.yml
+    with:
+      require_auth: ${{ vars.STAGING_WEB_URL != '' }}
+    secrets: inherit
+
   performance:
-    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && vars.STAGING_API_URL != '' && ((github.event_name == 'workflow_dispatch' && inputs.run_staging_scans) || (github.event_name == 'push' && vars.RUN_STAGING_SCANS == 'true')) }}
+    if: >-
+      always() &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      vars.STAGING_API_URL != '' &&
+      (
+        (github.event_name == 'workflow_dispatch' && (inputs.run_staging_scans || inputs.run_full_validation)) ||
+        (github.event_name == 'push' && vars.RUN_STAGING_SCANS == 'true')
+      )
     needs: [changes, build]
     uses: ./.github/workflows/performance-tests.yml
     with:
@@ -127,8 +168,12 @@ jobs:
       profile: ${{ github.event_name == 'workflow_dispatch' && inputs.performance_profile || 'smoke' }}
 
   security:
-    if: ${{ always() && needs.performance.result == 'success' && vars.STAGING_WEB_URL != '' && vars.STAGING_API_URL != '' }}
-    needs: performance
+    if: >-
+      always() &&
+      needs.performance.result == 'success' &&
+      vars.STAGING_WEB_URL != '' &&
+      vars.STAGING_API_URL != ''
+    needs: [performance]
     uses: ./.github/workflows/security-tests.yml
     with:
       web_url: ${{ vars.STAGING_WEB_URL }}
@@ -136,7 +181,7 @@ jobs:
 
   reports:
     if: always()
-    needs: [changes, build, performance, security]
+    needs: [changes, build, selenium, appium, performance, security]
     permissions:
       actions: read
       contents: read
@@ -144,7 +189,7 @@ jobs:
 
   quality-gate:
     if: always()
-    needs: [changes, build, performance, security, reports]
+    needs: [changes, build, selenium, appium, performance, security, reports]
     runs-on: ubuntu-latest
     steps:
       - name: Enforce mandatory results
@@ -153,11 +198,20 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
+          SELENIUM_RESULT: ${{ needs.selenium.result }}
+          APPIUM_RESULT: ${{ needs.appium.result }}
           REPORT_RESULT: ${{ needs.reports.result }}
+          FULL_VALIDATION: ${{ github.event_name == 'workflow_dispatch' && inputs.run_full_validation || 'false' }}
         shell: bash
         run: |
           if [[ "$BUILD_REQUIRED" == "true" ]]; then test "$BUILD_RESULT" = success; fi
           test "$REPORT_RESULT" = success
+          if [[ "$FULL_VALIDATION" == "true" ]]; then
+            test "$SELENIUM_RESULT" = success
+            test "$APPIUM_RESULT" = success
+            test "$PERFORMANCE_RESULT" = success
+            test "$SECURITY_RESULT" = success
+          fi
           test "$PERFORMANCE_RESULT" != failure
           test "$PERFORMANCE_RESULT" != cancelled
           test "$SECURITY_RESULT" != failure

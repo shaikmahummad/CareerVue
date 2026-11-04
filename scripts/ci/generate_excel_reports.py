@@ -742,11 +742,11 @@ def build_final_workbook(input_dir: Path, output_path: Path) -> dict[str, StageR
     pass_rate = counts["PASS"] / total if total else 0
     complete_evidence = all(results[stage].tests for stage in FINAL_SUITES)
     all_passed = complete_evidence and all(test.status == "PASS" for test in all_tests)
-    deployment_status = "READY" if all_passed else "NOT READY — INCOMPLETE OR NON-PASSING EVIDENCE"
+    deployment_status = "READY" if all_passed else "NOT READY - INCOMPLETE OR NON-PASSING EVIDENCE"
 
     workbook = Workbook()
     summary = workbook.active
-    summary.title = "Executive Summary"
+    summary.title = "EXECUTIVE SUMMARY"
     summary.sheet_view.showGridLines = False
     summary.sheet_properties.tabColor = "17365D"
     summary["A2"] = "CareerVue Test Execution Executive Summary"
@@ -759,7 +759,7 @@ def build_final_workbook(input_dir: Path, output_path: Path) -> dict[str, StageR
         ("C5:D5", "C6:D6", "Passed", counts["PASS"], "E2F0D9", "006100"),
         ("E5:F5", "E6:F6", "Failed", counts["FAIL"], "FCE4D6", "9C0006"),
         ("G5:H5", "G6:H6", "Overall Pass Rate", pass_rate, "FFF2CC", "7F6000"),
-        ("I5:K5", "I6:K6", "Deployment Status", deployment_status, "E7E6E6", "595959"),
+        ("I5:K5", "I6:K6", "Deployment Readiness", deployment_status, "E7E6E6", "595959"),
     )
     for header_range, value_range, label, value, fill, color in cards:
         summary.merge_cells(header_range)
@@ -844,13 +844,21 @@ def build_final_workbook(input_dir: Path, output_path: Path) -> dict[str, StageR
     summary["A16"].fill = PatternFill("solid", fgColor="FCE4D6" if not all_passed else "E2F0D9")
     summary["A16"].font = Font(name="Arial", size=10, bold=True, color="9C0006" if not all_passed else "006100")
     summary["A16"].alignment = Alignment(wrap_text=True, vertical="center")
-    summary["A19"] = "Calculation note"
-    summary["A19"].font = Font(name="Arial", size=10, bold=True, color="17365D")
-    summary.merge_cells("A20:K20")
-    summary["A20"] = "Overall pass rate = passed ÷ total verified, including skipped or blocked executions in total verified."
-    summary["A20"].font = Font(name="Arial", size=10, italic=True, color="44546A")
-    summary["A22"] = "Generated at (UTC)"
-    summary["B22"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    summary["A19"] = "Overall status"
+    summary["B19"] = "PASS" if all_passed else "INCOMPLETE / NON-PASSING"
+    summary["B19"].font = Font(
+        name="Arial",
+        size=10,
+        bold=True,
+        color="006100" if all_passed else "9C0006",
+    )
+    summary["A20"] = "Calculation note"
+    summary["A20"].font = Font(name="Arial", size=10, bold=True, color="17365D")
+    summary.merge_cells("A21:K21")
+    summary["A21"] = "Overall pass rate = passed / total verified executions, including skipped or blocked executions in the denominator."
+    summary["A21"].font = Font(name="Arial", size=10, italic=True, color="44546A")
+    summary["A23"] = "Generated at (UTC)"
+    summary["B23"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     summary_widths = (22, 16, 16, 14, 14, 14, 14, 16, 28, 18, 18)
     for index, width in enumerate(summary_widths, start=1):
@@ -860,7 +868,7 @@ def build_final_workbook(input_dir: Path, output_path: Path) -> dict[str, StageR
     summary.page_setup.fitToWidth = 1
     summary.page_setup.fitToHeight = 1
 
-    consolidated = workbook.create_sheet("Consolidated Results")
+    consolidated = workbook.create_sheet("CONSOLIDATED RESULTS")
     _style_results_sheet(
         consolidated,
         "Consolidated Results",
@@ -890,7 +898,7 @@ def build_final_workbook(input_dir: Path, output_path: Path) -> dict[str, StageR
             if result.tests
             else f"Missing detailed execution source: {expected_sources[stage]}. No execution rows or PASS statuses were invented."
         )
-        sheet = workbook.create_sheet(sheet_name)
+        sheet = workbook.create_sheet(sheet_name.upper())
         _style_results_sheet(sheet, f"{sheet_name} Results", note, rows_by_stage[stage], table_names[stage])
 
     workbook.properties.title = "CareerVue Final Test Summary"
@@ -904,19 +912,19 @@ def build_final_workbook(input_dir: Path, output_path: Path) -> dict[str, StageR
 def validate_final_workbook(output_path: Path, results: dict[str, StageResults]) -> None:
     workbook = load_workbook(output_path, data_only=False, read_only=False)
     expected_sheets = [
-        "Executive Summary",
-        "Consolidated Results",
-        "Selenium Web",
-        "Appium Mobile",
-        "Load Performance",
-        "DAST Security",
+        "EXECUTIVE SUMMARY",
+        "CONSOLIDATED RESULTS",
+        "SELENIUM WEB",
+        "APPIUM MOBILE",
+        "LOAD PERFORMANCE",
+        "DAST SECURITY",
     ]
     if workbook.sheetnames != expected_sheets:
         raise ValueError(f"{output_path.name}: expected sheets {expected_sheets}, got {workbook.sheetnames}")
     rows_by_stage = _final_rows(results)
     total = sum(len(result.tests) for result in results.values())
     counts = Counter(test.status for result in results.values() for test in result.tests)
-    summary = workbook["Executive Summary"]
+    summary = workbook["EXECUTIVE SUMMARY"]
     if summary["A6"].value != total or summary["C6"].value != counts["PASS"] or summary["E6"].value != counts["FAIL"]:
         raise ValueError(f"{output_path.name}: executive counts do not match source artifacts")
     deployment = summary["I6"].value
@@ -925,7 +933,7 @@ def validate_final_workbook(output_path: Path, results: dict[str, StageResults])
     )
     if (deployment == "READY") != complete_and_passed:
         raise ValueError(f"{output_path.name}: deployment readiness is inconsistent with evidence")
-    consolidated = workbook["Consolidated Results"]
+    consolidated = workbook["CONSOLIDATED RESULTS"]
     consolidated_rows = consolidated.max_row - 4 if total else 0
     if consolidated_rows != total:
         raise ValueError(f"{output_path.name}: consolidated rows {consolidated_rows} != source rows {total}")
@@ -933,7 +941,7 @@ def validate_final_workbook(output_path: Path, results: dict[str, StageResults])
     if headers != FINAL_COLUMNS:
         raise ValueError(f"{output_path.name}: consolidated columns do not match required columns")
     for stage, (sheet_name, _) in FINAL_SUITES.items():
-        sheet = workbook[sheet_name]
+        sheet = workbook[sheet_name.upper()]
         headers = tuple(sheet.cell(4, column).value for column in range(1, len(FINAL_COLUMNS) + 1))
         if headers != FINAL_COLUMNS:
             raise ValueError(f"{output_path.name}: {sheet_name} columns do not match required columns")
@@ -967,7 +975,22 @@ def main() -> int:
     parser.add_argument("--input", type=Path, required=True, help="Directory containing downloaded or local test artifacts")
     parser.add_argument("--output", type=Path, required=True, help="Directory for generated .xlsx reports")
     parser.add_argument("--no-validate", action="store_true", help="Skip reopening and validating generated workbooks")
+    parser.add_argument("--final-only", action="store_true", help="Generate only FINAL_TEST_SUMMARY.xlsx")
     args = parser.parse_args()
+
+    if args.final_only:
+        final_path = args.output / FINAL_WORKBOOK_NAME
+        final_results = build_final_workbook(args.input.resolve(), final_path)
+        if not args.no_validate:
+            validate_final_workbook(final_path, final_results)
+        for stage, result in final_results.items():
+            counts = result.counts
+            print(
+                f"{stage}: total={len(result.tests)} pass={counts['PASS']} "
+                f"fail={counts['FAIL']} skipped={counts['SKIPPED']} blocked={counts['BLOCKED']}"
+            )
+        print(f"final: {final_path}")
+        return 0
 
     results = generate_all(args.input, args.output, validate=not args.no_validate)
     for stage, result in results.items():
