@@ -8,6 +8,7 @@ import {
   CheckCircle2, AlertCircle, ExternalLink, Brain,
 } from "lucide-react";
 import StudentNavbar from "../../../components/StudentNavbar";
+import ProfilePhotoUpload from "../../../components/ProfilePhotoUpload";
 import { apiGet, apiPut } from "../../../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,24 +40,6 @@ interface Stats {
 }
 
 // ─── Avatar initial ───────────────────────────────────────────────────────────
-
-function AvatarInitial({ name, size = "lg" }: { name: string; size?: "md" | "lg" }) {
-  const initials = name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-
-  const cls = size === "lg"
-    ? "w-20 h-20 text-2xl"
-    : "w-12 h-12 text-base";
-
-  return (
-    <div className={`${cls} rounded-2xl bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center text-white font-bold flex-shrink-0`}>
-      {initials || "?"}
-    </div>
-  );
-}
 
 // ─── Field group ──────────────────────────────────────────────────────────────
 
@@ -239,7 +222,11 @@ export default function ProfilePage() {
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6"
         >
           <div className="flex items-start gap-5">
-            <AvatarInitial name={profile.full_name} />
+            <ProfilePhotoUpload
+              name={profile.full_name}
+              avatarUrl={profile.avatar_url}
+              onUploaded={(avatarUrl) => setProfile((current) => current ? { ...current, avatar_url: avatarUrl } : current)}
+            />
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold text-gray-900">{profile.full_name}</h1>
               <p className="text-sm text-gray-500">{profile.email}</p>

@@ -1,20 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Settings, Shield, Bell, Users, Database, LogOut, Loader2 } from "lucide-react";
 import AdminNavbar from "../../../../components/AdminNavbar";
+import ProfilePhotoUpload from "../../../../components/ProfilePhotoUpload";
+import { apiGet } from "../../../../lib/api";
 import { createClient } from "../../../../lib/supabase/client";
+
+interface CurrentProfile {
+  full_name: string;
+  email: string;
+  avatar_url: string | null;
+}
 
 export default function AdminSettingsPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState<CurrentProfile | null>(null);
   const [toggles, setToggles] = useState({
     maintenanceMode: false,
     newRegistrations: true,
     emailNotifications: true,
     autoApprove: false,
   });
+
+  useEffect(() => {
+    apiGet<CurrentProfile>("/api/v1/auth/me")
+      .then(setProfile)
+      .catch(() => {});
+  }, []);
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -41,6 +56,22 @@ export default function AdminSettingsPage() {
               <h1 className="text-2xl font-bold text-white">Platform Settings</h1>
             </div>
             <p className="text-sm text-[#7c7a8a]">Control platform-wide configuration and moderation settings.</p>
+          </div>
+
+          {/* Profile photo */}
+          <p className="text-[10px] font-semibold text-[#6c63ff] uppercase tracking-widest mb-3">Account Profile</p>
+          <div className="glass-card rounded-2xl p-5 mb-6 flex items-center gap-5">
+            <ProfilePhotoUpload
+              name={profile?.full_name ?? "Admin"}
+              avatarUrl={profile?.avatar_url ?? null}
+              variant="dark"
+              onUploaded={(avatarUrl) => setProfile((current) => current ? { ...current, avatar_url: avatarUrl } : current)}
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white truncate">{profile?.full_name ?? "Platform Admin"}</p>
+              <p className="text-xs text-[#7c7a8a] truncate mt-0.5">{profile?.email ?? "Loading account…"}</p>
+              <p className="text-xs text-[#7c7a8a] mt-2">Upload the photo displayed with your admin account.</p>
+            </div>
           </div>
 
           {/* Access Control */}

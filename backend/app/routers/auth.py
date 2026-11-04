@@ -1,8 +1,10 @@
+import asyncio
 import logging
 import uuid
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -40,6 +42,7 @@ from app.services.registration_service import (
     pending_registration_for_email,
     reconcile_pending_registration,
 )
+from app.utils.storage import BUCKETS, delete_file, ensure_public_bucket, upload_file
 
 
 logger = logging.getLogger(__name__)
@@ -48,6 +51,12 @@ MAX_OTP_ATTEMPTS = 5
 PENDING = "PENDING"
 OTP_SENT = "OTP_SENT"
 OTP_SEND_FAILED = "OTP_SEND_FAILED"
+MAX_AVATAR_BYTES = 5 * 1024 * 1024
+AVATAR_CONTENT_TYPES = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
 
 
 def _auth_error(status_code: int, code: str, message: str) -> HTTPException:
@@ -594,6 +603,81 @@ async def get_me(current_user: CurrentUser):
             "avatar_url": current_user.avatar_url,
             "phone": current_user.phone,
         },
+    }
+
+
+@router.post("/profile/avatar")
+async def upload_profile_avatar(
+    current_user: CurrentUser,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    content_type = (file.content_type or "").lower()
+    extension = AVATAR_CONTENT_TYPES.get(content_type)
+    if extension is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Profile photo must be a JPG, PNG, or WebP image.",
+        )
+
+    contents = await file.read(MAX_AVATAR_BYTES + 1)
+    await file.close()
+    if not contents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Profile photo cannot be empty.",
+        )
+    if len(contents) > MAX_AVATAR_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Profile photo must be 5 MB or smaller.",
+        )
+
+    bucket = BUCKETS["avatars"]
+    path = f"profiles/{current_user.id}/{uuid.uuid4()}.{extension}"
+    try:
+        await asyncio.to_thread(
+            ensure_public_bucket,
+            bucket,
+            file_size_limit=MAX_AVATAR_BYTES,
+            allowed_mime_types=list(AVATAR_CONTENT_TYPES),
+        )
+        avatar_url = await asyncio.to_thread(
+            upload_file, bucket, path, contents, content_type
+        )
+    except Exception:
+        logger.exception("Profile avatar upload failed for user_id=%s", current_user.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Profile photo upload is temporarily unavailable.",
+        ) from None
+
+    previous_url = current_user.avatar_url
+    current_user.avatar_url = avatar_url
+    try:
+        await db.commit()
+        await db.refresh(current_user)
+    except Exception:
+        with suppress(Exception):
+            await asyncio.to_thread(delete_file, bucket, path)
+        raise
+
+    marker = f"/storage/v1/object/public/{bucket}/"
+    if previous_url and marker in previous_url:
+        previous_path = previous_url.split(marker, 1)[1]
+        if previous_path != path:
+            try:
+                await asyncio.to_thread(delete_file, bucket, previous_path)
+            except Exception:
+                logger.warning(
+                    "Could not remove previous avatar for user_id=%s",
+                    current_user.id,
+                )
+
+    return {
+        "success": True,
+        "message": "Profile photo updated",
+        "data": {"avatar_url": current_user.avatar_url},
     }
 
 

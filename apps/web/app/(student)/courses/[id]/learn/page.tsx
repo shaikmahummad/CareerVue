@@ -10,6 +10,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "../../../../../lib/api";
+import CourseVideoPlayer from "../../../../../components/CourseVideoPlayer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,54 +55,6 @@ interface EnrollmentSummary {
 
 // ─── Video player ─────────────────────────────────────────────────────────────
 
-function getYouTubeId(url: string): string | null {
-  // Handles watch?v=, youtu.be/, /embed/, and ?si= share links
-  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-  return m?.[1] ?? null;
-}
-
-function getVimeoId(url: string): string | null {
-  const m = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-  return m?.[1] ?? null;
-}
-
-function VideoPlayer({ url }: { url: string }) {
-  const ytId = getYouTubeId(url);
-  const vimeoId = getVimeoId(url);
-
-  const frameClass = "w-full aspect-video rounded-xl bg-black";
-
-  if (ytId) {
-    return (
-      <iframe
-        className={frameClass}
-        src={`https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1`}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-      />
-    );
-  }
-
-  if (vimeoId) {
-    return (
-      <iframe
-        className={frameClass}
-        src={`https://player.vimeo.com/video/${vimeoId}?title=0&byline=0&portrait=0`}
-        allow="autoplay; fullscreen; picture-in-picture"
-        allowFullScreen
-      />
-    );
-  }
-
-  return (
-    <video
-      src={url}
-      controls
-      className={`${frameClass} object-contain`}
-    />
-  );
-}
-
 // ─── Module list item ─────────────────────────────────────────────────────────
 
 function ModuleListItem({
@@ -120,20 +73,20 @@ function ModuleListItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
+      className={`w-full flex items-start gap-3 px-4 py-3.5 text-left border-l-2 transition-colors ${
         isActive
-          ? "bg-blue-50 border-r-2 border-blue-600"
-          : "hover:bg-gray-50 border-r-2 border-transparent"
+          ? "bg-blue-500/10 border-blue-400"
+          : "hover:bg-white/[0.04] border-transparent"
       }`}
     >
       {/* Status icon */}
       <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5 ${
-        isCompleted ? "bg-emerald-100" : isActive ? "bg-blue-100" : "bg-gray-100"
+        isCompleted ? "bg-emerald-500/15" : isActive ? "bg-blue-500/15" : "bg-white/[0.06]"
       }`}>
         {isCompleted ? (
           <CheckCircle2 size={13} className="text-emerald-600" />
         ) : (
-          <span className={`text-xs font-bold ${isActive ? "text-blue-600" : "text-gray-400"}`}>
+          <span className={`text-xs font-bold ${isActive ? "text-blue-300" : "text-gray-500"}`}>
             {index + 1}
           </span>
         )}
@@ -141,7 +94,7 @@ function ModuleListItem({
 
       <div className="flex-1 min-w-0">
         <p className={`text-sm leading-snug ${
-          isActive ? "font-semibold text-blue-700" : isCompleted ? "text-gray-500 line-through" : "font-medium text-gray-700"
+          isActive ? "font-semibold text-white" : isCompleted ? "text-gray-400" : "font-medium text-gray-300"
         }`}>
           {module.title}
         </p>
@@ -377,10 +330,10 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
         />
       )}
 
-      <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
+      <div className="h-screen flex flex-col bg-[#070b14] text-white overflow-hidden">
 
         {/* ── Top bar ── */}
-        <header className="flex-shrink-0 bg-gray-900 border-b border-gray-800 px-4 h-14 flex items-center gap-3">
+        <header className="flex-shrink-0 bg-[#0b1120] border-b border-white/[0.08] px-5 lg:px-8 h-16 flex items-center gap-4">
           <Link
             href={`/courses/${id}`}
             className="flex-shrink-0 flex items-center gap-1.5 text-gray-400 hover:text-white transition-colors text-sm"
@@ -423,10 +376,10 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
               <motion.aside
                 key="sidebar"
                 initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 280, opacity: 1 }}
+                animate={{ width: 312, opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
                 transition={{ duration: 0.2, ease: "easeInOut" }}
-                className="flex-shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto"
+                className="flex-shrink-0 bg-[#0b1120] border-r border-white/[0.08] overflow-y-auto"
               >
                 <div className="py-2">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-2">
@@ -448,24 +401,29 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
           </AnimatePresence>
 
           {/* ── Content ── */}
-          <main className="flex-1 overflow-y-auto bg-gray-950">
-            <div className="max-w-4xl mx-auto px-6 py-6 space-y-6">
+          <main className="flex-1 overflow-y-auto bg-[#070b14]">
+            <div className="max-w-5xl mx-auto px-4 sm:px-7 lg:px-10 py-7 lg:py-10 space-y-6">
 
               {/* Video player */}
               {currentModule.video_url && (
-                <VideoPlayer url={currentModule.video_url} />
+                <div className="overflow-hidden rounded-2xl border border-white/[0.1] bg-black shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+                  <CourseVideoPlayer
+                    url={currentModule.video_url}
+                    title={`${course.title} — ${currentModule.title}`}
+                  />
+                </div>
               )}
 
               {/* No media placeholder */}
               {!currentModule.video_url && !currentModule.pdf_url && (
-                <div className="aspect-video bg-gray-900 rounded-xl flex flex-col items-center justify-center gap-3 border border-gray-800">
+                <div className="aspect-video bg-[#0b1120] rounded-2xl flex flex-col items-center justify-center gap-3 border border-white/[0.08]">
                   <BookOpen size={40} className="text-gray-600" />
                   <p className="text-gray-500 text-sm">No video for this module</p>
                 </div>
               )}
 
               {/* Module info */}
-              <div className="space-y-3">
+              <section className="space-y-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-medium text-gray-500">
                     Lesson {currentIdx + 1} of {modules.length}
@@ -482,10 +440,10 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
                   )}
                 </div>
 
-                <h1 className="text-2xl font-bold text-white">{currentModule.title}</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">{currentModule.title}</h1>
 
                 {currentModule.description && (
-                  <p className="text-gray-400 leading-relaxed">{currentModule.description}</p>
+                  <p className="text-gray-300 leading-7">{currentModule.description}</p>
                 )}
 
                 {/* PDF resource */}
@@ -501,21 +459,21 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
                     <ExternalLink size={12} className="text-gray-500" />
                   </a>
                 )}
-              </div>
+              </section>
 
               {/* Action bar */}
-              <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+              <div className="grid grid-cols-3 items-center gap-3 pt-5 border-t border-white/[0.08]">
                 {/* Prev */}
                 <button
                   onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
                   disabled={currentIdx === 0}
-                  className="flex items-center gap-1.5 text-sm font-medium text-gray-400 hover:text-white px-4 py-2 rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="justify-self-start flex items-center gap-1.5 text-sm font-medium text-gray-400 hover:text-white px-3 sm:px-4 py-2.5 rounded-xl hover:bg-white/[0.05] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft size={16} /> Previous
                 </button>
 
                 {/* Mark complete / Complete course */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center gap-3">
                   {allCompleted && !enrollment?.completed_at ? (
                     <button
                       onClick={completeCourse}
@@ -553,7 +511,7 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
                 <button
                   onClick={() => setCurrentIdx((i) => Math.min(modules.length - 1, i + 1))}
                   disabled={currentIdx === modules.length - 1}
-                  className="flex items-center gap-1.5 text-sm font-medium text-gray-400 hover:text-white px-4 py-2 rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="justify-self-end flex items-center gap-1.5 text-sm font-medium text-gray-400 hover:text-white px-3 sm:px-4 py-2.5 rounded-xl hover:bg-white/[0.05] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   Next <ChevronRight size={16} />
                 </button>

@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { LayoutDashboard, CheckSquare, Users, BookOpen, BarChart3, Settings } from "lucide-react";
 import AppSidebar from "./AppSidebar";
 import { createClient } from "../lib/supabase/client";
+import { apiGet } from "../lib/api";
+
+interface CurrentProfile {
+  full_name: string;
+  avatar_url: string | null;
+}
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Overview",   icon: LayoutDashboard },
@@ -18,6 +24,7 @@ const NAV_ITEMS = [
 export default function AdminNavbar() {
   const router = useRouter();
   const [userName, setUserName] = useState("Admin User");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -25,6 +32,13 @@ export default function AdminNavbar() {
       const { data: { session } } = await supabase.auth.getSession();
       const name = session?.user?.user_metadata?.full_name as string | undefined;
       if (name) setUserName(name);
+      try {
+        const profile = await apiGet<CurrentProfile>("/api/v1/auth/me");
+        setUserName(profile.full_name);
+        setAvatarUrl(profile.avatar_url);
+      } catch {
+        // Keep the session metadata fallback when the API is unavailable.
+      }
     })();
   }, []);
 
@@ -40,6 +54,7 @@ export default function AdminNavbar() {
       tierLabel="Admin Control Center"
       userName={userName}
       userRoleLabel="Platform Admin"
+      avatarUrl={avatarUrl}
       showUpgrade={false}
       settingsHref="/admin/settings"
       onLogout={handleLogout}

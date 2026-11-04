@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Settings, LogOut, TrendingUp, Zap, PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -18,6 +19,7 @@ interface AppSidebarProps {
   tierLabel: string;
   userName: string;
   userRoleLabel: string;
+  avatarUrl?: string | null;
   showUpgrade?: boolean;
   settingsHref?: string;
   onLogout: () => void;
@@ -32,6 +34,7 @@ export default function AppSidebar({
   tierLabel,
   userName,
   userRoleLabel,
+  avatarUrl = null,
   showUpgrade = true,
   settingsHref = "/settings",
   onLogout,
@@ -39,6 +42,16 @@ export default function AppSidebar({
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null);
+  const currentAvatarUrl = uploadedAvatarUrl ?? avatarUrl;
+
+  useEffect(() => {
+    function updateAvatar(event: Event) {
+      setUploadedAvatarUrl((event as CustomEvent<string>).detail);
+    }
+    window.addEventListener("careervue:avatar-updated", updateAvatar);
+    return () => window.removeEventListener("careervue:avatar-updated", updateAvatar);
+  }, []);
 
   // Read persisted state on mount and set CSS variable
   useEffect(() => {
@@ -191,8 +204,17 @@ export default function AppSidebar({
         <div className={`flex items-center gap-3 rounded-xl hover:bg-white/[0.03] transition-colors mt-1
           ${collapsed ? "justify-center px-0 py-2" : "px-3 py-2.5"}
         `}>
-          <div className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {initials}
+          <div className="relative w-8 h-8 rounded-full overflow-hidden gradient-primary flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+            {currentAvatarUrl ? (
+              <Image
+                src={currentAvatarUrl}
+                alt={`${userName}'s profile photo`}
+                fill
+                sizes="32px"
+                unoptimized
+                className="object-cover"
+              />
+            ) : initials}
           </div>
           {!collapsed && (
             <>
