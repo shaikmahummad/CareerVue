@@ -17,7 +17,10 @@
     "test:catalogs": "python scripts/ci/generate_test_catalogs.py",
     "dev:web": "turbo run dev --filter=web",
     "dev:mobile": "turbo run dev --filter=mobile",
-    "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000"
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000",
+    "test:load": "python tests/load/run_load_tests.py",
+    "test:dast": "python tests/dast/run_dast_tests.py",
+    "bundle:reports": "python scripts/ci/bundle_reports.py"
   },
   "devDependencies": {
     "@expo/dom-webview": "57.0.1",

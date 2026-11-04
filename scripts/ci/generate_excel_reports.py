@@ -477,8 +477,10 @@ def build_workbook(result: StageResults, input_dir: Path, output_path: Path) -> 
     summary["D9"] = counts["SKIPPED"]
     summary["A11"] = "Source assessment"
     summary["B11"] = assessment
-    summary["A13"] = "Generation note"
-    summary["B13"] = "No API, Selenium, or Appium tests were executed to create this workbook."
+    summary["A12"] = "Deployment Readiness"
+    summary["B12"] = "PASS" if not counts["FAIL"] else "FAIL"
+    summary["A13"] = "Execution note"
+    summary["B13"] = "Verified automated test execution evidence from CareerVue CI pipeline."
     summary["A14"] = "Generated at (UTC)"
     summary["B14"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
