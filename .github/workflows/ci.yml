@@ -128,7 +128,6 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      deployment: false
     outputs:
       web_url: ${{ steps.config.outputs.web_url }}
       api_url: ${{ steps.config.outputs.api_url }}
