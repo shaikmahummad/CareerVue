@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import os
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from typing import Any
 
 
-def create_driver(browser: str = None, headless: bool = None) -> webdriver.Remote:
+def create_driver(browser: str = None, headless: bool = None) -> Any:
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options as ChromeOptions
+        from selenium.webdriver.firefox.options import Options as FirefoxOptions
+    except ImportError:
+        return None
+
     browser = (browser or os.getenv("E2E_BROWSER", "chrome")).lower()
     if headless is None:
         headless = os.getenv("E2E_HEADLESS", "true").lower() != "false"
@@ -30,4 +35,3 @@ def create_driver(browser: str = None, headless: bool = None) -> webdriver.Remot
 
     driver.set_page_load_timeout(30)
     return driver
-
