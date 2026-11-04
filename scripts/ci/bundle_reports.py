@@ -7,6 +7,8 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from generate_excel_reports import generate_all
+
 
 STAGES = (
     "routing",
@@ -69,6 +71,8 @@ def main() -> None:
     summary_dir = args.output / "summary"
     summary_dir.mkdir(exist_ok=True)
     (summary_dir / "pipeline-summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    generate_all(args.output, args.output / "excel", validate=True)
 
     rows = "".join(
         f"<tr><td>{html.escape(stage)}</td><td class='{html.escape(item['result'])}'>{html.escape(item['result'])}</td><td>{html.escape(item.get('details', ''))}</td></tr>"

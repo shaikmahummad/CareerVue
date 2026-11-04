@@ -67,6 +67,8 @@ jobs:
               - '.github/workflows/report.yml'
               - 'scripts/ci/write_status.py'
               - 'scripts/ci/bundle_reports.py'
+              - 'scripts/ci/generate_excel_reports.py'
+              - 'scripts/ci/requirements-reports.txt'
       - name: Determine affected build jobs
         id: route
         env:
