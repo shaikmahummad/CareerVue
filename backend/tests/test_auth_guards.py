@@ -27,7 +27,8 @@ class FakeSession:
         self.commits = 0
 
     async def execute(self, _statement):
-        return ScalarResult(self.profile)
+        self.execute_count = getattr(self, "execute_count", 0) + 1
+        return ScalarResult(self.profile if self.execute_count == 1 else None)
 
     async def commit(self):
         self.commits += 1
@@ -72,7 +73,12 @@ class VerifiedSessionTests(unittest.IsolatedAsyncioTestCase):
             id=str(user_id),
             email_confirmed_at=datetime.now(timezone.utc),
         )
-        profile = SimpleNamespace(id=user_id, email_verified=False)
+        profile = SimpleNamespace(
+            id=user_id,
+            email="user@gmail.com",
+            role="student",
+            email_verified=False,
+        )
         db = FakeSession(profile)
         with patch(
             "app.dependencies.supabase_admin.auth.get_user",
