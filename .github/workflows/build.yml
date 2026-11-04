@@ -157,6 +157,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Reclaim runner disk space for Android native build
+        shell: bash
+        run: |
+          sudo rm -rf \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/local/.ghcup \
+            /usr/local/lib/android/sdk/system-images \
+            /usr/share/dotnet \
+            /usr/share/swift
+          df -h /
       - name: Report disk usage before npm install
         run: |
           df -h /
