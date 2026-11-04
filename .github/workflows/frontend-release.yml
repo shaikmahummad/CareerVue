@@ -27,7 +27,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: frontend-release-${{ github.ref }}
+  group: frontend-release-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

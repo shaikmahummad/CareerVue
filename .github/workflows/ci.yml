@@ -26,7 +26,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: careervue-ci-${{ github.workflow }}-${{ github.ref }}
+  group: careervue-ci-v2-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
