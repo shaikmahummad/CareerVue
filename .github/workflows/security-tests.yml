@@ -28,16 +28,27 @@ jobs:
     if: inputs.web_url != '' && inputs.api_url != ''
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    environment: staging
+    environment:
+      name: staging
+      deployment: false
     env:
       SECURITY_WEB_URL: ${{ inputs.web_url }}
       SECURITY_API_URL: ${{ inputs.api_url }}
       ZAP_FAIL_ON: ${{ vars.ZAP_FAIL_ON || 'high' }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/ci/requirements-reports.txt
+      - name: Install report dependencies
+        run: python -m pip install -r scripts/ci/requirements-reports.txt
       - name: Reject known production targets
         shell: bash
         run: |
+          test -n "$SECURITY_WEB_URL"
+          test -n "$SECURITY_API_URL"
           case "$SECURITY_WEB_URL $SECURITY_API_URL" in
             *careervue-api.welcos.in*) echo "Production DAST is prohibited by this routine workflow"; exit 2 ;;
           esac
@@ -58,9 +69,23 @@ jobs:
             -r artifacts/security/zap-api-report.html
       - name: Enforce configured severity gate
         run: python scripts/ci/zap_summary.py artifacts/security/zap-web-report.json artifacts/security/zap-api-report.json --output artifacts/security/severity-summary.json --fail-on "$ZAP_FAIL_ON"
+      - name: Generate DAST test-case catalog
+        if: always()
+        run: python scripts/ci/generate_test_catalogs.py --suite dast --output artifacts/security/test-cases
       - name: Write security status
         if: always()
         run: python scripts/ci/write_status.py security "${{ job.status }}" --details "OWASP ZAP passive baseline; gate=$ZAP_FAIL_ON" --output artifacts/security/status.json
+      - name: Publish DAST summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# DAST Security Test Summary"
+            echo
+            echo "Result: **${{ job.status }}**"
+            echo "Catalog: **351+ repository-derived cases**"
+            echo "Severity gate: \`$ZAP_FAIL_ON\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -68,4 +93,3 @@ jobs:
           path: artifacts/security
           if-no-files-found: error
           retention-days: 14
-

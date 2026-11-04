@@ -12,6 +12,21 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CiSupportScriptTests(unittest.TestCase):
+    def test_test_catalogs_are_repository_derived_and_unique(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/ci/generate_test_catalogs.py"), "--output", str(ROOT / "test-cases")],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        counts = json.loads(result.stdout)
+        self.assertTrue(all(count >= 351 for count in counts.values()))
+        for suite, count in counts.items():
+            rows = json.loads((ROOT / "test-cases" / f"{suite}_test_cases.json").read_text())
+            self.assertEqual(len(rows), count)
+            self.assertEqual(len({row["test_id"] for row in rows}), count)
+            self.assertTrue(all(row["status"] == "NOT_EXECUTED" for row in rows))
+
     def test_zap_summary_aggregates_and_enforces_high_findings(self):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
@@ -79,4 +94,3 @@ class CiSupportScriptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

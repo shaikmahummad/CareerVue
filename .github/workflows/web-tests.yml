@@ -6,6 +6,9 @@ on:
       base_url:
         type: string
         default: ""
+      require_staging:
+        type: boolean
+        default: false
     secrets:
       E2E_STUDENT_EMAIL: { required: false }
       E2E_STUDENT_PASSWORD: { required: false }
@@ -19,11 +22,14 @@ jobs:
   selenium:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    environment:
+      name: staging
+      deployment: false
     env:
       WEB_BASE_URL: ${{ inputs.base_url || 'http://localhost:3000' }}
       E2E_BROWSER: chrome
       E2E_HEADLESS: "true"
-      E2E_REQUIRE_AUTH: ${{ inputs.base_url != '' && 'true' || 'false' }}
+      E2E_REQUIRE_AUTH: ${{ inputs.require_staging && 'true' || 'false' }}
       E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
       E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
       E2E_TUTOR_EMAIL: ${{ secrets.E2E_TUTOR_EMAIL }}
@@ -33,6 +39,16 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
     steps:
       - uses: actions/checkout@v4
+      - name: Validate staging target and credentials
+        if: inputs.require_staging
+        shell: bash
+        run: |
+          test -n "$WEB_BASE_URL"
+          test "$WEB_BASE_URL" != "http://localhost:3000"
+          test -n "$E2E_STUDENT_EMAIL"
+          test -n "$E2E_STUDENT_PASSWORD"
+          test -n "$E2E_TUTOR_EMAIL"
+          test -n "$E2E_TUTOR_PASSWORD"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -62,12 +78,26 @@ jobs:
           python -m pytest tests/selenium -v
           --junitxml=artifacts/selenium/junit-results.xml
           --html=artifacts/selenium/report.html --self-contained-html
+      - name: Generate Selenium test-case catalog
+        if: always()
+        run: python scripts/ci/generate_test_catalogs.py --suite selenium --output artifacts/selenium/test-cases
       - name: Preserve local server log
         if: always() && inputs.base_url == ''
         run: cp web-server.log artifacts/selenium/web-server.log || true
       - name: Write Selenium status
         if: always()
         run: python scripts/ci/write_status.py selenium "${{ job.status }}" --details "Selenium web journeys ($WEB_BASE_URL)" --output artifacts/selenium/status.json
+      - name: Publish Selenium summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Selenium Web Test Summary"
+            echo
+            echo "Result: **${{ job.status }}**"
+            echo "Catalog: **351+ repository-derived cases**"
+            echo "Base URL: \`$WEB_BASE_URL\`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -75,4 +105,3 @@ jobs:
           path: artifacts/selenium
           if-no-files-found: error
           retention-days: 14
-

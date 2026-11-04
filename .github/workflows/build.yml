@@ -12,6 +12,18 @@ on:
       run_mobile:
         type: boolean
         default: true
+      require_mobile_staging_config:
+        type: boolean
+        default: false
+      mobile_api_url:
+        type: string
+        default: ""
+      mobile_supabase_url:
+        type: string
+        default: ""
+      mobile_supabase_anon_key:
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -122,11 +134,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      EXPO_PUBLIC_API_URL: ${{ vars.STAGING_API_URL || 'https://example.test' }}
-      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL || 'https://example.supabase.co' }}
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.STAGING_SUPABASE_ANON_KEY || 'test-anon-key' }}
+      EXPO_PUBLIC_API_URL: ${{ inputs.mobile_api_url || 'https://example.test' }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ inputs.mobile_supabase_url || 'https://example.supabase.co' }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ inputs.mobile_supabase_anon_key || 'test-anon-key' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Require real staging configuration for the Appium APK
+        if: inputs.require_mobile_staging_config
+        shell: bash
+        run: |
+          test -n "$EXPO_PUBLIC_API_URL"
+          test -n "$EXPO_PUBLIC_SUPABASE_URL"
+          test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          test "$EXPO_PUBLIC_API_URL" != "https://example.test"
+          test "$EXPO_PUBLIC_SUPABASE_URL" != "https://example.supabase.co"
+          test "$EXPO_PUBLIC_SUPABASE_ANON_KEY" != "test-anon-key"
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

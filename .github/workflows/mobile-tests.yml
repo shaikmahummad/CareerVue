@@ -18,6 +18,9 @@ jobs:
   appium:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    environment:
+      name: staging
+      deployment: false
     env:
       E2E_REQUIRE_AUTH: ${{ inputs.require_auth }}
       E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
@@ -29,6 +32,12 @@ jobs:
       APPIUM_BASE_PATH: "/"
     steps:
       - uses: actions/checkout@v4
+      - name: Validate required staging credentials
+        if: inputs.require_auth
+        shell: bash
+        run: |
+          test -n "$E2E_STUDENT_EMAIL"
+          test -n "$E2E_STUDENT_PASSWORD"
       - uses: actions/download-artifact@v4
         with:
           name: mobile-build-apk
@@ -72,9 +81,22 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: sh scripts/ci/run_appium.sh
+      - name: Generate Appium test-case catalog
+        if: always()
+        run: python scripts/ci/generate_test_catalogs.py --suite appium --output artifacts/appium/test-cases
       - name: Write Appium status
         if: always()
         run: python scripts/ci/write_status.py appium "${{ job.status }}" --details "Appium Android emulator journeys" --output artifacts/appium/status.json
+      - name: Publish Appium summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "# Appium Mobile Test Summary"
+            echo
+            echo "Result: **${{ job.status }}**"
+            echo "Catalog: **351+ repository-derived cases**"
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

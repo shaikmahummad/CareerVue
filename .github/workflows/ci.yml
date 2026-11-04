@@ -15,8 +15,13 @@ on:
         description: Run performance and passive DAST against staging
         type: boolean
         default: false
+      run_full_validation:
+        description: Run Selenium, Appium, performance, and DAST validation
+        type: boolean
+        default: false
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -68,7 +73,9 @@ jobs:
               - 'scripts/ci/write_status.py'
               - 'scripts/ci/bundle_reports.py'
               - 'scripts/ci/generate_excel_reports.py'
+              - 'scripts/ci/generate_test_catalogs.py'
               - 'scripts/ci/requirements-reports.txt'
+              - 'test-cases/**'
       - name: Determine affected build jobs
         id: route
         env:
@@ -107,34 +114,176 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  build:
+  staging-config:
     needs: changes
-    if: needs.changes.outputs.build == 'true'
+    if: >-
+      (github.event_name == 'pull_request' &&
+        (needs.changes.outputs.web == 'true' ||
+         needs.changes.outputs.mobile == 'true' ||
+         needs.changes.outputs.shared == 'true' ||
+         needs.changes.outputs.workflow == 'true')) ||
+      (github.event_name == 'workflow_dispatch' &&
+        (inputs.run_staging_scans || inputs.run_full_validation)) ||
+      (github.event_name == 'push' &&
+        (((github.ref == 'refs/heads/main') &&
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.mobile == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+         ((github.ref != 'refs/heads/main') &&
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+         vars.RUN_STAGING_SCANS == 'true'))
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    outputs:
+      web_url: ${{ steps.config.outputs.web_url }}
+      api_url: ${{ steps.config.outputs.api_url }}
+      supabase_url: ${{ steps.config.outputs.supabase_url }}
+      supabase_anon_key: ${{ steps.config.outputs.supabase_anon_key }}
+    steps:
+      - name: Validate and expose non-secret staging configuration
+        id: config
+        shell: bash
+        env:
+          STAGING_WEB_URL: ${{ vars.STAGING_WEB_URL }}
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+          E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
+          E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
+          E2E_TUTOR_EMAIL: ${{ secrets.E2E_TUTOR_EMAIL }}
+          E2E_TUTOR_PASSWORD: ${{ secrets.E2E_TUTOR_PASSWORD }}
+        run: |
+          for name in \
+            STAGING_WEB_URL STAGING_API_URL STAGING_SUPABASE_URL STAGING_SUPABASE_ANON_KEY \
+            E2E_STUDENT_EMAIL E2E_STUDENT_PASSWORD E2E_TUTOR_EMAIL E2E_TUTOR_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "Required staging configuration is missing: $name" >&2
+              exit 1
+            fi
+          done
+          {
+            echo "web_url=$STAGING_WEB_URL"
+            echo "api_url=$STAGING_API_URL"
+            echo "supabase_url=$STAGING_SUPABASE_URL"
+            echo "supabase_anon_key=$STAGING_SUPABASE_ANON_KEY"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [changes, staging-config]
+    if: >-
+      always() &&
+      needs.changes.result == 'success' &&
+      (needs.staging-config.result == 'success' || needs.staging-config.result == 'skipped') &&
+      (needs.changes.outputs.build == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.run_full_validation))
     uses: ./.github/workflows/build.yml
     with:
-      run_backend: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflow == 'true' }}
-      run_web: ${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true' }}
-      run_mobile: ${{ needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true' }}
+      run_backend: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_full_validation) || needs.changes.outputs.backend == 'true' || needs.changes.outputs.workflow == 'true' }}
+      run_web: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_full_validation) || needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true' }}
+      run_mobile: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_full_validation) || needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true' }}
+      require_mobile_staging_config: ${{ needs.staging-config.result == 'success' }}
+      mobile_api_url: ${{ needs.staging-config.outputs.api_url }}
+      mobile_supabase_url: ${{ needs.staging-config.outputs.supabase_url }}
+      mobile_supabase_anon_key: ${{ needs.staging-config.outputs.supabase_anon_key }}
+
+  selenium:
+    needs: [changes, staging-config, build]
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      needs.staging-config.result == 'success' &&
+      (
+        (github.event_name == 'pull_request' &&
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'workflow_dispatch' &&
+          inputs.run_full_validation)
+      )
+    uses: ./.github/workflows/web-tests.yml
+    with:
+      base_url: ${{ needs.staging-config.outputs.web_url }}
+      require_staging: true
+    secrets:
+      E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
+      E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
+      E2E_TUTOR_EMAIL: ${{ secrets.E2E_TUTOR_EMAIL }}
+      E2E_TUTOR_PASSWORD: ${{ secrets.E2E_TUTOR_PASSWORD }}
+
+  appium:
+    needs: [changes, staging-config, build]
+    permissions:
+      actions: read
+      contents: read
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      needs.staging-config.result == 'success' &&
+      (
+        (github.event_name == 'pull_request' &&
+          (needs.changes.outputs.mobile == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          (needs.changes.outputs.mobile == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'workflow_dispatch' &&
+          inputs.run_full_validation)
+      )
+    uses: ./.github/workflows/mobile-tests.yml
+    with:
+      require_auth: true
+    secrets:
+      E2E_STUDENT_EMAIL: ${{ secrets.E2E_STUDENT_EMAIL }}
+      E2E_STUDENT_PASSWORD: ${{ secrets.E2E_STUDENT_PASSWORD }}
 
   performance:
-    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') && vars.STAGING_API_URL != '' && ((github.event_name == 'workflow_dispatch' && inputs.run_staging_scans) || (github.event_name == 'push' && vars.RUN_STAGING_SCANS == 'true')) }}
-    needs: [changes, build]
+    if: >-
+      always() &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped') &&
+      needs.staging-config.result == 'success' &&
+      (
+        (github.event_name == 'pull_request' &&
+          (needs.changes.outputs.web == 'true' ||
+           needs.changes.outputs.mobile == 'true' ||
+           needs.changes.outputs.shared == 'true' ||
+           needs.changes.outputs.workflow == 'true')) ||
+        (github.event_name == 'workflow_dispatch' &&
+          (inputs.run_staging_scans || inputs.run_full_validation)) ||
+        (github.event_name == 'push' &&
+          vars.RUN_STAGING_SCANS == 'true')
+      )
+    needs: [changes, staging-config, build]
     uses: ./.github/workflows/performance-tests.yml
     with:
-      base_url: ${{ vars.STAGING_API_URL }}
+      base_url: ${{ needs.staging-config.outputs.api_url }}
       profile: ${{ github.event_name == 'workflow_dispatch' && inputs.performance_profile || 'smoke' }}
 
   security:
-    if: ${{ always() && needs.performance.result == 'success' && vars.STAGING_WEB_URL != '' && vars.STAGING_API_URL != '' }}
-    needs: performance
+    if: >-
+      always() &&
+      needs.performance.result == 'success' &&
+      needs.staging-config.result == 'success'
+    needs: [staging-config, performance]
     uses: ./.github/workflows/security-tests.yml
     with:
-      web_url: ${{ vars.STAGING_WEB_URL }}
-      api_url: ${{ vars.STAGING_API_URL }}
+      web_url: ${{ needs.staging-config.outputs.web_url }}
+      api_url: ${{ needs.staging-config.outputs.api_url }}
 
   reports:
     if: always()
-    needs: [changes, build, performance, security]
+    needs: [changes, build, selenium, appium, performance, security]
     permissions:
       actions: read
       contents: read
@@ -142,7 +291,7 @@ jobs:
 
   quality-gate:
     if: always()
-    needs: [changes, build, performance, security, reports]
+    needs: [changes, build, selenium, appium, performance, security, reports]
     runs-on: ubuntu-latest
     steps:
       - name: Enforce mandatory results
@@ -151,23 +300,32 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
+          SELENIUM_RESULT: ${{ needs.selenium.result }}
+          APPIUM_RESULT: ${{ needs.appium.result }}
           REPORT_RESULT: ${{ needs.reports.result }}
+          FULL_VALIDATION: ${{ (github.event_name == 'pull_request' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true')) || (github.event_name == 'workflow_dispatch' && inputs.run_full_validation) }}
         shell: bash
         run: |
           if [[ "$BUILD_REQUIRED" == "true" ]]; then test "$BUILD_RESULT" = success; fi
           test "$REPORT_RESULT" = success
+          if [[ "$FULL_VALIDATION" == "true" ]]; then
+            test "$SELENIUM_RESULT" = success
+            test "$APPIUM_RESULT" = success
+            test "$PERFORMANCE_RESULT" = success
+            test "$SECURITY_RESULT" = success
+          fi
           test "$PERFORMANCE_RESULT" != failure
           test "$PERFORMANCE_RESULT" != cancelled
           test "$SECURITY_RESULT" != failure
           test "$SECURITY_RESULT" != cancelled
 
   deploy-staging:
-    needs: [changes, quality-gate]
-    if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true') && vars.WEB_DEPLOY_ENABLED == 'true' && vars.STAGING_WEB_URL != '' }}
+    needs: [changes, staging-config, quality-gate]
+    if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && needs.staging-config.result == 'success' && (needs.changes.outputs.web == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.workflow == 'true') && vars.WEB_DEPLOY_ENABLED == 'true' }}
     uses: ./.github/workflows/deploy.yml
     with:
       environment: staging
-      web_url: ${{ vars.STAGING_WEB_URL }}
+      web_url: ${{ needs.staging-config.outputs.web_url }}
     secrets: inherit
 
   deploy-production:
