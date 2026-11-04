@@ -296,6 +296,35 @@ async def list_users(
     }
 
 
+@router.get("/users/counts")
+async def get_user_role_counts(
+    current_user: AdminUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return unfiltered user totals for the user-management filter badges."""
+    rows = (
+        await db.execute(
+            select(Profile.role, func.count(Profile.id)).group_by(Profile.role)
+        )
+    ).all()
+    counts = {
+        "all": 0,
+        "student": 0,
+        "tutor": 0,
+        "admin": 0,
+        "deactivated": 0,
+    }
+    for role, count in rows:
+        counts[role] = count
+        counts["all"] += count
+
+    return {
+        "success": True,
+        "message": "User role counts fetched",
+        "data": counts,
+    }
+
+
 @router.put("/users/{user_id}/role")
 async def change_user_role(
     user_id: str,
