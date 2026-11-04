@@ -21,6 +21,7 @@ on:
         default: false
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -203,6 +204,9 @@ jobs:
 
   appium:
     needs: [changes, staging-config, build]
+    permissions:
+      actions: read
+      contents: read
     if: >-
       always() &&
       needs.build.result == 'success' &&
