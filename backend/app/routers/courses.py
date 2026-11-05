@@ -16,6 +16,7 @@ from app.models.course import Course, CourseApproval, CourseModule
 from app.models.enrollment import Enrollment
 from app.models.social import Review
 from app.models.user import Profile, Student, Tutor
+from app.utils.supabase import supabase_auth
 from app.utils.storage import BUCKETS, delete_file, ensure_public_bucket, upload_file
 
 _optional_bearer = HTTPBearer(auto_error=False)
@@ -29,14 +30,13 @@ async def get_optional_user(
     if credentials is None:
         return None
     # Reuse the full dependency logic by temporarily building the needed inputs
-    from app.utils.supabase import supabase_admin
     import uuid as _uuid
     from sqlalchemy import select as _select
     from app.models.user import Profile as _Profile
 
     token = credentials.credentials
     try:
-        user_response = supabase_admin.auth.get_user(token)
+        user_response = supabase_auth.auth.get_user(token)
         supabase_user = user_response.user
         if not supabase_user:
             raise HTTPException(

@@ -57,7 +57,7 @@ class VerifiedSessionTests(unittest.IsolatedAsyncioTestCase):
             confirmed_at=None,
         )
         with (
-            patch("app.dependencies.supabase_admin.auth.get_user", return_value=SimpleNamespace(user=user)),
+            patch("app.dependencies.supabase_auth.auth.get_user", return_value=SimpleNamespace(user=user)),
             self.assertRaises(HTTPException) as raised,
         ):
             await get_current_user(
@@ -81,7 +81,7 @@ class VerifiedSessionTests(unittest.IsolatedAsyncioTestCase):
         )
         db = FakeSession(profile)
         with patch(
-            "app.dependencies.supabase_admin.auth.get_user",
+            "app.dependencies.supabase_auth.auth.get_user",
             return_value=SimpleNamespace(user=user),
         ):
             result = await get_current_user(

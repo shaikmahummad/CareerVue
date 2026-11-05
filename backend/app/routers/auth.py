@@ -27,7 +27,7 @@ from app.schemas.auth import (
     RegisterTutorRequest,
     VerifyOtpRequest,
 )
-from app.utils.supabase import supabase_admin
+from app.utils.supabase import supabase_admin, supabase_auth
 from app.services.email_verification_service import (
     RESEND_COOLDOWN,
     hash_verification_token,
@@ -509,7 +509,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     # Authenticate first. Verification state must not be disclosed and OTPs
     # must not be issued until the caller has supplied the correct password.
     try:
-        response = supabase_admin.auth.sign_in_with_password(
+        response = supabase_auth.auth.sign_in_with_password(
             {"email": body.email, "password": body.password}
         )
     except Exception as exc:
@@ -689,7 +689,7 @@ async def logout(current_user: CurrentUser):
 @router.post("/refresh")
 async def refresh_token(body: RefreshRequest):
     try:
-        response = supabase_admin.auth.refresh_session(body.refresh_token)
+        response = supabase_auth.auth.refresh_session(body.refresh_token)
         session = response.session
         return {
             "success": True,

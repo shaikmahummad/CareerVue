@@ -323,7 +323,7 @@ class LoginTests(unittest.TestCase):
                 user_metadata={"role": "student", "full_name": "Student"},
             ),
         )
-        with patch.object(auth.supabase_admin.auth, "sign_in_with_password", return_value=response):
+        with patch.object(auth.supabase_auth.auth, "sign_in_with_password", return_value=response):
             result = __import__("asyncio").run(login_result(
                 {"email": " USER@Gmail.com ", "password": "secret1"},
                 FlowSession(profile),
@@ -334,7 +334,7 @@ class LoginTests(unittest.TestCase):
         for provider_error in ("Invalid login credentials", "Email not confirmed", "User missing"):
             with (
                 self.subTest(provider_error=provider_error),
-                patch.object(auth.supabase_admin.auth, "sign_in_with_password", side_effect=Exception(provider_error)),
+                patch.object(auth.supabase_auth.auth, "sign_in_with_password", side_effect=Exception(provider_error)),
                 self.assertRaises(HTTPException) as raised,
             ):
                 __import__("asyncio").run(login_result(
@@ -353,7 +353,7 @@ class LoginTests(unittest.TestCase):
         )
         with (
             patch.object(
-                auth.supabase_admin.auth,
+                auth.supabase_auth.auth,
                 "sign_in_with_password",
                 side_effect=Exception("Email not confirmed"),
             ) as sign_in,
@@ -380,7 +380,7 @@ class LoginTests(unittest.TestCase):
             patch.object(auth, "send_verification_email", new_callable=AsyncMock) as send,
             patch.object(auth, "issue_verification_token", new_callable=AsyncMock) as issue,
             patch.object(
-                auth.supabase_admin.auth,
+                auth.supabase_auth.auth,
                 "sign_in_with_password",
                 side_effect=Exception("Email not confirmed"),
             ) as sign_in,
@@ -405,7 +405,7 @@ class LoginTests(unittest.TestCase):
         )
         with (
             patch.object(
-                auth.supabase_admin.auth,
+                auth.supabase_auth.auth,
                 "sign_in_with_password",
                 side_effect=Exception("Email not confirmed"),
             ),
@@ -444,7 +444,7 @@ class LoginTests(unittest.TestCase):
         )
         session = FlowSession(profile)
         with patch.object(
-            auth.supabase_admin.auth,
+            auth.supabase_auth.auth,
             "sign_in_with_password",
             return_value=response,
         ):
@@ -478,7 +478,7 @@ class LoginTests(unittest.TestCase):
         )
         with (
             patch.object(
-                auth.supabase_admin.auth,
+                auth.supabase_auth.auth,
                 "sign_in_with_password",
                 return_value=response,
             ),

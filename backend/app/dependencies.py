@@ -8,7 +8,7 @@ from typing import Annotated, Optional
 import uuid
 
 from app.database import get_db
-from app.utils.supabase import supabase_admin
+from app.utils.supabase import supabase_auth
 from app.models.user import Profile
 from app.services.registration_service import reconcile_pending_registration
 from app.config import settings  # noqa: F401 — kept for potential future use
@@ -32,7 +32,7 @@ async def get_current_user(
 
     # Verify token with Supabase (handles all JWT validation)
     try:
-        user_response = supabase_admin.auth.get_user(token)
+        user_response = supabase_auth.auth.get_user(token)
         supabase_user = user_response.user
         if not supabase_user:
             raise HTTPException(status_code=401, detail="Invalid token")

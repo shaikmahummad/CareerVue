@@ -63,8 +63,14 @@ _anon_key, _service_key, supabase_admin_credential_status = resolve_supabase_key
 # Service-role client for admin operations (storage, auth admin).
 supabase_admin: Client = create_client(settings.supabase_url, _service_key)
 
-# Anon client for public operations
-supabase_anon: Client = create_client(settings.supabase_url, _anon_key)
+# Authentication mutates the client's active Authorization header. Keep it on
+# a separate client so a user login can never downgrade the service-role client
+# later used for Storage or Auth Admin operations.
+supabase_auth: Client = create_client(settings.supabase_url, _anon_key)
+
+# Backward-compatible public client alias. Neither name may be used for admin
+# Storage operations.
+supabase_anon: Client = supabase_auth
 
 
 def get_storage_url(bucket: str, path: str) -> str:
