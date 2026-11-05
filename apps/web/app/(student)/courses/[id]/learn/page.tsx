@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, CheckCircle2, Play, FileText,
   Clock, Menu, X, Trophy, Loader2, ExternalLink, BookOpen,
-  AlertCircle,
+  AlertCircle, Star, Download,
 } from "lucide-react";
 import { apiGet, apiPost, apiPut } from "../../../../../lib/api";
 import CourseVideoPlayer from "../../../../../components/CourseVideoPlayer";
@@ -44,6 +44,7 @@ interface EnrollmentDetail {
   progress_pct: number;
   completed_at: string | null;
   module_progress: ModuleProgressItem[];
+  certificate: { id: string; download_path: string } | null;
 }
 
 interface EnrollmentSummary {
@@ -114,7 +115,7 @@ function ModuleListItem({
 
 // ─── Completion overlay ───────────────────────────────────────────────────────
 
-function CompletionOverlay({ courseTitle }: { courseTitle: string }) {
+function CompletionOverlay({ courseTitle, certificatePath }: { courseTitle: string; certificatePath: string | null }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -152,6 +153,7 @@ function CompletionOverlay({ courseTitle }: { courseTitle: string }) {
         </p>
 
         <div className="flex flex-col gap-2">
+          {certificatePath && <a href={`${process.env.NEXT_PUBLIC_API_URL || "https://careervue-api.welcos.in"}${certificatePath}`} className="w-full bg-emerald-600 text-white font-semibold py-3 rounded-xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"><Download size={16} /> Download Certificate</a>}
           <Link
             href="/dashboard"
             className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors"
@@ -191,6 +193,8 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
   const [marking, setMarking] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [certificatePath, setCertificatePath] = useState<string | null>(null);
 
   // ── Load data ───────────────────────────────────────────────────────────────
 
@@ -219,8 +223,13 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
       }
 
       // Load full enrollment with module progress
-      const detail = await apiGet<EnrollmentDetail>(`/api/v1/enrollments/${enr.id}`);
+      const [detail, moduleRatings] = await Promise.all([
+        apiGet<EnrollmentDetail>(`/api/v1/enrollments/${enr.id}`),
+        apiGet<{ module_id: string; rating: number }[]>(`/api/v1/courses/${id}/my-module-ratings`),
+      ]);
       setEnrollment(detail);
+      setCertificatePath(detail.certificate?.download_path ?? null);
+      setRatings(Object.fromEntries(moduleRatings.map((rating) => [rating.module_id, rating.rating])));
 
       const done = new Set(detail.module_progress.map((mp) => mp.module_id));
       setCompletedIds(done);
@@ -277,12 +286,23 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
     if (!enrollment) return;
     setCompleting(true);
     try {
-      await apiPost(`/api/v1/enrollments/${enrollment.id}/complete`);
+      const result = await apiPost<{ certificate_download_path: string }>(`/api/v1/enrollments/${enrollment.id}/complete`);
+      setCertificatePath(result.certificate_download_path);
       setShowCelebration(true);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to complete course");
     } finally {
       setCompleting(false);
+    }
+  }
+
+  async function rateModule(rating: number) {
+    if (!currentModule || ratings[currentModule.id]) return;
+    try {
+      await apiPost(`/api/v1/courses/${id}/modules/${currentModule.id}/rating`, { rating });
+      setRatings((current) => ({ ...current, [currentModule.id]: rating }));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not submit rating");
     }
   }
 
@@ -327,6 +347,7 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
       {showCelebration && (
         <CompletionOverlay
           courseTitle={course.title}
+          certificatePath={certificatePath}
         />
       )}
 
@@ -460,6 +481,25 @@ export default function LearnPage({ params }: { params: Promise<{ id: string }> 
                   </a>
                 )}
               </section>
+
+              <section className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
+                <p className="text-sm font-semibold text-white">Rate this module</p>
+                <p className="text-xs text-gray-500 mt-1">Enrolled students can rate each module once.</p>
+                <div className="flex gap-2 mt-3">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button key={value} disabled={Boolean(ratings[currentModule.id])} onClick={() => void rateModule(value)} aria-label={`${value} stars`}>
+                      <Star size={24} className={value <= (ratings[currentModule.id] || 0) ? "fill-amber-400 text-amber-400" : "text-gray-600 hover:text-amber-300"} />
+                    </button>
+                  ))}
+                  {ratings[currentModule.id] && <span className="text-xs text-emerald-400 self-center ml-2">Rating submitted</span>}
+                </div>
+              </section>
+
+              {certificatePath && (
+                <a href={`${process.env.NEXT_PUBLIC_API_URL || "https://careervue-api.welcos.in"}${certificatePath}`} className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-300 border border-emerald-700/50 rounded-xl px-4 py-3">
+                  <Download size={16} /> Download your certificate
+                </a>
+              )}
 
               {/* Action bar */}
               <div className="grid grid-cols-3 items-center gap-3 pt-5 border-t border-white/[0.08]">

@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, Pressable, TextInput,
-  Switch, ActivityIndicator, Alert,
+  Switch, ActivityIndicator, Alert, Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { apiPost } from "../../lib/api";
+import { apiPost, apiPostForm } from "../../lib/api";
 
 const CATEGORIES = ["Programming", "Design", "Data Science", "Business", "DevOps", "Cybersecurity", "Other"];
 const LEVELS     = ["beginner", "intermediate", "advanced"];
@@ -21,6 +22,21 @@ export default function CreateCourseScreen() {
   const [tagsInput,     setTagsInput]     = useState("");
   const [durationHours, setDurationHours] = useState("");
   const [loading,       setLoading]       = useState(false);
+  const [thumbnail, setThumbnail] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [createdCourseId, setCreatedCourseId] = useState<string | null>(null);
+
+  const pickThumbnail = useCallback(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) { Alert.alert("Permission required", "Allow photo access to choose a course thumbnail."); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    if ((asset.fileSize ?? 0) > 10 * 1024 * 1024) {
+      Alert.alert("Image too large", "Choose a thumbnail that is 10 MB or smaller.");
+      return;
+    }
+    setThumbnail(asset);
+  }, []);
 
   const handleCreate = useCallback(async () => {
     if (!title.trim()) {
@@ -34,16 +50,27 @@ export default function CreateCourseScreen() {
         .map((t) => t.trim())
         .filter(Boolean);
 
-      const course = await apiPost<{ id: string }>("/api/v1/courses/", {
-        title:          title.trim(),
-        description:    description.trim() || null,
-        category:       category || null,
-        level:          level || null,
-        is_free:        isFree,
-        price:          isFree ? 0 : parseFloat(price) || 0,
-        tags,
-        duration_hours: durationHours ? parseFloat(durationHours) : null,
-      });
+      const course = createdCourseId ? { id: createdCourseId } : await apiPost<{ id: string }>("/api/v1/courses/", {
+          title:          title.trim(),
+          description:    description.trim() || null,
+          category:       category || null,
+          level:          level || null,
+          is_free:        isFree,
+          price:          isFree ? 0 : parseFloat(price) || 0,
+          tags,
+          duration_hours: durationHours ? parseFloat(durationHours) : null,
+        });
+      setCreatedCourseId(course.id);
+
+      if (thumbnail) {
+        const body = new FormData();
+        body.append("file", {
+          uri: thumbnail.uri,
+          name: thumbnail.fileName ?? "course-thumbnail.jpg",
+          type: thumbnail.mimeType ?? "image/jpeg",
+        } as any);
+        await apiPostForm(`/api/v1/courses/${course.id}/thumbnail`, body);
+      }
 
       router.replace(`/(tutor)/courses/${course.id}` as never);
     } catch (e: any) {
@@ -51,7 +78,7 @@ export default function CreateCourseScreen() {
     } finally {
       setLoading(false);
     }
-  }, [title, description, category, level, isFree, price, tagsInput, durationHours, router]);
+  }, [title, description, category, level, isFree, price, tagsInput, durationHours, router, thumbnail, createdCourseId]);
 
   return (
     <View className="flex-1 bg-gray-50">
@@ -178,6 +205,21 @@ export default function CreateCourseScreen() {
         {/* Additional details */}
         <View className="bg-white rounded-2xl border border-gray-100 p-5 gap-4">
           <Text className="text-sm font-semibold text-gray-700">Additional Details</Text>
+
+          <View className="gap-2">
+            <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Course Thumbnail</Text>
+            <Pressable onPress={pickThumbnail} className="border border-dashed border-gray-300 rounded-xl min-h-32 items-center justify-center overflow-hidden">
+              {thumbnail ? (
+                <Image source={{ uri: thumbnail.uri }} className="w-full h-36" resizeMode="cover" />
+              ) : (
+                <View className="items-center gap-2 py-6">
+                  <Ionicons name="image-outline" size={26} color="#6b7280" />
+                  <Text className="text-sm text-gray-500">Choose from device</Text>
+                  <Text className="text-xs text-gray-400">JPG, PNG or WebP · max 10 MB</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
 
           <View>
             <Text className="text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">

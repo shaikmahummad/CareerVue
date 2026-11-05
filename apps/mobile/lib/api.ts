@@ -53,14 +53,16 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 async function fetchWithRetry(url: string, options: RequestInit): Promise<Response> {
+  const makeHeaders = async () => {
+    const headers = await authHeaders();
+    if (options.body instanceof FormData) delete headers["Content-Type"];
+    return { ...headers, ...(options.headers as Record<string, string> | undefined) };
+  };
   let res: Response;
   try {
     res = await fetch(url, {
       ...options,
-      headers: {
-        ...await authHeaders(),
-        ...(options.headers as Record<string, string> | undefined),
-      },
+      headers: await makeHeaders(),
     });
   } catch {
     throw new ApiError("Unable to reach the server.", 0, "NETWORK_ERROR");
@@ -72,10 +74,7 @@ async function fetchWithRetry(url: string, options: RequestInit): Promise<Respon
   try {
     return await fetch(url, {
       ...options,
-      headers: {
-        ...await authHeaders(),
-        ...(options.headers as Record<string, string> | undefined),
-      },
+      headers: await makeHeaders(),
     });
   } catch {
     throw new ApiError("Unable to reach the server.", 0, "NETWORK_ERROR");
@@ -98,6 +97,15 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   }));
   _clearCache(); // data has changed — force fresh fetch next time
+  return data;
+}
+
+export async function apiPostForm<T>(path: string, body: FormData): Promise<T> {
+  const data = await handleResponse<T>(await fetchWithRetry(`${API_URL}${path}`, {
+    method: "POST",
+    body,
+  }));
+  _clearCache();
   return data;
 }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   ArrowLeft, Check, X, BookOpen, User, Clock, Tag, Globe,
   Video, FileText, Eye, Loader2, AlertCircle, ChevronRight,
@@ -36,6 +37,7 @@ interface CourseDetail {
   enrolled_count: number;
   created_at: string | null;
   tutor_name: string | null;
+  thumbnail_url: string | null;
   modules: Module[];
 }
 
@@ -164,6 +166,7 @@ export default function CourseReviewPage() {
 
               {/* ── Course Info ───────────────────────────────────────── */}
               <div className="glass-card rounded-2xl p-6 space-y-5">
+                {course.thumbnail_url && <Image src={course.thumbnail_url} alt={`${course.title} thumbnail`} width={960} height={540} unoptimized className="w-full max-h-80 object-cover rounded-xl border border-white/[0.08]" />}
                 <h1 className="text-xl font-bold text-white leading-snug">{course.title}</h1>
 
                 {course.description ? (

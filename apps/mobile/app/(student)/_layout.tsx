@@ -9,9 +9,10 @@ const STUDENT_TABS: TabConfig[] = [
   { name: "courses",  label: "Network",  icon: "people-outline",      activeIcon: "people"       },
   { name: "profile",  label: "Profile",  icon: "person-outline",      activeIcon: "person"       },
   { name: "settings", label: "Settings", icon: "settings-outline",    activeIcon: "settings"     },
+  { name: "notifications", label: "Alerts", icon: "notifications-outline", activeIcon: "notifications" },
 ];
 
-const ROUTE_ORDER = ["index", "roadmap", "courses", "profile", "settings"];
+const ROUTE_ORDER = ["index", "roadmap", "courses", "profile", "settings", "notifications"];
 
 export default function StudentLayout() {
   const segments = useSegments();

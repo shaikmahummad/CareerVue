@@ -10,7 +10,7 @@ import {
   AlertCircle, CheckCircle, XCircle, Clock,
 } from "lucide-react";
 import TutorNavbar from "../../../../../../components/TutorNavbar";
-import { apiGet, apiPost, apiPut, apiDelete } from "../../../../../../lib/api";
+import { apiGet, apiPost, apiPostForm, apiPut, apiDelete } from "../../../../../../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +70,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 // ─── Module editor row ────────────────────────────────────────────────────────
 
 interface LocalModule extends CourseModule {
+  video_file?: File | null;
   _unsaved?: boolean;
   _deleting?: boolean;
   _saving?: boolean;
@@ -104,11 +105,18 @@ function ModuleRow({
     if (!local.title.trim()) return;
     setSaving(true);
     try {
+      let videoUrl = local.video_url?.trim() || null;
+      if (local.video_file) {
+        const body = new FormData();
+        body.append("file", local.video_file);
+        const uploaded = await apiPostForm<{ video_url: string }>(`/api/v1/courses/${courseId}/modules/video`, body);
+        videoUrl = uploaded.video_url;
+      }
       if (mod._unsaved) {
         const saved = await apiPost<CourseModule>(`/api/v1/courses/${courseId}/modules`, {
           title:        local.title.trim(),
           description:  local.description?.trim() || null,
-          video_url:    local.video_url?.trim() || null,
+          video_url:    videoUrl,
           pdf_url:      local.pdf_url?.trim() || null,
           duration_mins: local.duration_mins ? Number(local.duration_mins) : null,
           order_index:  index,
@@ -121,7 +129,7 @@ function ModuleRow({
           {
             title:        local.title.trim(),
             description:  local.description?.trim() || null,
-            video_url:    local.video_url?.trim() || null,
+            video_url:    videoUrl,
             pdf_url:      local.pdf_url?.trim() || null,
             duration_mins: local.duration_mins ? Number(local.duration_mins) : null,
             order_index:  index,
@@ -171,6 +179,35 @@ function ModuleRow({
             {mod._unsaved && <span className="text-xs text-amber-600">unsaved</span>}
             {local._error && <span className="text-xs text-red-500">{local._error}</span>}
           </div>
+          <Field label="Upload Video from Device">
+            <input
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime"
+              className={inputCls}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                if (file && file.size > 250 * 1024 * 1024) {
+                  event.currentTarget.value = "";
+                  alert("Video must be 250 MB or smaller.");
+                  return;
+                }
+                if (!file) { setLocal((value) => ({ ...value, video_file: null })); return; }
+                const video = document.createElement("video");
+                video.preload = "metadata";
+                video.onloadedmetadata = () => {
+                  URL.revokeObjectURL(video.src);
+                  if (video.duration > 3600) {
+                    event.currentTarget.value = "";
+                    alert("Choose a video that is 60 minutes or shorter.");
+                    return;
+                  }
+                  setLocal((value) => ({ ...value, video_file: file }));
+                };
+                video.src = URL.createObjectURL(file);
+              }}
+            />
+            <p className="text-xs text-[#7c7a8a] mt-1">MP4, WebM or MOV · max 250 MB and 60 minutes</p>
+          </Field>
         </div>
         {canEdit && (
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -249,6 +286,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [modules, setModules] = useState<LocalModule[]>([]);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
 
   const [form, setForm] = useState({
     title: "", description: "", category: "", level: "",
@@ -301,6 +339,13 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         thumbnail_url:  form.thumbnail_url.trim() || null,
         tags,
       });
+      if (thumbnailFile) {
+        const body = new FormData();
+        body.append("file", thumbnailFile);
+        const uploaded = await apiPostForm<{ thumbnail_url: string }>(`/api/v1/courses/${courseId}/thumbnail`, body);
+        updated.thumbnail_url = uploaded.thumbnail_url;
+        setThumbnailFile(null);
+      }
       setCourse((c) => c ? { ...c, ...updated } : c);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 3000);
@@ -469,8 +514,23 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
               <input className={inputCls} value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))} disabled={!canEdit} placeholder="React, JavaScript, Web Development" />
             </Field>
 
-            <Field label="Thumbnail URL">
-              <input className={inputCls} value={form.thumbnail_url} onChange={(e) => setForm((f) => ({ ...f, thumbnail_url: e.target.value }))} disabled={!canEdit} placeholder="https://..." />
+            <Field label="Course Thumbnail">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className={inputCls}
+                disabled={!canEdit}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  if (file && file.size > 10 * 1024 * 1024) {
+                    event.currentTarget.value = "";
+                    alert("Thumbnail must be 10 MB or smaller.");
+                    return;
+                  }
+                  setThumbnailFile(file);
+                }}
+              />
+              <p className="text-xs text-[#7c7a8a] mt-1">{thumbnailFile?.name ?? "JPG, PNG or WebP · max 10 MB"}</p>
             </Field>
           </div>
 

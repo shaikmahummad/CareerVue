@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   View, Text, ScrollView, Pressable, TextInput, Alert,
-  ActivityIndicator, KeyboardAvoidingView, Platform,
+  ActivityIndicator, KeyboardAvoidingView, Platform, Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { apiGet, apiPut } from "../../lib/api";
+import { apiGet, apiPostForm, apiPut } from "../../lib/api";
 import { supabase } from "../../lib/supabase";
 
 interface TutorProfile {
@@ -29,6 +30,7 @@ export default function TutorProfile() {
   const [profile,  setProfile]  = useState<TutorProfile | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Editable fields
   const [bio,         setBio]         = useState("");
@@ -82,6 +84,29 @@ export default function TutorProfile() {
     router.replace("/(auth)/login" as never);
   }
 
+  async function choosePhoto() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) { Alert.alert("Permission required", "Allow photo access to choose a profile picture."); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    if ((asset.fileSize ?? 0) > 5 * 1024 * 1024) {
+      Alert.alert("Photo too large", "Choose an image that is 5 MB or smaller.");
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const body = new FormData();
+      body.append("file", { uri: asset.uri, name: asset.fileName ?? "profile.jpg", type: asset.mimeType ?? "image/jpeg" } as any);
+      const uploaded = await apiPostForm<{ avatar_url: string }>("/api/v1/auth/profile/avatar", body);
+      setProfile((current) => current ? { ...current, avatar_url: uploaded.avatar_url } : current);
+    } catch (error: any) {
+      Alert.alert("Upload failed", error?.message ?? "Could not upload profile photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   const initials = profile?.full_name
     ? profile.full_name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
     : (profile?.email?.[0]?.toUpperCase() ?? "T");
@@ -125,9 +150,18 @@ export default function TutorProfile() {
 
         {/* Avatar + name */}
         <View className="items-center py-8 bg-white border-b border-gray-100 gap-3">
-          <View className="w-20 h-20 rounded-full bg-blue-100 items-center justify-center">
-            <Text className="text-3xl font-bold text-blue-600">{initials}</Text>
-          </View>
+          <Pressable onPress={choosePhoto} disabled={uploadingPhoto} className="relative">
+            {profile?.avatar_url ? (
+              <Image source={{ uri: profile.avatar_url }} className="w-20 h-20 rounded-full" />
+            ) : (
+              <View className="w-20 h-20 rounded-full bg-blue-100 items-center justify-center">
+                <Text className="text-3xl font-bold text-blue-600">{initials}</Text>
+              </View>
+            )}
+            <View className="absolute -right-1 -bottom-1 bg-blue-600 rounded-full p-2">
+              {uploadingPhoto ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="camera" size={14} color="white" />}
+            </View>
+          </Pressable>
           <View className="items-center gap-0.5">
             <Text className="text-lg font-bold text-gray-900">{profile?.full_name ?? "—"}</Text>
             <Text className="text-sm text-gray-400">{profile?.email ?? "—"}</Text>
@@ -144,7 +178,7 @@ export default function TutorProfile() {
               className="bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm text-gray-900"
               value={bio}
               onChangeText={setBio}
-              placeholder="Tell students about yourself..."
+              placeholder=""
               placeholderTextColor="#9ca3af"
               multiline
               numberOfLines={4}
@@ -159,7 +193,7 @@ export default function TutorProfile() {
               className="bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm text-gray-900"
               value={tags}
               onChangeText={setTags}
-              placeholder="React, Node.js, Python..."
+              placeholder=""
               placeholderTextColor="#9ca3af"
             />
           </Field>
@@ -170,7 +204,7 @@ export default function TutorProfile() {
               className="bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm text-gray-900"
               value={qual}
               onChangeText={setQual}
-              placeholder="e.g. B.Tech Computer Science, Google SWE..."
+              placeholder=""
               placeholderTextColor="#9ca3af"
             />
           </Field>
@@ -181,7 +215,7 @@ export default function TutorProfile() {
               className="bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm text-gray-900"
               value={years}
               onChangeText={setYears}
-              placeholder="5"
+              placeholder=""
               placeholderTextColor="#9ca3af"
               keyboardType="numeric"
             />
@@ -193,7 +227,7 @@ export default function TutorProfile() {
               className="bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm text-gray-900"
               value={linkedin}
               onChangeText={setLinkedin}
-              placeholder="https://linkedin.com/in/..."
+              placeholder=""
               placeholderTextColor="#9ca3af"
               autoCapitalize="none"
               keyboardType="url"
@@ -206,7 +240,7 @@ export default function TutorProfile() {
               className="bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm text-gray-900"
               value={website}
               onChangeText={setWebsite}
-              placeholder="https://yoursite.com"
+              placeholder=""
               placeholderTextColor="#9ca3af"
               autoCapitalize="none"
               keyboardType="url"
@@ -219,7 +253,7 @@ export default function TutorProfile() {
               className="bg-white border border-gray-200 rounded-2xl px-4 py-3 text-sm text-gray-900"
               value={phone}
               onChangeText={setPhone}
-              placeholder="+91 9876543210"
+              placeholder=""
               placeholderTextColor="#9ca3af"
               keyboardType="phone-pad"
             />

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -174,6 +175,22 @@ async def get_student_stats(
     db: AsyncSession = Depends(get_db),
 ):
     student = await _get_student_or_404(db, current_user.id)
+
+    # A streak advances once per UTC calendar day and resets after a missed day.
+    now = datetime.now(timezone.utc)
+    last_active = student.last_active_at
+    if last_active is None:
+        student.streak_days = 1
+    else:
+        if last_active.tzinfo is None:
+            last_active = last_active.replace(tzinfo=timezone.utc)
+        days = (now.date() - last_active.date()).days
+        if days == 1:
+            student.streak_days = (student.streak_days or 0) + 1
+        elif days > 1:
+            student.streak_days = 1
+    student.last_active_at = now
+    await db.commit()
 
     # Single query: count all enrollments and completed ones in one DB round-trip
     row = (

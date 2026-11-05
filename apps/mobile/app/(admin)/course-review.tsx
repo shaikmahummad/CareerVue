@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   View, Text, ScrollView, Pressable, ActivityIndicator,
-  Alert, TextInput, Modal, StyleSheet, KeyboardAvoidingView, Platform,
+  Alert, TextInput, Modal, StyleSheet, KeyboardAvoidingView, Platform, Image, Linking,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,6 +37,7 @@ interface CourseDetail {
   created_at: string | null;
   tutor_name: string | null;
   tutor_avatar: string | null;
+  thumbnail_url: string | null;
   modules: Module[];
 }
 
@@ -131,6 +132,7 @@ export default function CourseReviewScreen() {
       >
         {/* ── Tutor ─────────────────────────────────────────────────────── */}
         <View style={s.card}>
+          {course.thumbnail_url && <Image source={{ uri: course.thumbnail_url }} style={{ width: "100%", height: 180, borderRadius: 14, marginBottom: 16 }} resizeMode="cover" />}
           <View style={s.tutorRow}>
             <View style={s.avatar}>
               <Text style={s.avatarText}>
@@ -238,10 +240,10 @@ export default function CourseReviewScreen() {
 
                     <View style={s.moduleBadges}>
                       {mod.video_url && (
-                        <View style={s.badge}>
+                        <Pressable style={s.badge} onPress={() => Linking.openURL(mod.video_url!)}>
                           <Ionicons name="videocam-outline" size={10} color={colors.secondary} />
-                          <Text style={[s.badgeText, { color: colors.secondary }]}>Video</Text>
-                        </View>
+                          <Text style={[s.badgeText, { color: colors.secondary }]}>Watch Video</Text>
+                        </Pressable>
                       )}
                       {mod.pdf_url && (
                         <View style={[s.badge, { backgroundColor: "rgba(255,184,0,0.1)" }]}>

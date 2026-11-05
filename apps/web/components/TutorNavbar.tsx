@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, BookOpen, BarChart3, Settings } from "lucide-react";
+import { LayoutDashboard, BookOpen, BarChart3, Settings, Bell } from "lucide-react";
 import AppSidebar from "./AppSidebar";
 import { createClient } from "../lib/supabase/client";
 import { apiGet } from "../lib/api";
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/tutor/courses",   label: "My Courses", icon: BookOpen },
   { href: "/tutor/analytics", label: "Analytics",  icon: BarChart3 },
   { href: "/tutor/settings",  label: "Settings",   icon: Settings },
+  { href: "/notifications",   label: "Notifications", icon: Bell },
 ];
 
 export default function TutorNavbar() {

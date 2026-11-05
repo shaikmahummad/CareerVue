@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
-import { apiGet, apiPut } from "../../lib/api";
+import { apiGet, apiPostForm, apiPut } from "../../lib/api";
 import { colors, TAB_BAR_HEIGHT } from "../../constants/theme";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ interface StudentProfile {
   streak_days: number;
   enrolled_count: number;
   completed_count: number;
+  avatar_url: string | null;
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -132,6 +134,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [form, setForm] = useState({
     phone: "", college: "", branch: "",
@@ -184,6 +187,29 @@ export default function ProfileScreen() {
     }
   }
 
+  async function choosePhoto() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) { Alert.alert("Permission required", "Allow photo access to choose a profile picture."); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    if ((asset.fileSize ?? 0) > 5 * 1024 * 1024) {
+      Alert.alert("Photo too large", "Choose an image that is 5 MB or smaller.");
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const body = new FormData();
+      body.append("file", { uri: asset.uri, name: asset.fileName ?? "profile.jpg", type: asset.mimeType ?? "image/jpeg" } as any);
+      const uploaded = await apiPostForm<{ avatar_url: string }>("/api/v1/auth/profile/avatar", body);
+      setProfile((current) => current ? { ...current, avatar_url: uploaded.avatar_url } : current);
+    } catch (error: any) {
+      Alert.alert("Upload failed", error?.message ?? "Could not upload profile photo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   // ── Loading ───────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -213,7 +239,14 @@ export default function ProfileScreen() {
         {/* Identity card */}
         <View style={s.card}>
           <View style={s.identityRow}>
-            <AvatarInitial name={profile?.full_name ?? ""} />
+            <Pressable onPress={choosePhoto} disabled={uploadingPhoto}>
+              {profile?.avatar_url ? (
+                <Image source={{ uri: profile.avatar_url }} style={a.avatar} />
+              ) : <AvatarInitial name={profile?.full_name ?? ""} />}
+              <View style={{ position: "absolute", right: -5, bottom: -5, backgroundColor: colors.primary, borderRadius: 14, padding: 5 }}>
+                {uploadingPhoto ? <ActivityIndicator size="small" color={colors.bg} /> : <Ionicons name="camera" size={14} color={colors.bg} />}
+              </View>
+            </Pressable>
             <View style={s.identityInfo}>
               <Text style={s.identityName} numberOfLines={1}>
                 {profile?.full_name}
@@ -311,19 +344,19 @@ export default function ProfileScreen() {
         {/* Personal Details (editable) */}
         <View style={s.card}>
           <Text style={s.sectionTitle}>Personal Details</Text>
-          <Field label="Phone"           value={form.phone}           onChangeText={set("phone")}           placeholder="+91 9876543210" keyboardType="phone-pad" />
-          <Field label="City"            value={form.city}            onChangeText={set("city")}            placeholder="Hyderabad" />
-          <Field label="College"         value={form.college}         onChangeText={set("college")}         placeholder="IIT Bombay" />
-          <Field label="Branch"          value={form.branch}          onChangeText={set("branch")}          placeholder="Computer Science" />
-          <Field label="Year of Study"   value={form.year_of_study}   onChangeText={set("year_of_study")}   placeholder="3" keyboardType="numeric" />
-          <Field label="Graduation Year" value={form.graduation_year} onChangeText={set("graduation_year")} placeholder="2026" keyboardType="numeric" />
+          <Field label="Phone"           value={form.phone}           onChangeText={set("phone")}           placeholder="" keyboardType="phone-pad" />
+          <Field label="City"            value={form.city}            onChangeText={set("city")}            placeholder="" />
+          <Field label="College"         value={form.college}         onChangeText={set("college")}         placeholder="" />
+          <Field label="Branch"          value={form.branch}          onChangeText={set("branch")}          placeholder="" />
+          <Field label="Year of Study"   value={form.year_of_study}   onChangeText={set("year_of_study")}   placeholder="" keyboardType="numeric" />
+          <Field label="Graduation Year" value={form.graduation_year} onChangeText={set("graduation_year")} placeholder="" keyboardType="numeric" />
         </View>
 
         {/* Links */}
         <View style={s.card}>
           <Text style={s.sectionTitle}>Links</Text>
-          <Field label="LinkedIn" value={form.linkedin_url} onChangeText={set("linkedin_url")} placeholder="https://linkedin.com/in/..." keyboardType="url" />
-          <Field label="GitHub"   value={form.github_url}   onChangeText={set("github_url")}   placeholder="https://github.com/..."   keyboardType="url" />
+          <Field label="LinkedIn" value={form.linkedin_url} onChangeText={set("linkedin_url")} placeholder="" keyboardType="url" />
+          <Field label="GitHub"   value={form.github_url}   onChangeText={set("github_url")}   placeholder="" keyboardType="url" />
         </View>
 
         {/* Save */}

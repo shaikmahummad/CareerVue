@@ -32,6 +32,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/quiz") ||
     pathname.startsWith("/roadmap") ||
     pathname.startsWith("/profile") ||
+    pathname.startsWith("/notifications") ||
     pathname.startsWith("/tutor") ||
     pathname.startsWith("/admin");
 

@@ -293,7 +293,7 @@ export default function ProfilePage() {
               <Input
                 value={form.phone}
                 onChange={set("phone")}
-                placeholder="+91 9876543210"
+                placeholder=""
                 type="tel"
               />
             </Field>
@@ -304,16 +304,16 @@ export default function ProfilePage() {
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Academic Details</p>
             <div className="grid sm:grid-cols-2 gap-4">
               <Field label="College / University">
-                <Input value={form.college} onChange={set("college")} placeholder="IIT Delhi" />
+                <Input value={form.college} onChange={set("college")} placeholder="" />
               </Field>
               <Field label="Branch / Major">
-                <Input value={form.branch} onChange={set("branch")} placeholder="Computer Science" />
+                <Input value={form.branch} onChange={set("branch")} placeholder="" />
               </Field>
               <Field label="Year of Study">
                 <Input
                   value={form.year_of_study}
                   onChange={set("year_of_study")}
-                  placeholder="3"
+                  placeholder=""
                   type="number"
                   min={1}
                   max={5}
@@ -323,14 +323,14 @@ export default function ProfilePage() {
                 <Input
                   value={form.graduation_year}
                   onChange={set("graduation_year")}
-                  placeholder="2026"
+                  placeholder=""
                   type="number"
                   min={2020}
                   max={2035}
                 />
               </Field>
               <Field label="City" >
-                <Input value={form.city} onChange={set("city")} placeholder="Bangalore" />
+                <Input value={form.city} onChange={set("city")} placeholder="" />
               </Field>
             </div>
           </div>
@@ -343,7 +343,7 @@ export default function ProfilePage() {
                 <Input
                   value={form.linkedin_url}
                   onChange={set("linkedin_url")}
-                  placeholder="https://linkedin.com/in/username"
+                  placeholder=""
                   type="url"
                 />
               </Field>
@@ -351,7 +351,7 @@ export default function ProfilePage() {
                 <Input
                   value={form.github_url}
                   onChange={set("github_url")}
-                  placeholder="https://github.com/username"
+                  placeholder=""
                   type="url"
                 />
               </Field>

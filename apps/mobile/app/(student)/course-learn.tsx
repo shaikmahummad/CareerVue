@@ -13,6 +13,7 @@ import { colors } from "../../constants/theme";
 
 const { width, height } = Dimensions.get("window");
 const VIDEO_H = Math.round(width * 9 / 16); // 16:9 ratio
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://careervue-api.welcos.in";
 
 interface Module {
   id:            string;
@@ -37,6 +38,7 @@ interface Enrollment {
   progress_pct: number;
   completed_at: string | null;
   module_progress?: { module_id: string; completed_at: string }[];
+  certificate?: { id: string; download_path: string } | null;
 }
 
 type EmbedResult =
@@ -70,6 +72,8 @@ export default function CourseLearnScreen() {
   const [marking,     setMarking]     = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [certificatePath, setCertificatePath] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -87,8 +91,13 @@ export default function CourseLearnScreen() {
       if (!enroll) { router.back(); return; }
 
       // Load full enrollment with module progress
-      const fullEnroll = await apiGet<Enrollment>(`/api/v1/enrollments/${enroll.id}`);
+      const [fullEnroll, moduleRatings] = await Promise.all([
+        apiGet<Enrollment>(`/api/v1/enrollments/${enroll.id}`),
+        apiGet<{ module_id: string; rating: number }[]>(`/api/v1/courses/${courseId}/my-module-ratings`),
+      ]);
       setEnrollment(fullEnroll);
+      setCertificatePath(fullEnroll.certificate?.download_path ?? null);
+      setRatings(Object.fromEntries(moduleRatings.map((rating) => [rating.module_id, rating.rating])));
 
       const done = new Set((fullEnroll.module_progress ?? []).map((mp) => mp.module_id));
       setCompletedIds(done);
@@ -124,11 +133,15 @@ export default function CourseLearnScreen() {
 
       // Check if all done
       if (done >= total) {
-        await apiPost(`/api/v1/enrollments/${enrollment.id}/complete`, {});
+        const completed = await apiPost<{ certificate_download_path: string }>(`/api/v1/enrollments/${enrollment.id}/complete`, {});
+        setCertificatePath(completed.certificate_download_path);
         Alert.alert(
           "🎉 Course Complete!",
           "Congratulations! You've completed this course. +100 XP earned!",
-          [{ text: "Back to Courses", onPress: () => router.back() }]
+          [
+            { text: "Download Certificate", onPress: () => Linking.openURL(`${API_URL}${completed.certificate_download_path}`) },
+            { text: "Back to Courses", onPress: () => router.back() },
+          ]
         );
         return;
       }
@@ -147,6 +160,16 @@ export default function CourseLearnScreen() {
   function goToModule(mod: Module) {
     setCurrentMod(mod);
     setShowSidebar(false);
+  }
+
+  async function rateModule(rating: number) {
+    if (!currentMod || ratings[currentMod.id]) return;
+    try {
+      await apiPost(`/api/v1/courses/${courseId}/modules/${currentMod.id}/rating`, { rating });
+      setRatings((current) => ({ ...current, [currentMod.id]: rating }));
+    } catch (error: any) {
+      Alert.alert("Rating failed", error?.message ?? "Could not submit rating.");
+    }
   }
 
   function goNext() {
@@ -313,6 +336,26 @@ export default function CourseLearnScreen() {
               <Ionicons name="open-outline" size={14} color={colors.textVariant} />
             </Pressable>
           ) : null}
+
+          <View style={{ marginTop: 20, padding: 16, borderWidth: 1, borderColor: colors.border, borderRadius: 16, backgroundColor: colors.surface }}>
+            <Text style={{ color: colors.text, fontFamily: "HankenGrotesk_600SemiBold" }}>Rate this module</Text>
+            <Text style={{ color: colors.textVariant, fontSize: 12, marginTop: 3 }}>You can submit one rating per module.</Text>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <Pressable key={value} disabled={Boolean(currentMod && ratings[currentMod.id])} onPress={() => void rateModule(value)}>
+                  <Ionicons name={currentMod && value <= (ratings[currentMod.id] || 0) ? "star" : "star-outline"} size={27} color="#f59e0b" />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {certificatePath && (
+            <Pressable style={[s.pdfBtn, { marginTop: 14 }]} onPress={() => Linking.openURL(`${API_URL}${certificatePath}`)}>
+              <Ionicons name="ribbon-outline" size={18} color={colors.success} />
+              <Text style={s.pdfBtnText}>Download Certificate</Text>
+              <Ionicons name="download-outline" size={14} color={colors.textVariant} />
+            </Pressable>
+          )}
         </View>
       </ScrollView>
 

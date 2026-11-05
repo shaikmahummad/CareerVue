@@ -12,6 +12,7 @@ from app.dependencies import AdminUser
 from app.models.course import Course, CourseApproval
 from app.models.enrollment import Enrollment
 from app.models.payment import Payment
+from app.models.social import Notification
 from app.models.user import Profile, Student, Tutor
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -107,6 +108,11 @@ async def get_dashboard(
     total_enrollments = (
         await db.execute(select(func.count()).select_from(Enrollment))
     ).scalar_one()
+    pending_approvals = (
+        await db.execute(
+            select(func.count()).select_from(Course).where(Course.status == "pending_approval")
+        )
+    ).scalar_one()
 
     return {
         "success": True,
@@ -118,6 +124,7 @@ async def get_dashboard(
             "total_courses": total_courses,
             "total_revenue": total_revenue,
             "total_enrollments": total_enrollments,
+            "pending_approvals": pending_approvals,
         },
     }
 
@@ -201,6 +208,10 @@ async def approve_course(
     course = await db.get(Course, cid)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    if course.status == "approved":
+        raise HTTPException(status_code=409, detail="Course is already approved")
+    if course.status not in {"pending_approval", "rejected"}:
+        raise HTTPException(status_code=409, detail="Only submitted courses can be approved")
 
     course.status = "approved"
     course.rejection_note = None
@@ -212,6 +223,36 @@ async def approve_course(
         reviewed_at=datetime.now(timezone.utc),
     )
     db.add(approval)
+
+    tutor = await db.get(Tutor, course.tutor_id)
+    if tutor:
+        db.add(Notification(
+            user_id=tutor.profile_id,
+            type="course_approved",
+            title="Course approved",
+            body=f'Your course "{course.title}" is now live.',
+            link="/tutor/courses",
+        ))
+
+    # Notify students whose current goal overlaps this newly published course.
+    goal_rows = (await db.execute(
+        select(Student, Profile)
+        .join(Profile, Student.profile_id == Profile.id)
+        .where(Student.current_goal.is_not(None))
+    )).all()
+    course_terms = " ".join([
+        course.title or "", course.category or "", " ".join(course.tags or [])
+    ]).lower()
+    for student, profile in goal_rows:
+        goal_words = {word for word in (student.current_goal or "").lower().replace("-", " ").split() if len(word) >= 3}
+        if goal_words and any(word in course_terms for word in goal_words):
+            db.add(Notification(
+                user_id=profile.id,
+                type="goal_course",
+                title="A new course matches your goal",
+                body=f'"{course.title}" may help you progress toward {student.current_goal}.',
+                link=f"/courses/{course.id}",
+            ))
     await db.commit()
     await db.refresh(course)
 
@@ -238,7 +279,10 @@ async def reject_course(
     course = await db.get(Course, cid)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    if course.status not in {"pending_approval", "approved"}:
+        raise HTTPException(status_code=409, detail="Course is not awaiting review or currently live")
 
+    previous_status = course.status
     course.status = "rejected"
     course.rejection_note = body.rejection_note
 
@@ -250,6 +294,19 @@ async def reject_course(
         reviewed_at=datetime.now(timezone.utc),
     )
     db.add(approval)
+    tutor = await db.get(Tutor, course.tutor_id)
+    if tutor:
+        was_live = previous_status == "approved"
+        db.add(Notification(
+            user_id=tutor.profile_id,
+            type="course_revoked" if was_live else "course_rejected",
+            title="Course revoked" if was_live else "Course needs changes",
+            body=(
+                f'Your course "{course.title}" was removed from the catalog.'
+                if was_live else f'Your course "{course.title}" was not approved.'
+            ) + (f" Reason: {body.rejection_note}" if body.rejection_note else ""),
+            link="/tutor/courses",
+        ))
     await db.commit()
     await db.refresh(course)
 

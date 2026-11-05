@@ -168,7 +168,7 @@ export default function TutorProfilePage() {
           <p className="text-sm font-semibold text-[#cbc4d2] mb-4">Professional Details</p>
           <div className="space-y-4">
             <Field label="Phone">
-              <input className={inputCls} value={form.phone} onChange={(e) => set("phone")(e.target.value)} placeholder="+91 9876543210" />
+              <input className={inputCls} value={form.phone} onChange={(e) => set("phone")(e.target.value)} placeholder="" />
             </Field>
 
             <Field label="Bio">
@@ -176,16 +176,16 @@ export default function TutorProfilePage() {
                 className={inputCls + " min-h-[100px] resize-y"}
                 value={form.bio}
                 onChange={(e) => set("bio")(e.target.value)}
-                placeholder="Tell students about yourself, your experience, and teaching style..."
+                placeholder=""
               />
             </Field>
 
             <Field label="Qualification">
-              <input className={inputCls} value={form.qualification} onChange={(e) => set("qualification")(e.target.value)} placeholder="e.g. B.Tech Computer Science, IIT Delhi" />
+              <input className={inputCls} value={form.qualification} onChange={(e) => set("qualification")(e.target.value)} placeholder="" />
             </Field>
 
             <Field label="Years of Experience">
-              <input type="number" min="0" max="50" className={inputCls} value={form.years_experience} onChange={(e) => set("years_experience")(e.target.value)} placeholder="e.g. 5" />
+              <input type="number" min="0" max="50" className={inputCls} value={form.years_experience} onChange={(e) => set("years_experience")(e.target.value)} placeholder="" />
             </Field>
 
             <Field label="Expertise Tags">
@@ -205,7 +205,7 @@ export default function TutorProfilePage() {
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
-                  placeholder="Add a skill (e.g. React, Python)"
+                  placeholder=""
                 />
                 <button
                   onClick={addTag}
@@ -217,11 +217,11 @@ export default function TutorProfilePage() {
             </Field>
 
             <Field label="LinkedIn URL">
-              <input className={inputCls} value={form.linkedin_url} onChange={(e) => set("linkedin_url")(e.target.value)} placeholder="https://linkedin.com/in/..." />
+              <input className={inputCls} value={form.linkedin_url} onChange={(e) => set("linkedin_url")(e.target.value)} placeholder="" />
             </Field>
 
             <Field label="Website URL">
-              <input className={inputCls} value={form.website_url} onChange={(e) => set("website_url")(e.target.value)} placeholder="https://..." />
+              <input className={inputCls} value={form.website_url} onChange={(e) => set("website_url")(e.target.value)} placeholder="" />
             </Field>
           </div>
 

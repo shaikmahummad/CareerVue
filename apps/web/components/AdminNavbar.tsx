@@ -14,7 +14,7 @@ interface CurrentProfile {
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Overview",   icon: LayoutDashboard },
-  { href: "/admin/approvals", label: "Approvals",  icon: CheckSquare, badge: 5 },
+  { href: "/admin/approvals", label: "Approvals",  icon: CheckSquare },
   { href: "/admin/users",     label: "Users",      icon: Users },
   { href: "/admin/courses",   label: "Courses",    icon: BookOpen },
   { href: "/admin/analytics", label: "Analytics",  icon: BarChart3 },
@@ -25,6 +25,7 @@ export default function AdminNavbar() {
   const router = useRouter();
   const [userName, setUserName] = useState("Admin User");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -39,6 +40,12 @@ export default function AdminNavbar() {
       } catch {
         // Keep the session metadata fallback when the API is unavailable.
       }
+      try {
+        const pending = await apiGet<unknown[]>("/api/v1/admin/courses/pending");
+        setPendingCount(pending.length);
+      } catch {
+        setPendingCount(0);
+      }
     })();
   }, []);
 
@@ -50,7 +57,7 @@ export default function AdminNavbar() {
 
   return (
     <AppSidebar
-      navItems={NAV_ITEMS}
+      navItems={NAV_ITEMS.map((item) => item.href === "/admin/approvals" ? { ...item, badge: pendingCount } : item)}
       tierLabel="Admin Control Center"
       userName={userName}
       userRoleLabel="Platform Admin"

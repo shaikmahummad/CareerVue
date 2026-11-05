@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -12,7 +12,8 @@ from app.dependencies import StudentUser
 from app.models.course import Course, CourseModule
 from app.models.enrollment import Certificate, Enrollment, ModuleProgress
 from app.models.payment import Payment
-from app.models.user import Student
+from app.models.user import Profile, Student
+from app.services.certificate_service import render_certificate_pdf
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
@@ -186,6 +187,64 @@ async def my_enrollments(
     return {"success": True, "message": "Enrollments fetched", "data": data}
 
 
+@router.get("/certificates/mine")
+async def my_certificates(
+    current_user: StudentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    student = await _get_student(db, current_user.id)
+    rows = (await db.execute(
+        select(Certificate, Course)
+        .join(Course, Certificate.course_id == Course.id)
+        .where(Certificate.student_id == student.id)
+        .order_by(Certificate.issued_at.desc())
+    )).all()
+    return {
+        "success": True,
+        "message": "Certificates fetched",
+        "data": [
+            {
+                "id": str(cert.id),
+                "course_id": str(cert.course_id),
+                "course_title": course.title,
+                "issued_at": cert.issued_at.isoformat() if cert.issued_at else None,
+                "download_path": f"/api/v1/enrollments/certificates/{cert.id}/download",
+            }
+            for cert, course in rows
+        ],
+    }
+
+
+@router.get("/certificates/{certificate_id}/download")
+async def download_certificate(
+    certificate_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download by an unguessable certificate UUID so mobile can open the PDF externally."""
+    try:
+        cid = uuid.UUID(certificate_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid certificate_id")
+    row = (await db.execute(
+        select(Certificate, Course, Profile)
+        .join(Course, Certificate.course_id == Course.id)
+        .join(Student, Certificate.student_id == Student.id)
+        .join(Profile, Student.profile_id == Profile.id)
+        .where(Certificate.id == cid)
+    )).one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+    certificate, course, profile = row
+    issued_at = certificate.issued_at or datetime.now(timezone.utc)
+    pdf = render_certificate_pdf(profile.full_name, course.title, issued_at, str(certificate.id))
+    safe_name = "".join(c for c in course.title if c.isalnum() or c in "-_ ").strip() or "course"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}-certificate.pdf"'},
+    )
+
+
 @router.get("/{enrollment_id}")
 async def get_enrollment(
     enrollment_id: str,
@@ -219,6 +278,20 @@ async def get_enrollment(
         }
         for mp in module_progresses
     ]
+    certificate = (await db.execute(
+        select(Certificate).where(
+            Certificate.student_id == student.id,
+            Certificate.course_id == enrollment.course_id,
+        )
+    )).scalar_one_or_none()
+    data["certificate"] = (
+        {
+            "id": str(certificate.id),
+            "issued_at": certificate.issued_at.isoformat() if certificate.issued_at else None,
+            "download_path": f"/api/v1/enrollments/certificates/{certificate.id}/download",
+        }
+        if certificate else None
+    )
     return {"success": True, "message": "Enrollment detail", "data": data}
 
 
@@ -247,13 +320,25 @@ async def update_module_progress(
     if not module or module.course_id != enrollment.course_id:
         raise HTTPException(status_code=404, detail="Module not found for this course")
 
-    await db.execute(
-        pg_insert(ModuleProgress)
-        .values(enrollment_id=eid, module_id=mid)
-        .on_conflict_do_nothing(
-            index_elements=["enrollment_id", "module_id"]
+    inserted_progress_id = (
+        await db.execute(
+            pg_insert(ModuleProgress)
+            .values(enrollment_id=eid, module_id=mid)
+            .on_conflict_do_nothing(
+                index_elements=["enrollment_id", "module_id"]
+            )
+            .returning(ModuleProgress.id)
         )
-    )
+    ).scalar_one_or_none()
+
+    xp_awarded = 0
+    if inserted_progress_id is not None:
+        xp_awarded = 10
+        await db.execute(
+            update(Student)
+            .where(Student.id == student.id)
+            .values(xp_points=func.coalesce(Student.xp_points, 0) + xp_awarded)
+        )
 
     pct = await _recalculate_progress(db, enrollment)
     enrollment.progress_pct = pct
@@ -263,7 +348,7 @@ async def update_module_progress(
     return {
         "success": True,
         "message": "Progress updated",
-        "data": {"enrollment_id": str(eid), "progress_pct": pct},
+        "data": {"enrollment_id": str(eid), "progress_pct": pct, "xp_awarded": xp_awarded},
     }
 
 
@@ -358,6 +443,7 @@ async def complete_course(
             "completed_at": enrollment.completed_at.isoformat(),
             "progress_pct": 100,
             "certificate_id": str(certificate_id),
+            "certificate_download_path": f"/api/v1/enrollments/certificates/{certificate_id}/download",
             "xp_awarded": 100 if xp_awarded else 0,
             "already_completed": already_completed,
         },

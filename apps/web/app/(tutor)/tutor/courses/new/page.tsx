@@ -9,7 +9,7 @@ import {
   Video, FileText, Loader2, PlusCircle, Trash2, GripVertical,
 } from "lucide-react";
 import TutorNavbar from "../../../../../components/TutorNavbar";
-import { apiPost } from "../../../../../lib/api";
+import { apiPost, apiPostForm } from "../../../../../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +33,7 @@ interface ModuleForm {
   pdf_url: string;
   duration_mins: string;
   is_preview: boolean;
+  video_file: File | null;
 }
 
 interface Module extends ModuleForm {
@@ -102,9 +103,13 @@ function StepBar({ step }: { step: number }) {
 function DetailsStep({
   form,
   onChange,
+  thumbnailFile,
+  onThumbnailFile,
 }: {
   form: CourseForm;
   onChange: (k: keyof CourseForm, v: string | boolean) => void;
+  thumbnailFile: File | null;
+  onThumbnailFile: (file: File | null) => void;
 }) {
   return (
     <div className="space-y-5">
@@ -215,13 +220,22 @@ function DetailsStep({
         )}
       </Field>
 
-      <Field label="Thumbnail URL">
+      <Field label="Course Thumbnail">
         <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
           className={inputCls}
-          placeholder="https://..."
-          value={form.thumbnail_url}
-          onChange={(e) => onChange("thumbnail_url", e.target.value)}
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+            if (file && file.size > 10 * 1024 * 1024) {
+              e.currentTarget.value = "";
+              alert("Thumbnail must be 10 MB or smaller.");
+              return;
+            }
+            onThumbnailFile(file);
+          }}
         />
+        <p className="text-xs text-[#7c7a8a] mt-1">{thumbnailFile ? thumbnailFile.name : "JPG, PNG or WebP · max 10 MB"}</p>
       </Field>
 
       <Field label="Tags (comma-separated)">
@@ -246,7 +260,7 @@ function ModuleRow({
 }: {
   mod: Module;
   index: number;
-  onChange: (id: string, k: keyof ModuleForm, v: string | boolean) => void;
+  onChange: (id: string, k: keyof ModuleForm, v: ModuleForm[keyof ModuleForm]) => void;
   onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(!mod.saved);
@@ -325,6 +339,36 @@ function ModuleRow({
             </Field>
           </div>
 
+          <Field label="Upload Video from Device">
+            <input
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime"
+              className={inputCls}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                if (file && file.size > 250 * 1024 * 1024) {
+                  event.currentTarget.value = "";
+                  alert("Video must be 250 MB or smaller.");
+                  return;
+                }
+                if (!file) { onChange(mod.id, "video_file", null); return; }
+                const video = document.createElement("video");
+                video.preload = "metadata";
+                video.onloadedmetadata = () => {
+                  URL.revokeObjectURL(video.src);
+                  if (video.duration > 3600) {
+                    event.currentTarget.value = "";
+                    alert("Choose a video that is 60 minutes or shorter.");
+                    return;
+                  }
+                  onChange(mod.id, "video_file", file);
+                };
+                video.src = URL.createObjectURL(file);
+              }}
+            />
+            <p className="text-xs text-[#7c7a8a] mt-1">{mod.video_file ? mod.video_file.name : "MP4, WebM or MOV · max 250 MB and 60 minutes"}</p>
+          </Field>
+
           <div className="grid grid-cols-2 gap-4">
             <Field label="Duration (minutes)">
               <input
@@ -364,7 +408,7 @@ function ModulesStep({
 }: {
   modules: Module[];
   onAdd: () => void;
-  onChange: (id: string, k: keyof ModuleForm, v: string | boolean) => void;
+  onChange: (id: string, k: keyof ModuleForm, v: ModuleForm[keyof ModuleForm]) => void;
   onDelete: (id: string) => void;
   onSaveAll: () => Promise<void>;
   saving: boolean;
@@ -515,6 +559,7 @@ export default function NewCoursePage() {
     thumbnail_url: "", tags: "",
   });
   const [modules, setModules] = useState<Module[]>([]);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [savingModules, setSavingModules] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -550,6 +595,11 @@ export default function NewCoursePage() {
             tags,
           });
           setCourseId(data.id);
+          if (thumbnailFile) {
+            const thumbnailBody = new FormData();
+            thumbnailBody.append("file", thumbnailFile);
+            await apiPostForm(`/api/v1/courses/${data.id}/thumbnail`, thumbnailBody);
+          }
         } catch (error: unknown) {
           setError(error instanceof Error ? error.message : "Failed to create course");
           setCreating(false);
@@ -573,11 +623,11 @@ export default function NewCoursePage() {
     setModules((m) => [
       ...m,
       { id, title: "", description: "", video_url: "", pdf_url: "",
-        duration_mins: "", is_preview: false, saved: false, saving: false, error: "" },
+        duration_mins: "", is_preview: false, video_file: null, saved: false, saving: false, error: "" },
     ]);
   }
 
-  function changeModule(id: string, k: keyof ModuleForm, v: string | boolean) {
+  function changeModule(id: string, k: keyof ModuleForm, v: ModuleForm[keyof ModuleForm]) {
     setModules((m) => m.map((mod) => mod.id === id ? { ...mod, [k]: v, saved: false } : mod));
   }
 
@@ -590,17 +640,26 @@ export default function NewCoursePage() {
     setSavingModules(true);
     const unsaved = modules.filter((m) => !m.saved && m.title.trim());
     const results = await Promise.allSettled(
-      unsaved.map((mod) =>
-        apiPost(`/api/v1/courses/${courseId}/modules`, {
+      unsaved.map(async (mod) => {
+        let videoUrl = mod.video_url.trim() || null;
+        if (mod.video_file) {
+          const videoBody = new FormData();
+          videoBody.append("file", mod.video_file);
+          const uploaded = await apiPostForm<{ video_url: string }>(
+            `/api/v1/courses/${courseId}/modules/video`, videoBody,
+          );
+          videoUrl = uploaded.video_url;
+        }
+        return apiPost(`/api/v1/courses/${courseId}/modules`, {
           title:        mod.title.trim(),
           description:  mod.description.trim() || null,
-          video_url:    mod.video_url.trim() || null,
+          video_url:    videoUrl,
           pdf_url:      mod.pdf_url.trim() || null,
           duration_mins: mod.duration_mins ? parseInt(mod.duration_mins) : null,
           order_index:  modules.indexOf(mod),
           is_preview:   mod.is_preview,
-        })
-      )
+        });
+      })
     );
     setModules((prev) => {
       const updated = [...prev];
@@ -659,7 +718,7 @@ export default function NewCoursePage() {
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {step === 0 && <DetailsStep form={form} onChange={setField} />}
+              {step === 0 && <DetailsStep form={form} onChange={setField} thumbnailFile={thumbnailFile} onThumbnailFile={setThumbnailFile} />}
               {step === 1 && courseId && (
                 <ModulesStep
                   modules={modules}

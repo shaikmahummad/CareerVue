@@ -10,9 +10,10 @@ const TUTOR_TABS: TabConfig[] = [
   { name: "create",    label: "Create",   icon: "add-circle-outline",    activeIcon: "add-circle"    },
   { name: "profile",   label: "Profile",  icon: "person-circle-outline", activeIcon: "person-circle" },
   { name: "settings",  label: "Settings", icon: "settings-outline",      activeIcon: "settings"      },
+  { name: "notifications", label: "Alerts", icon: "notifications-outline", activeIcon: "notifications" },
 ];
 
-const ROUTE_ORDER = ["index", "analytics", "courses", "create", "profile", "settings"];
+const ROUTE_ORDER = ["index", "analytics", "courses", "create", "profile", "settings", "notifications"];
 
 export default function TutorLayout() {
   const segments    = useSegments();

@@ -1,8 +1,10 @@
+import asyncio
 import uuid
+from contextlib import suppress
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
@@ -14,6 +16,7 @@ from app.models.course import Course, CourseApproval, CourseModule
 from app.models.enrollment import Enrollment
 from app.models.social import Review
 from app.models.user import Profile, Student, Tutor
+from app.utils.storage import BUCKETS, delete_file, ensure_public_bucket, upload_file
 
 _optional_bearer = HTTPBearer(auto_error=False)
 
@@ -113,6 +116,12 @@ class ModuleUpdateBody(BaseModel):
 class ReviewCreateBody(BaseModel):
     rating: int
     comment: Optional[str] = None
+
+
+THUMBNAIL_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+VIDEO_TYPES = {"video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov"}
+MAX_THUMBNAIL_BYTES = 10 * 1024 * 1024
+MAX_VIDEO_BYTES = 250 * 1024 * 1024
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -348,6 +357,88 @@ async def create_course(
     return {"success": True, "message": "Course created", "data": _course_dict(course)}
 
 
+async def _store_course_file(
+    file: UploadFile,
+    *,
+    course: Course,
+    bucket: str,
+    accepted_types: dict[str, str],
+    max_bytes: int,
+    folder: str,
+) -> str:
+    content_type = (file.content_type or "").lower()
+    extension = accepted_types.get(content_type)
+    if extension is None:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {content_type or 'unknown'}")
+    contents = await file.read(max_bytes + 1)
+    await file.close()
+    if not contents:
+        raise HTTPException(status_code=400, detail="The selected file is empty")
+    if len(contents) > max_bytes:
+        limit_mb = max_bytes // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File must be {limit_mb} MB or smaller")
+    path = f"courses/{course.id}/{folder}/{uuid.uuid4()}.{extension}"
+    try:
+        await asyncio.to_thread(
+            ensure_public_bucket,
+            bucket,
+            file_size_limit=max_bytes,
+            allowed_mime_types=list(accepted_types),
+        )
+        return await asyncio.to_thread(upload_file, bucket, path, contents, content_type)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="File upload is temporarily unavailable") from None
+
+
+@router.post("/{course_id}/thumbnail")
+async def upload_course_thumbnail(
+    course_id: str,
+    current_user: TutorUser,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        cid = uuid.UUID(course_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid course_id")
+    course = await _get_course_or_404(db, cid)
+    await _assert_owner_or_admin(course, current_user, db)
+    previous_url = course.thumbnail_url
+    url = await _store_course_file(
+        file, course=course, bucket=BUCKETS["thumbnails"],
+        accepted_types=THUMBNAIL_TYPES, max_bytes=MAX_THUMBNAIL_BYTES, folder="thumbnail",
+    )
+    course.thumbnail_url = url
+    await db.commit()
+    marker = f"/storage/v1/object/public/{BUCKETS['thumbnails']}/"
+    if previous_url and marker in previous_url:
+        with suppress(Exception):
+            await asyncio.to_thread(delete_file, BUCKETS["thumbnails"], previous_url.split(marker, 1)[1])
+    return {"success": True, "message": "Thumbnail uploaded", "data": {"thumbnail_url": url}}
+
+
+@router.post("/{course_id}/modules/video")
+async def upload_course_video(
+    course_id: str,
+    current_user: TutorUser,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        cid = uuid.UUID(course_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid course_id")
+    course = await _get_course_or_404(db, cid)
+    await _assert_owner_or_admin(course, current_user, db)
+    url = await _store_course_file(
+        file, course=course, bucket=BUCKETS["videos"],
+        accepted_types=VIDEO_TYPES, max_bytes=MAX_VIDEO_BYTES, folder="videos",
+    )
+    return {"success": True, "message": "Video uploaded", "data": {"video_url": url}}
+
+
 @router.put("/{course_id}")
 async def update_course(
     course_id: str,
@@ -528,17 +619,19 @@ async def delete_module(
     return {"success": True, "message": "Module deleted", "data": None}
 
 
-@router.post("/{course_id}/reviews", status_code=status.HTTP_201_CREATED)
+@router.post("/{course_id}/modules/{module_id}/rating", status_code=status.HTTP_201_CREATED)
 async def add_review(
     course_id: str,
+    module_id: str,
     body: ReviewCreateBody,
     current_user: StudentUser,
     db: AsyncSession = Depends(get_db),
 ):
     try:
         cid = uuid.UUID(course_id)
+        mid = uuid.UUID(module_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid course_id")
+        raise HTTPException(status_code=400, detail="Invalid course_id or module_id")
 
     if body.rating < 1 or body.rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
@@ -556,33 +649,40 @@ async def add_review(
     )
     enrollment = (await db.execute(enr_stmt)).scalar_one_or_none()
     if not enrollment:
-        raise HTTPException(status_code=403, detail="You must be enrolled to review this course")
+        raise HTTPException(status_code=403, detail="Only enrolled students can rate modules")
 
-    # Upsert review
+    module = await db.get(CourseModule, mid)
+    if not module or module.course_id != cid:
+        raise HTTPException(status_code=404, detail="Module not found for this course")
+
+    # Each enrolled student may rate each module exactly once.
     review_stmt = select(Review).where(
         Review.student_id == student.id,
-        Review.course_id == cid,
+        Review.module_id == mid,
     )
     review = (await db.execute(review_stmt)).scalar_one_or_none()
 
     if review:
-        review.rating = body.rating
-        review.comment = body.comment
-    else:
-        review = Review(
-            student_id=student.id,
-            course_id=cid,
-            rating=body.rating,
-            comment=body.comment,
-        )
-        db.add(review)
+        raise HTTPException(status_code=409, detail="You have already rated this module")
+    review = Review(
+        student_id=student.id,
+        course_id=cid,
+        module_id=mid,
+        rating=body.rating,
+        comment=body.comment,
+    )
+    db.add(review)
 
     await db.flush()
 
     # Recalculate avg_rating
-    avg_result = await db.execute(
-        select(func.avg(Review.rating)).where(Review.course_id == cid)
+    module_averages = (
+        select(func.avg(Review.rating).label("module_average"))
+        .where(Review.course_id == cid, Review.module_id.is_not(None))
+        .group_by(Review.module_id)
+        .subquery()
     )
+    avg_result = await db.execute(select(func.avg(module_averages.c.module_average)))
     new_avg = avg_result.scalar_one_or_none() or 0.0
 
     await db.execute(
@@ -596,11 +696,41 @@ async def add_review(
         "id": str(review.id),
         "student_id": str(review.student_id),
         "course_id": str(review.course_id),
+        "module_id": str(review.module_id),
         "rating": review.rating,
         "comment": review.comment,
         "created_at": review.created_at.isoformat() if review.created_at else None,
     }
     return {"success": True, "message": "Review submitted", "data": review_data}
+
+
+@router.get("/{course_id}/my-module-ratings")
+async def get_my_module_ratings(
+    course_id: str,
+    current_user: StudentUser,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        cid = uuid.UUID(course_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid course_id")
+    student = (await db.execute(
+        select(Student).where(Student.profile_id == current_user.id)
+    )).scalar_one_or_none()
+    if not student:
+        return {"success": True, "message": "Module ratings fetched", "data": []}
+    rows = (await db.execute(
+        select(Review).where(
+            Review.student_id == student.id,
+            Review.course_id == cid,
+            Review.module_id.is_not(None),
+        )
+    )).scalars().all()
+    return {
+        "success": True,
+        "message": "Module ratings fetched",
+        "data": [{"module_id": str(r.module_id), "rating": r.rating, "comment": r.comment} for r in rows],
+    }
 
 
 @router.get("/{course_id}/reviews")

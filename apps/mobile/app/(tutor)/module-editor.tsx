@@ -7,8 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { apiGet, apiPost, apiPut } from "../../lib/api";
-import { uploadToStorage } from "../../lib/upload";
+import { apiGet, apiPost, apiPostForm, apiPut } from "../../lib/api";
 import { colors } from "../../constants/theme";
 
 interface ModuleData {
@@ -77,12 +76,26 @@ export default function ModuleEditor() {
     if (result.canceled || !result.assets?.[0]) return;
 
     const asset = result.assets[0];
+    if ((asset.duration ?? 0) > 60 * 60 * 1000) {
+      Alert.alert("Video too long", "Choose a video that is 60 minutes or shorter.");
+      return;
+    }
+    if ((asset.fileSize ?? 0) > 250 * 1024 * 1024) {
+      Alert.alert("Video too large", "Choose a video that is 250 MB or smaller.");
+      return;
+    }
     setUploadingVideo(true);
     try {
-      const ext      = asset.uri.split(".").pop() ?? "mp4";
-      const fileName = `${courseId}/${Date.now()}.${ext}`;
-      const url      = await uploadToStorage(asset.uri, "course-videos", fileName, "video/mp4");
-      setVideoUrl(url);
+      const form = new FormData();
+      form.append("file", {
+        uri: asset.uri,
+        name: asset.fileName ?? `course-video-${Date.now()}.mp4`,
+        type: asset.mimeType ?? "video/mp4",
+      } as any);
+      const uploaded = await apiPostForm<{ video_url: string }>(
+        `/api/v1/courses/${courseId}/modules/video`, form,
+      );
+      setVideoUrl(uploaded.video_url);
       Alert.alert("Uploaded", "Video uploaded successfully.");
     } catch (e: any) {
       Alert.alert("Upload Failed", e?.message ?? "Could not upload video. Check your Supabase storage bucket.");
