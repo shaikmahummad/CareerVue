@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 from contextlib import suppress
 from datetime import datetime
@@ -20,6 +21,7 @@ from app.utils.supabase import supabase_auth
 from app.utils.storage import BUCKETS, delete_file, ensure_public_bucket, upload_file
 
 _optional_bearer = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
 
 
 async def get_optional_user(
@@ -389,6 +391,11 @@ async def _store_course_file(
     except HTTPException:
         raise
     except Exception:
+        logger.exception(
+            "Course file upload failed course_id=%s bucket=%s",
+            course.id,
+            bucket,
+        )
         raise HTTPException(status_code=503, detail="File upload is temporarily unavailable") from None
 
 

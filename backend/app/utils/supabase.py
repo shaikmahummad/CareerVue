@@ -73,5 +73,15 @@ supabase_auth: Client = create_client(settings.supabase_url, _anon_key)
 supabase_anon: Client = supabase_auth
 
 
+def service_role_headers() -> dict[str, str]:
+    """Return fresh headers for an isolated Supabase admin REST request."""
+    headers = {"apikey": _service_key}
+    # Legacy service-role keys are JWTs and are also accepted as Bearer tokens.
+    # New sb_secret_ keys must only be sent through the apikey header.
+    if not _service_key.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {_service_key}"
+    return headers
+
+
 def get_storage_url(bucket: str, path: str) -> str:
     return f"{settings.supabase_url}/storage/v1/object/public/{bucket}/{path}"
