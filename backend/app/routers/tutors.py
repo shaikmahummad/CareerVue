@@ -42,7 +42,7 @@ def _merge_tutor_profile(profile: Profile, tutor: Tutor) -> dict:
         "bio": tutor.bio,
         "expertise_tags": tutor.expertise_tags or [],
         "qualification": tutor.qualification,
-        "years_experience": tutor.years_experience,
+        "years_experience": tutor.experience_years,
         "linkedin_url": tutor.linkedin_url,
         "website_url": tutor.website_url,
         "is_verified": tutor.is_verified or False,
@@ -50,6 +50,21 @@ def _merge_tutor_profile(profile: Profile, tutor: Tutor) -> dict:
         "tutor_created_at": tutor.created_at.isoformat() if tutor.created_at else None,
         "tutor_updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
     }
+
+
+def _apply_tutor_updates(tutor: Tutor, body: TutorProfileUpdateBody) -> None:
+    field_map = {
+        "bio": "bio",
+        "expertise_tags": "expertise_tags",
+        "qualification": "qualification",
+        "years_experience": "experience_years",
+        "linkedin_url": "linkedin_url",
+        "website_url": "website_url",
+    }
+    for request_field, model_field in field_map.items():
+        value = getattr(body, request_field)
+        if value is not None:
+            setattr(tutor, model_field, value)
 
 
 def _course_summary(course: Course) -> dict:
@@ -106,11 +121,7 @@ async def update_tutor_profile(
     current_user.updated_at = datetime.now(timezone.utc)
 
     # Update tutors table columns
-    tutor_fields = {"bio", "expertise_tags", "qualification", "years_experience", "linkedin_url", "website_url"}
-    for field in tutor_fields:
-        value = getattr(body, field, None)
-        if value is not None:
-            setattr(tutor, field, value)
+    _apply_tutor_updates(tutor, body)
     await db.commit()
     await db.refresh(current_user)
     await db.refresh(tutor)
