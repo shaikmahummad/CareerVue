@@ -23,6 +23,7 @@ from app.routers import (
     notifications,
 )
 from app.routers.auth import cleanup_expired_pending_registrations
+from app.utils.supabase import supabase_admin_credential_status
 
 
 logger = logging.getLogger(__name__)
@@ -142,4 +143,8 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "2.0.0"}
+    return {
+        "status": "ok",
+        "version": "2.0.0",
+        "storage_admin": supabase_admin_credential_status,
+    }
