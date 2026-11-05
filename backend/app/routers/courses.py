@@ -121,7 +121,7 @@ class ReviewCreateBody(BaseModel):
 THUMBNAIL_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 VIDEO_TYPES = {"video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov"}
 MAX_THUMBNAIL_BYTES = 10 * 1024 * 1024
-MAX_VIDEO_BYTES = 250 * 1024 * 1024
+MAX_VIDEO_BYTES = 50 * 1024 * 1024
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

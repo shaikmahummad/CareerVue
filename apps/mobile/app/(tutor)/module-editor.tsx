@@ -80,8 +80,8 @@ export default function ModuleEditor() {
       Alert.alert("Video too long", "Choose a video that is 60 minutes or shorter.");
       return;
     }
-    if ((asset.fileSize ?? 0) > 250 * 1024 * 1024) {
-      Alert.alert("Video too large", "Choose a video that is 250 MB or smaller.");
+    if ((asset.fileSize ?? 0) > 50 * 1024 * 1024) {
+      Alert.alert("Video too large", "Choose a video that is 50 MB or smaller.");
       return;
     }
     setUploadingVideo(true);

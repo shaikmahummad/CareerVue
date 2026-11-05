@@ -346,9 +346,9 @@ function ModuleRow({
               className={inputCls}
               onChange={(event) => {
                 const file = event.target.files?.[0] ?? null;
-                if (file && file.size > 250 * 1024 * 1024) {
+                if (file && file.size > 50 * 1024 * 1024) {
                   event.currentTarget.value = "";
-                  alert("Video must be 250 MB or smaller.");
+                  alert("Video must be 50 MB or smaller.");
                   return;
                 }
                 if (!file) { onChange(mod.id, "video_file", null); return; }
@@ -366,7 +366,7 @@ function ModuleRow({
                 video.src = URL.createObjectURL(file);
               }}
             />
-            <p className="text-xs text-[#7c7a8a] mt-1">{mod.video_file ? mod.video_file.name : "MP4, WebM or MOV · max 250 MB and 60 minutes"}</p>
+            <p className="text-xs text-[#7c7a8a] mt-1">{mod.video_file ? mod.video_file.name : "MP4, WebM or MOV · max 50 MB and 60 minutes"}</p>
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
